@@ -1,4 +1,7 @@
-import { PartialType } from '@nestjs/swagger';
-import { CreateSessionDto } from '@/sessions/dto/create-session.dto';
+import { IsNotEmpty, IsString } from 'class-validator';
 
-export class UpdateSessionDto extends PartialType(CreateSessionDto) {}
+export class UpdateSessionDto {
+  @IsNotEmpty()
+  @IsString()
+  user_agent: string;
+}

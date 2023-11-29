@@ -26,8 +26,8 @@ export class WebauthnService {
     });
   }
 
-  private base64UrlEncode(inputString: string) {
-    const base64 = btoa(inputString);
+  private base64UrlEncode(inputString: string | number) {
+    const base64 = btoa(`${inputString}`);
     return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   }
 
@@ -117,7 +117,7 @@ export class WebauthnService {
     credentialId: string,
     pem: string,
     counter: number,
-    user_id: string
+    user_id: number
   ) {
     const clientAssertionResponse = {
       id: coerceToArrayBuffer(data.id, 'id'),

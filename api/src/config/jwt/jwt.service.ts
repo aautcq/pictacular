@@ -8,18 +8,18 @@ import type { Session } from '@/sessions/entities/session.entity';
 
 export interface AccessToken {
   user: {
-    id: string;
+    id: number;
     nickname: string;
     email: string;
   };
   session: {
-    id: string;
+    id: number;
   };
 }
 
 export interface RefreshToken {
-  userId: string;
-  sessionId: string;
+  userId: number;
+  sessionId: number;
 }
 
 export const accessTokenTtl = 15 * 50; // In seconds (15 minutes)

@@ -105,7 +105,7 @@ export class UsersService {
     });
   }
 
-  async update(id: string, data: UserUpdate) {
+  async update(id: number, data: UserUpdate) {
     return await this.prismaService.user.update({
       where: {
         id
@@ -123,7 +123,7 @@ export class UsersService {
     });
   }
 
-  async remove(id: string) {
+  async remove(id: number) {
     return await this.prismaService.user.delete({
       where: {
         id

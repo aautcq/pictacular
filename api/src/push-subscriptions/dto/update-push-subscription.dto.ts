@@ -1,6 +1,7 @@
-import { PartialType } from '@nestjs/swagger';
-import { CreatePushSubscriptionDto } from '@/push-subscriptions/dto/create-push-subscription.dto';
+import { IsNotEmpty, IsString } from 'class-validator';
 
-export class UpdatePushSubscriptionDto extends PartialType(
-  CreatePushSubscriptionDto
-) {}
+export class UpdatePushSubscriptionDto {
+  @IsNotEmpty()
+  @IsString()
+  subscription: string;
+}

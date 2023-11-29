@@ -1,11 +1,9 @@
 import { Controller, Post, Body, UseGuards, Res } from '@nestjs/common';
 import { PushSubscriptionsService } from '@/push-subscriptions/push-subscriptions.service';
-import { ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@/common/guards/auth.guard';
 import type { Response } from 'express';
 import type { CreatePushSubscriptionDto } from '@/push-subscriptions/dto/create-push-subscription.dto';
 
-@ApiTags('Push Subscriptions')
 @Controller('push-subscriptions')
 export class PushSubscriptionsController {
   constructor(

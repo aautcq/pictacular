@@ -11,7 +11,6 @@ import {
   UseGuards
 } from '@nestjs/common';
 import { UsersService } from '@/users/users.service';
-import { NotificationsSettingsService } from '@/notifications-settings/notifications-settings.service';
 import { SessionsService } from '@/sessions/sessions.service';
 import { AuthService } from '@/auth/auth.service';
 import { CryptoService } from '@/config/crypto/crypto.service';
@@ -23,19 +22,16 @@ import {
   accessTokenCookieOptions,
   refreshTokenCookieOptions
 } from '@/auth/cookies.params';
-import { ApiTags } from '@nestjs/swagger';
 import type { RegisterDto } from '@/auth/dto/register.dto';
 import type { LoginDto } from '@/auth/dto/login.dto';
 import type { ResetPasswordDto } from '@/auth/dto/reset-password.dto';
 import type { SetPasswordDto } from '@/auth/dto/set-password.dto';
 import type { Response } from 'express';
 
-@ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
   constructor(
     private readonly usersService: UsersService,
-    private readonly notificationsSettingsService: NotificationsSettingsService,
     private readonly sessionsService: SessionsService,
     private readonly authService: AuthService,
     private readonly cryptoService: CryptoService,
@@ -142,10 +138,6 @@ export class AuthController {
     const user = await this.usersService.create({
       email,
       password: passwordHash
-    });
-
-    await this.notificationsSettingsService.create({
-      user_id: user.id
     });
 
     const clientUrl = this.configService.get<string>('CLIENT_URL');

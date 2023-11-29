@@ -6,7 +6,7 @@ import type { PushSubscriptionCreate } from '@/push-subscriptions/entities/push-
 export class PushSubscriptionsService {
   constructor(private readonly prismaService: PrismaService) {}
 
-  async create(user_id: string, data: PushSubscriptionCreate) {
+  async create(user_id: number, data: PushSubscriptionCreate) {
     return await this.prismaService.pushSubscription.create({
       data: {
         endpoint: data.endpoint,
@@ -23,7 +23,7 @@ export class PushSubscriptionsService {
     });
   }
 
-  async findAllFromUser(user_id: string) {
+  async findAllFromUser(user_id: number) {
     return await this.prismaService.pushSubscription.findMany({
       where: {
         user_id

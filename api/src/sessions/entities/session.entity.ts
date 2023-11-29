@@ -1,7 +1,7 @@
 import { AtLeast } from '@/common/types';
 
 export class Session {
-  id: string;
+  id: number;
   created_at: Date;
   updated_at: Date;
 
@@ -9,7 +9,7 @@ export class Session {
   user_agent: string;
   refresh_token: string | null;
 
-  user_id: string;
+  user_id: number;
   user: unknown;
 }
 

@@ -6,7 +6,7 @@ export class BiometricsService {
   constructor(private readonly prismaService: PrismaService) {}
 
   async create(
-    user_id: string,
+    user_id: number,
     credential_id: string,
     pem: string,
     counter: number
@@ -58,7 +58,7 @@ export class BiometricsService {
     });
   }
 
-  async updateCounter(id: string, value: number) {
+  async updateCounter(id: number, value: number) {
     return await this.prismaService.biometrics.update({
       where: { id },
       data: {

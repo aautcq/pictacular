@@ -25,11 +25,13 @@ model User {
   last_name              String
   avatar_url             String?
   password               String
-  last_sign_in           DateTime?
+  last_sign_in_at        DateTime?
   is_verified            Boolean    @default(false)
   verification_token     String
   nb_incorrect_passwords Int        @default(0)
 
+  pushSubscription    PushSubscription[]
+  resetPasswordToken  ResetPasswordToken[]
   aws_credentials     AwsCredentials?
   sessions            Session[]
   biometrics          Biometrics[]
@@ -46,11 +48,12 @@ model Session {
   created_at DateTime   @default(now())
   updated_at DateTime   @updatedAt
 
-  active     Boolean @default(true)
-  user_agent String?
+  active        Boolean @default(true)
+  user_agent    String?
+  refresh_token String?
 
   user_id Int
-  user    User @relation(fields: [user_id], references: [id])
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@map("sessions")
 }
@@ -65,9 +68,38 @@ model Biometrics {
   counter       Int
 
   user_id Int
-  user    User @relation(fields: [user_id], references: [id])
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@map("biometrics")
+}
+
+model PushSubscription {
+  id         Int        @id @default(autoincrement())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  endpoint String
+  keys     String
+
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id Int
+
+  @@map("push_subsciptions")
+}
+
+model ResetPasswordToken {
+  id         Int        @id @default(autoincrement())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  token     String @unique
+  expiresAt DateTime
+  expired   Boolean  @default(false)
+
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id Int
+
+  @@map("reset_password_tokens")
 }
 
 model AwsCredentials {
@@ -80,7 +112,7 @@ model AwsCredentials {
   tokens     String
 
   user_id Int  @unique
-  user    User @relation(fields: [user_id], references: [id])
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@map("aws_credentials")
 }
@@ -96,7 +128,7 @@ model Photo {
   last_modified DateTime
 
   user_id Int
-  user    User @relation("Photos", fields: [user_id], references: [id])
+  user    User @relation("Photos", fields: [user_id], references: [id], onDelete: Cascade)
 
   albums   AlbumsOnPhotos[]
 
@@ -135,21 +167,4 @@ model AlbumsOnPhotos {
 
   @@id([photo_id, album_id])
   @@index([photo_id, album_id])
-}
-
-model ApiError {
-  id         Int        @id @default(autoincrement())
-  created_at DateTime   @default(now())
-  updated_at DateTime   @updatedAt
-
-  user_id  Int?
-  user_ip  String?
-  type     ERROR_TYPE
-  path     String
-  status   Int
-  message  String
-  details  String?
-  raw      String?
-
-  @@map("api_errors")
 }

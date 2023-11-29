@@ -9,7 +9,6 @@ import {
   UseGuards
 } from '@nestjs/common';
 import { UsersService } from '@/users/users.service';
-import { ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@/common/guards/auth.guard';
 import {
   accessTokenCookieOptions,
@@ -18,7 +17,6 @@ import {
 import type { UpdateUserDto } from '@/users/dto/update-user.dto';
 import type { Response } from 'express';
 
-@ApiTags('Users')
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
@@ -38,13 +36,13 @@ export class UsersController {
 
   @UseGuards(AuthGuard)
   @Patch(':id')
-  async update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
+  async update(@Param('id') id: number, @Body() updateUserDto: UpdateUserDto) {
     return await this.usersService.update(id, updateUserDto);
   }
 
   @UseGuards(AuthGuard)
   @Delete(':id')
-  async remove(@Param('id') id: string, @Res() response: Response) {
+  async remove(@Param('id') id: number, @Res() response: Response) {
     await this.usersService.remove(id);
     response.clearCookie('memowiseAccTok', accessTokenCookieOptions);
     response.clearCookie('memowiseRefTok', refreshTokenCookieOptions);

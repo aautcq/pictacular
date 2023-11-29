@@ -8,6 +8,12 @@ export class RegisterDto {
   email: string;
 
   @IsString()
+  first_name: string;
+
+  @IsString()
+  last_name: string;
+
+  @IsString()
   @IsNotEmpty()
   @ValidatePasswordComplexity(3)
   password: string;

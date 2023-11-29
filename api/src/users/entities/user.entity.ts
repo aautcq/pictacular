@@ -1,7 +1,7 @@
 import { AtLeast } from '@/common/types';
 
 export class User {
-  id: string;
+  id: number;
   created_at: Date;
   updated_at: Date;
 

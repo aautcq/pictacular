@@ -16,7 +16,6 @@ import { UsersService } from '@/users/users.service';
 import { SessionsService } from '@/sessions/sessions.service';
 import { CryptoService } from '@/config/crypto/crypto.service';
 import { JwtService } from '@/config/jwt/jwt.service';
-import { ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@/common/guards/auth.guard';
 import {
   accessTokenCookieOptions,
@@ -26,7 +25,6 @@ import type { Response } from 'express';
 import type { CreateBiometricsDto } from '@/biometrics/dto/create-biometrics.dto';
 import type { VerifyBiometricsDto } from '@/biometrics/dto/verify-biometrics.dto';
 
-@ApiTags('Biometrics')
 @Controller()
 export class BiometricsController {
   constructor(
