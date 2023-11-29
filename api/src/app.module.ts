@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { I18nModule, AcceptLanguageResolver } from 'nestjs-i18n';
 import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from '@/config/prisma/prisma.module';
+import { StorageModule } from '@/config/storage/storage.module';
 import { CryptoModule } from '@/config/crypto/crypto.module';
 import { JwtModule } from '@/config/jwt/jwt.module';
 import { MailerModule } from '@/config/mailer/mailer.module';
@@ -41,6 +42,7 @@ import * as path from 'path';
 
     // Config
     PrismaModule,
+    StorageModule,
     CryptoModule,
     JwtModule,
     MailerModule,

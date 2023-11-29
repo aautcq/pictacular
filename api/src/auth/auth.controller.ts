@@ -42,7 +42,7 @@ export class AuthController {
     private readonly configService: ConfigService
   ) {}
 
-  @Post('login')
+  @Post('sessions')
   async login(
     @Body() loginDto: LoginDto,
     @Headers('user-agent') userAgent: string,
@@ -145,7 +145,7 @@ export class AuthController {
     response.status(204).send();
   }
 
-  @Post('register')
+  @Post('users')
   async register(@Body() registerDto: RegisterDto, @Res() response: Response) {
     const { email, password, first_name, last_name } = registerDto;
     const passwordHash = this.cryptoService.hash(password);
@@ -181,7 +181,7 @@ export class AuthController {
     response.status(204).send();
   }
 
-  @Post('reset-password')
+  @Post('send_password_reset_email')
   async resetPassword(
     @Body() resetPasswordDto: ResetPasswordDto,
     @Res() response: Response
@@ -189,7 +189,7 @@ export class AuthController {
     const clientUrl = this.configService.get<string>('CLIENT_URL');
     const { email } = resetPasswordDto;
     const user = await this.usersService.findUnique({ email });
-    if (!user) response.status(204).send();
+    if (!user || !user.is_verified) response.status(204).send();
     const token = await this.authService.generateResetPasswordToken(email);
     this.mailerService.sendEmail(
       {
@@ -201,7 +201,7 @@ export class AuthController {
     response.status(204).send();
   }
 
-  @Post('reset-password/:token')
+  @Post('reset_password/:token')
   async setPassword(
     @Body() setPasswordDto: SetPasswordDto,
     @Param('token') token: string,

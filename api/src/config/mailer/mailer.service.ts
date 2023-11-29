@@ -6,7 +6,7 @@ import { join } from 'path';
 import { render } from 'ejs';
 import * as sgMail from '@sendgrid/mail';
 
-export type EmailType = 'verification' | 'password-reset' | 'answers-due';
+export type EmailType = 'verification' | 'password-reset';
 
 export type EmailData = Partial<{
   email: string;

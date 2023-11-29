@@ -6,13 +6,6 @@
     "cta": "Verify my account",
     "alternative": "You can also copy and paste this link in your browser:"
   },
-  "answers-due": {
-    "subject": "Answers due",
-    "title": "Hello there!",
-    "content": "You have flashcards awaiting your answers in Pictacular. Click on the button below to check them out.",
-    "cta": "Answer my flashcards",
-    "alternative": "You can also copy and paste this link in your browser:"
-  },
   "password-reset": {
     "subject": "Reset your password",
     "title": "Hello there!",

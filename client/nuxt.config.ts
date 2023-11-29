@@ -104,7 +104,7 @@ export default defineNuxtConfig({
   security: {
     headers: {
       contentSecurityPolicy: {
-        'img-src': ['\'self\'', 'https://memowise.s3.eu-west-3.amazonaws.com'],
+        'img-src': ['\'self\'', 'https://pictacular.s3.eu-west-3.amazonaws.com'],
       },
     },
   },

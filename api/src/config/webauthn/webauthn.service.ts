@@ -14,7 +14,7 @@ export class WebauthnService {
     this.f2l = new Fido2Lib({
       timeout: 42,
       rpId: this.configService.get<string>('CLIENT_HOST'),
-      rpName: 'Memowise',
+      rpName: 'Pictacular',
       rpIcon:
         'https://pictacular.s3.eu-west-3.amazonaws.com/android-chrome-192x192.png',
       challengeSize: 128,

@@ -3,20 +3,9 @@ import { AppModule } from '@/app.module';
 import helmet from 'helmet';
 import * as cookieParser from 'cookie-parser';
 import { ValidationPipe } from '@nestjs/common';
-import * as fs from 'fs';
 
 async function bootstrap() {
-  const httpsOptions =
-    process.env.ENV === 'development'
-      ? {
-          key: fs.readFileSync('./server.key'),
-          cert: fs.readFileSync('./server.crt')
-        }
-      : null;
-
-  const app = await NestFactory.create(AppModule, {
-    httpsOptions
-  });
+  const app = await NestFactory.create(AppModule);
 
   app.use(helmet());
 

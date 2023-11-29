@@ -6,4 +6,4 @@ import { StorageService } from '@/config/storage/storage.service';
   providers: [StorageService],
   exports: [StorageService]
 })
-export class CryptoModule {}
+export class StorageModule {}

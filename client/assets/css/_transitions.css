@@ -1,0 +1,35 @@
+.aa-slide-from-right-enter-from,
+.aa-slide-from-right-leave-to {
+  @apply opacity-0 translate-x-3;
+}
+.aa-slide-from-right-enter-active,
+.aa-slide-from-right-leave-active {
+  @apply transition-all;
+}
+
+.aa-slide-from-top-enter-from,
+.aa-slide-from-top-leave-to {
+  @apply opacity-0 -translate-y-3;
+}
+.aa-slide-from-top-enter-active,
+.aa-slide-from-top-leave-active {
+  @apply transition-all;
+}
+
+.aa-fade-enter-from,
+.aa-fade-leave-to {
+  @apply opacity-0;
+}
+.aa-fade-enter-active,
+.aa-fade-leave-active {
+  @apply transition-opacity;
+}
+
+.page-enter-active,
+.page-leave-active {
+  @apply transition-all;
+}
+.page-enter-from,
+.page-leave-to {
+  @apply opacity-0 -translate-y-1;
+}

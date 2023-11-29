@@ -45,15 +45,23 @@ export class UsersService {
 
   async findUnique(data: UserFindUnique, password = false) {
     return this.prismaService.user.findUnique({
-      where: data,
+      where: {
+        id: data?.id,
+        email: data?.email,
+        verification_token: data?.verification_token
+      },
       select: {
         id: true,
         created_at: true,
         email: true,
+        first_name: true,
+        last_name: true,
         is_verified: true,
         verification_token: true,
         last_sign_in_at: true,
         nb_incorrect_passwords: true,
+        aws_credentials: true,
+        avatar_url: true,
         password
       }
     });

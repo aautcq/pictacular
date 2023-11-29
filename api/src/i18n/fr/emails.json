@@ -6,13 +6,6 @@
     "cta": "Vérifier mon compte",
     "alternative": "Vous pouvez également copier-coller le lien suivant dans votre navigateur :"
   },
-  "answers-due": {
-    "subject": "Des flashcards vous attendent",
-    "title": "Bonjour !",
-    "content": "Des flashcards attendent votre réponse dans Pictacular. Cliquez sur le bouton ci-dessous pour les voir.",
-    "cta": "Répondre à mes flashcards",
-    "alternative": "Vous pouvez également copier-coller le lien suivant dans votre navigateur :"
-  },
   "password-reset": {
     "subject": "Création d'un nouveau mot de passe",
     "title": "Bonjour !",

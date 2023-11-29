@@ -1,4 +1,4 @@
-import { AtLeast } from '@/common/types';
+import type { AtLeast } from '@/common/types';
 
 export class User {
   id: number;
@@ -14,6 +14,7 @@ export class User {
   verification_token: string;
   nb_incorrect_passwords: number;
 
+  aws_credentials: unknown;
   sessions: unknown[];
 }
 
