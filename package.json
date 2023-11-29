@@ -1,0 +1,21 @@
+{
+  "name": "pictacular",
+  "version": "1.0.0",
+  "description": "An image gallery app",
+  "scripts": {
+    "dev": "pnpm run -r --parallel start:dev",
+    "build": "pnpm run -r --parallel build",
+    "lf": "pnpm run -r --parallel lint && pnpm run -r --parallel format",
+    "prepare": "husky install"
+  },
+  "keywords": [
+    "memorisation",
+    "Leitner"
+  ],
+  "author": "Adrien Autricque <adrien.autricque@gmail.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "husky": "~8.0.3",
+    "lint-staged": "~15.1.0"
+  }
+}

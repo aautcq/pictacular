@@ -1,0 +1,23 @@
+{
+  "verification": {
+    "subject": "Welcome to Pictacular",
+    "title": "Hello there!",
+    "content": "Welcome to Pictacular. Click on the button below to verify your email address and complete the registration process.",
+    "cta": "Verify my account",
+    "alternative": "You can also copy and paste this link in your browser:"
+  },
+  "answers-due": {
+    "subject": "Answers due",
+    "title": "Hello there!",
+    "content": "You have flashcards awaiting your answers in Pictacular. Click on the button below to check them out.",
+    "cta": "Answer my flashcards",
+    "alternative": "You can also copy and paste this link in your browser:"
+  },
+  "password-reset": {
+    "subject": "Reset your password",
+    "title": "Hello there!",
+    "content": "Please click on the button below to set a new Pictacular password.",
+    "cta": "Set a new password",
+    "alternative": "You can also copy and paste this link in your browser:"
+  }
+}

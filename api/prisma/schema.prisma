@@ -1,0 +1,155 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = []
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ERROR_TYPE {
+  DATABASE
+  SOCKET
+  API
+  INTERNAL_SERVER_ERROR
+}
+
+model User {
+  id         Int        @id @default(autoincrement())
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+
+  email                  String     @unique
+  first_name             String
+  last_name              String
+  avatar_url             String?
+  password               String
+  last_sign_in           DateTime?
+  is_verified            Boolean    @default(false)
+  verification_token     String
+  nb_incorrect_passwords Int        @default(0)
+
+  aws_credentials     AwsCredentials?
+  sessions            Session[]
+  biometrics          Biometrics[]
+  albums              Album[] @relation("Albums")
+  photos              Photo[] @relation("Photos")
+  liked_photos        Photo[] @relation("LikedPhotos")
+  admin_albums        Album[] @relation("AdminAlbums")
+
+  @@map("users")
+}
+
+model Session {
+  id         Int        @id @default(autoincrement())
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+
+  active     Boolean @default(true)
+  user_agent String?
+
+  user_id Int
+  user    User @relation(fields: [user_id], references: [id])
+
+  @@map("sessions")
+}
+
+model Biometrics {
+  id         Int        @id @default(autoincrement())
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+
+  credential_id String  @unique
+  pem           String
+  counter       Int
+
+  user_id Int
+  user    User @relation(fields: [user_id], references: [id])
+
+  @@map("biometrics")
+}
+
+model AwsCredentials {
+  id         Int        @id @default(autoincrement())
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+
+  bucket     String
+  region     String
+  tokens     String
+
+  user_id Int  @unique
+  user    User @relation(fields: [user_id], references: [id])
+
+  @@map("aws_credentials")
+}
+
+model Photo {
+  id         Int        @id @default(autoincrement())
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+
+  key           String
+  mime_type     String
+  size          Int
+  last_modified DateTime
+
+  user_id Int
+  user    User @relation("Photos", fields: [user_id], references: [id])
+
+  albums   AlbumsOnPhotos[]
+
+  likes    User[] @relation("LikedPhotos")
+
+  @@map("photos")
+}
+
+model Album {
+  id         Int        @id @default(autoincrement())
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+
+  title         String?
+  description   String?
+  share_token   String?
+
+  admin_id Int
+  admin    User @relation("AdminAlbums", fields: [admin_id], references: [id])
+
+  photos     AlbumsOnPhotos[]
+
+  users      User[] @relation("Albums")
+
+  @@map("albums")
+}
+
+model AlbumsOnPhotos {
+  photo       Photo @relation(fields: [photo_id], references: [id])
+  photo_id    Int
+
+  album       Album @relation(fields: [album_id], references: [id])
+  album_id    Int
+
+  assigned_at DateTime @default(now())
+
+  @@id([photo_id, album_id])
+  @@index([photo_id, album_id])
+}
+
+model ApiError {
+  id         Int        @id @default(autoincrement())
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+
+  user_id  Int?
+  user_ip  String?
+  type     ERROR_TYPE
+  path     String
+  status   Int
+  message  String
+  details  String?
+  raw      String?
+
+  @@map("api_errors")
+}
