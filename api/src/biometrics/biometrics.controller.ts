@@ -129,8 +129,12 @@ export class BiometricsController {
       refresh_token: refreshTokenHash
     });
 
-    response.cookie('memowiseAccTok', accessToken, accessTokenCookieOptions);
-    response.cookie('memowiseRefTok', refreshToken, refreshTokenCookieOptions);
+    response.cookie('pictacularAccTok', accessToken, accessTokenCookieOptions);
+    response.cookie(
+      'pictacularRefTok',
+      refreshToken,
+      refreshTokenCookieOptions
+    );
 
     response.status(201).json({
       id: user.id,

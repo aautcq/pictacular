@@ -44,8 +44,8 @@ export class UsersController {
   @Delete(':id')
   async remove(@Param('id') id: number, @Res() response: Response) {
     await this.usersService.remove(id);
-    response.clearCookie('memowiseAccTok', accessTokenCookieOptions);
-    response.clearCookie('memowiseRefTok', refreshTokenCookieOptions);
+    response.clearCookie('pictacularAccTok', accessTokenCookieOptions);
+    response.clearCookie('pictacularRefTok', refreshTokenCookieOptions);
     response.status(204).send();
   }
 }

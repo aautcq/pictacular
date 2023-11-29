@@ -16,6 +16,7 @@ import { AuthService } from '@/auth/auth.service';
 import { CryptoService } from '@/config/crypto/crypto.service';
 import { JwtService } from '@/config/jwt/jwt.service';
 import { MailerService } from '@/config/mailer/mailer.service';
+import { StorageService } from '@/config/storage/storage.service';
 import { ConfigService } from '@nestjs/config';
 import { AuthGuard } from '@/common/guards/auth.guard';
 import {
@@ -37,6 +38,7 @@ export class AuthController {
     private readonly cryptoService: CryptoService,
     private readonly jwtService: JwtService,
     private readonly mailerService: MailerService,
+    private readonly storageService: StorageService,
     private readonly configService: ConfigService
   ) {}
 
@@ -104,12 +106,26 @@ export class AuthController {
       refresh_token: refreshTokenHash
     });
 
-    response.cookie('memowiseAccTok', accessToken, accessTokenCookieOptions);
-    response.cookie('memowiseRefTok', refreshToken, refreshTokenCookieOptions);
+    let secure_url = null;
+    if (user?.avatar_url && user.aws_credentials?.id) {
+      this.storageService.initWithBucket(user?.aws_credentials);
+      secure_url = await this.storageService.generateSecureUrl(user.avatar_url);
+    }
+
+    response.cookie('pictacularAccTok', accessToken, accessTokenCookieOptions);
+    response.cookie(
+      'pictacularRefTok',
+      refreshToken,
+      refreshTokenCookieOptions
+    );
 
     response.status(201).json({
       id: user.id,
       email: user.email,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      has_aws_credentials: !!user.aws_credentials?.id ?? false,
+      avatar_url: secure_url,
       created_at: user.created_at,
       last_sign_in_at
     });
@@ -124,19 +140,21 @@ export class AuthController {
       refresh_token: null
     });
 
-    response.clearCookie('memowiseAccTok', accessTokenCookieOptions);
-    response.clearCookie('memowiseRefTok', refreshTokenCookieOptions);
+    response.clearCookie('pictacularAccTok', accessTokenCookieOptions);
+    response.clearCookie('pictacularRefTok', refreshTokenCookieOptions);
     response.status(204).send();
   }
 
   @Post('register')
   async register(@Body() registerDto: RegisterDto, @Res() response: Response) {
-    const { email, password } = registerDto;
+    const { email, password, first_name, last_name } = registerDto;
     const passwordHash = this.cryptoService.hash(password);
     const emailTaken = await this.usersService.findUnique({ email });
     if (emailTaken) throw new ConflictException('email_taken');
     const user = await this.usersService.create({
       email,
+      first_name,
+      last_name,
       password: passwordHash
     });
 

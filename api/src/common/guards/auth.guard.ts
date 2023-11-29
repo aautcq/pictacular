@@ -17,8 +17,8 @@ export class AuthGuard implements CanActivate {
     const session = response.locals.session;
 
     if (!user || !session) {
-      response.clearCookie('memowiseAccTok', accessTokenCookieOptions);
-      response.clearCookie('memowiseRefTok', refreshTokenCookieOptions);
+      response.clearCookie('pictacularAccTok', accessTokenCookieOptions);
+      response.clearCookie('pictacularRefTok', refreshTokenCookieOptions);
       throw new UnauthorizedException();
     }
 

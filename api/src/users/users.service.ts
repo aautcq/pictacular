@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/config/prisma/prisma.service';
+import { CryptoService } from '@/config/crypto/crypto.service';
 
 import type {
   UserCreate,
@@ -9,14 +10,15 @@ import type {
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prismaService: PrismaService) {}
+  constructor(
+    private readonly prismaService: PrismaService,
+    private readonly cryptoService: CryptoService
+  ) {}
 
   private async getFreshToken() {
     let token = '';
     do {
-      token =
-        Math.random().toString(36).substring(2) +
-        Math.random().toString(36).substring(2);
+      token = this.cryptoService.generateRandomString(32);
     } while (
       await this.prismaService.user.findFirst({
         where: { verification_token: token }
@@ -57,50 +59,13 @@ export class UsersService {
     });
   }
 
-  async findWithFlashcards() {
-    return await this.prismaService.user.findMany({
-      where: {
-        is_verified: true,
-        NOT: {
-          OR: [{ flashcards: { none: {} } }, { notificationsSettings: null }]
-        }
-      },
-      select: {
-        id: true,
-        email: true,
-        notificationsSettings: {
-          select: {
-            id: true,
-            is_email_active: true,
-            is_push_active: true,
-            is_sent: true,
-            hour: true,
-            minute: true,
-            updates: true
-          }
-        }
-      }
-    });
-  }
-
   async findAll() {
     return await this.prismaService.user.findMany({
       where: {
-        is_verified: true,
-        NOT: {
-          notificationsSettings: null
-        }
+        is_verified: true
       },
       select: {
-        id: true,
-        notificationsSettings: {
-          select: {
-            id: true,
-            is_email_active: true,
-            is_push_active: true,
-            is_sent: true
-          }
-        }
+        id: true
       }
     });
   }

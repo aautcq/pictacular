@@ -12,7 +12,7 @@ export class AuthMiddleware implements NestMiddleware {
 
   async use(request: Request, response: Response, next: () => void) {
     if (!request.cookies) return next();
-    const { memowiseAccTok: accessToken, memowiseRefTok: refreshToken } =
+    const { pictacularAccTok: accessToken, pictacularRefTok: refreshToken } =
       request.cookies;
     if (!refreshToken) return next();
 
@@ -31,12 +31,12 @@ export class AuthMiddleware implements NestMiddleware {
         await this.jwtService.reIssueAccessToken(refreshToken);
 
       response.cookie(
-        'memowiseAccTok',
+        'pictacularAccTok',
         newAccessToken,
         accessTokenCookieOptions
       );
       response.cookie(
-        'memowiseRefTok',
+        'pictacularRefTok',
         newRefreshToken,
         refreshTokenCookieOptions
       );

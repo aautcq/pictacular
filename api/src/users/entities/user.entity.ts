@@ -6,19 +6,23 @@ export class User {
   updated_at: Date;
 
   email: string;
+  first_name: string;
+  last_name: string;
   password: string;
   last_sign_in_at: Date;
   is_verified: boolean;
   verification_token: string;
   nb_incorrect_passwords: number;
 
-  flashcards: unknown[];
   sessions: unknown[];
 }
 
 type UserUniqueFields = Pick<User, 'id' | 'email' | 'verification_token'>;
 
-export type UserCreate = Pick<User, 'email' | 'password'>;
+export type UserCreate = Pick<
+  User,
+  'email' | 'first_name' | 'last_name' | 'password'
+>;
 export type UserUpdate = Partial<
   Pick<
     User,

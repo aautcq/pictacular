@@ -5,9 +5,7 @@ import axios from 'axios';
 
 @Injectable()
 export class CronService {
-  constructor(
-    private readonly configService: ConfigService,
-  ) {}
+  constructor(private readonly configService: ConfigService) {}
 
   // every 14 minutes
   @Cron('*/14 * * * *')

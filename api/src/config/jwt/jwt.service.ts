@@ -22,6 +22,11 @@ export interface RefreshToken {
   sessionId: number;
 }
 
+export interface AwsCredentialsTokens {
+  access_key_id: string;
+  secret_access_key: string;
+}
+
 export const accessTokenTtl = 15 * 50; // In seconds (15 minutes)
 export const refreshTokenTtl = 7 * 24 * 60 * 60; // In seconds (7 days)
 
@@ -107,5 +112,17 @@ export class JwtService {
       newAccessToken: accessToken,
       newRefreshToken: refreshToken
     };
+  }
+
+  encodeAwsCredentials(payload: AwsCredentialsTokens) {
+    return this.nestJwtService.sign(payload, {
+      expiresIn: refreshTokenTtl,
+      algorithm: 'RS256',
+      privateKey: process.env.JWT_PRIVATE_KEY
+    });
+  }
+
+  decodeAwsCredentials(token: string) {
+    return this.verify<AwsCredentialsTokens>(token);
   }
 }
