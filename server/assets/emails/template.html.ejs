@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pictacular</title>
+  </head>
+  <body>
+    <table
+      width="100%"
+      cellpadding="0"
+      cellspacing="0"
+      border="0"
+      bgcolor="#f0f0f0"
+    >
+      <tr>
+        <td align="center">
+          <table cellpadding="0" cellspacing="0" border="0" width="600">
+            <tr>
+              <td bgcolor="#ffffff" align="center" style="padding: 40px 20px">
+                <h1 style="font-size: 18px"><%= title %></h1>
+                <p><%= content %></p>
+                <a
+                  href="<%= link %>"
+                  style="
+                    display: inline-block;
+                    padding: 10px 20px;
+                    background-color: #22c55d;
+                    color: #fff;
+                    text-decoration: none;
+                    border-radius: 3px;
+                  "
+                  ><%= cta %></a
+                >
+                <p style="font-size: 12px; color: #737373; margin-top: 50px">
+                  <%= alternative %>
+                  <a href="<%= link %>"><%= link %></a>
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
