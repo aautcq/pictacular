@@ -1,0 +1,73 @@
+import process from 'node:process'
+import jwt from 'jsonwebtoken'
+
+export interface AccessToken {
+  user: {
+    id: number
+    email: string
+  }
+  session: {
+    id: number
+  }
+}
+
+export interface RefreshToken {
+  userId: number
+  sessionId: number
+}
+
+export interface AwsCredentialsTokens {
+  access_key_id: string
+  secret_access_key: string
+}
+
+export const accessTokenTtl = 15 * 60 // In seconds (15 minutes)
+export const refreshTokenTtl = 7 * 24 * 60 * 60 // In seconds (7 days)
+
+// Plain RS256 JWT utility module (no DI container), ported from the former
+// NestJS JwtService. Silent-refresh (reIssueAccessToken) is intentionally
+// not ported here — it depends on the sessions/users server utils, which are
+// ported in a later ticket.
+export function createTokens(
+  user: { id: number, email: string },
+  session: { id: number },
+) {
+  const accessToken = jwt.sign(
+    {
+      user: { id: user.id, email: user.email },
+      session: { id: session.id },
+    },
+    process.env.JWT_PRIVATE_KEY as string,
+    { expiresIn: accessTokenTtl, algorithm: 'RS256' },
+  )
+
+  const refreshToken = jwt.sign(
+    { userId: user.id, sessionId: session.id },
+    process.env.JWT_PRIVATE_KEY as string,
+    { expiresIn: refreshTokenTtl, algorithm: 'RS256' },
+  )
+
+  return { accessToken, refreshToken }
+}
+
+export function verifyToken<T>(token: string): T | null {
+  try {
+    return jwt.verify(token, process.env.JWT_PUBLIC_KEY as string, {
+      algorithms: ['RS256'],
+    }) as T
+  }
+  catch {
+    return null
+  }
+}
+
+export function encodeAwsCredentials(payload: AwsCredentialsTokens) {
+  return jwt.sign(payload, process.env.JWT_PRIVATE_KEY as string, {
+    expiresIn: refreshTokenTtl,
+    algorithm: 'RS256',
+  })
+}
+
+export function decodeAwsCredentials(token: string) {
+  return verifyToken<AwsCredentialsTokens>(token)
+}

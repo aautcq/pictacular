@@ -1,0 +1,163 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = []
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         Int        @id @default(autoincrement())
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+
+  email                  String     @unique
+  first_name             String
+  last_name              String
+  avatar_url             String?
+  password               String
+  last_sign_in_at        DateTime?
+  is_verified            Boolean    @default(false)
+  verification_token     String
+  nb_incorrect_passwords Int        @default(0)
+
+  pushSubscription    PushSubscription[]
+  resetPasswordToken  ResetPasswordToken[]
+  aws_credentials     AwsCredentials?
+  sessions            Session[]
+  biometrics          Biometrics[]
+  albums              Album[] @relation("Albums")
+  photos              Photo[] @relation("Photos")
+  liked_photos        Photo[] @relation("LikedPhotos")
+  admin_albums        Album[] @relation("AdminAlbums")
+
+  @@map("users")
+}
+
+model Session {
+  id         Int        @id @default(autoincrement())
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+
+  active        Boolean @default(true)
+  user_agent    String?
+  refresh_token String?
+
+  user_id Int
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Biometrics {
+  id         Int        @id @default(autoincrement())
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+
+  credential_id String  @unique
+  pem           String
+  counter       Int
+
+  user_id Int
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("biometrics")
+}
+
+model PushSubscription {
+  id         Int        @id @default(autoincrement())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  endpoint String
+  keys     String
+
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id Int
+
+  @@map("push_subsciptions")
+}
+
+model ResetPasswordToken {
+  id         Int        @id @default(autoincrement())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  token     String @unique
+  expiresAt DateTime
+  expired   Boolean  @default(false)
+
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id Int
+
+  @@map("reset_password_tokens")
+}
+
+model AwsCredentials {
+  id         Int        @id @default(autoincrement())
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+
+  bucket     String
+  region     String
+  tokens     String
+
+  user_id Int  @unique
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("aws_credentials")
+}
+
+model Photo {
+  id         Int        @id @default(autoincrement())
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+
+  key           String
+  mime_type     String
+  size          Int
+  last_modified DateTime
+
+  user_id Int
+  user    User @relation("Photos", fields: [user_id], references: [id], onDelete: Cascade)
+
+  albums   AlbumsOnPhotos[]
+
+  likes    User[] @relation("LikedPhotos")
+
+  @@map("photos")
+}
+
+model Album {
+  id         Int        @id @default(autoincrement())
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+
+  title         String?
+  description   String?
+  share_token   String?
+
+  admin_id Int
+  admin    User @relation("AdminAlbums", fields: [admin_id], references: [id])
+
+  photos     AlbumsOnPhotos[]
+
+  users      User[] @relation("Albums")
+
+  @@map("albums")
+}
+
+model AlbumsOnPhotos {
+  photo       Photo @relation(fields: [photo_id], references: [id])
+  photo_id    Int
+
+  album       Album @relation(fields: [album_id], references: [id])
+  album_id    Int
+
+  assigned_at DateTime @default(now())
+
+  @@id([photo_id, album_id])
+  @@index([photo_id, album_id])
+}

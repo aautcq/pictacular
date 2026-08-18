@@ -1,17 +1,65 @@
 {
   "name": "pictacular",
+  "type": "module",
   "version": "1.0.0",
-  "description": "An image gallery app",
-  "scripts": {
-    "dev": "pnpm run -r --parallel start:dev",
-    "build": "pnpm run -r --parallel build",
-    "lf": "pnpm run -r --parallel lint && pnpm run -r --parallel format",
-    "prepare": "husky install"
-  },
+  "private": true,
+  "description": "Pictacular is an image gallery app",
   "author": "Adrien Autricque <adrien.autricque@gmail.com>",
   "license": "MIT",
+  "homepage": "https://github.com/aautcq/pictacular#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aautcq/pictacular.git"
+  },
+  "bugs": {
+    "url": "https://github.com/aautcq/pictacular/issues"
+  },
+  "engines": {
+    "node": "~18.7.0",
+    "npm": "~8.15.0"
+  },
+  "prettier": "@aautcq/prettier-config",
+  "scripts": {
+    "afterinstall": "prisma generate && prisma db push",
+    "postinstall": "nuxt prepare",
+    "prepare": "husky install",
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "lint": "eslint . --fix",
+    "format": "prettier --write \"**/*.css\" --ignore-path .gitignore",
+    "lf": "pnpm run lint && pnpm run format",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aautcq/web-utils": "~2.2.0",
+    "@prisma/client": "~5.6.0",
+    "@vite-pwa/nuxt": "~0.3.2",
+    "bcrypt": "~5.1.1",
+    "jsonwebtoken": "~9.0.2",
+    "zod": "~3.22.4"
+  },
   "devDependencies": {
+    "@aautcq/prettier-config": "~2.1.4",
+    "@antfu/eslint-config": "~2.1.1",
+    "@nuxt/test-utils": "~3.9.0",
+    "@nuxtjs/fontaine": "~0.4.1",
+    "@nuxtjs/tailwindcss": "~6.10.1",
+    "@types/bcrypt": "~5.0.2",
+    "@types/jsonwebtoken": "~9.0.5",
+    "@types/node": "~20.3.1",
+    "eslint": "^8.42.0",
     "husky": "~8.0.3",
-    "lint-staged": "~15.1.0"
+    "lint-staged": "~15.1.0",
+    "nuxt": "~3.8.2",
+    "nuxt-icon": "~0.6.6",
+    "nuxt-security": "1.0.0-rc.4",
+    "prisma": "~5.6.0",
+    "sass": "~1.69.5",
+    "vitest": "~1.0.4",
+    "vue": "~3.3.8",
+    "vue-router": "~4.2.5",
+    "ws": "~8.15.0"
   }
 }
