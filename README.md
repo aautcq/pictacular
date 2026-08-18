@@ -1,20 +1,23 @@
 # Pictacular
 
-Monorepo for the Pictacular app - a PWA built with Nuxt and NestJS and designed to display images stored in an AWS bucket.
+Pictacular is a PWA built with Nuxt/Nitro, designed to display images stored in an AWS bucket.
 
 ## Setup
 
-Make sure to install the dependencies in both the `/client` and `/api` folders:
+Install the dependencies:
 
 ```bash
 pnpm install
 ```
 
+A `DATABASE_URL` must be set in `.env` (copy from `.env.example`) before installing, since
+`prisma generate && prisma db push` runs as part of install.
+
 ## Development Server
 
-Start the development server on `http://pictacular.dev:3000`:
+Start the development server on `https://pictacular.dev:4005` (requires `pictacular.dev` in
+`/etc/hosts`):
 
 ```bash
-# pnpm
 pnpm run dev
 ```
