@@ -1,0 +1,16 @@
+{
+  "verification": {
+    "subject": "Bienvenue sur Pictacular",
+    "title": "Bonjour !",
+    "content": "Bienvenue sur Pictacular. Cliquez sur le bouton ci-dessous pour vérifier votre adresse email et ainsi terminer le processus de création de compte.",
+    "cta": "Vérifier mon compte",
+    "alternative": "Vous pouvez également copier-coller le lien suivant dans votre navigateur :"
+  },
+  "password-reset": {
+    "subject": "Création d'un nouveau mot de passe",
+    "title": "Bonjour !",
+    "content": "Veuillez cliquer sur le bouton ci-dessous afin de créer un nouveau mot de passe sur Pictacular.",
+    "cta": "Créer un nouveau mot de passe",
+    "alternative": "Vous pouvez également copier-coller le lien suivant dans votre navigateur :"
+  }
+}
