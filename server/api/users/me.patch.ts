@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client'
+import { Prisma } from '../../generated/prisma/client'
 import { comparePassword, hashPassword } from '../../utils/crypto'
 import { prisma } from '../../utils/prisma'
 import { updateUserSchema } from '../../utils/validation/update-user'
