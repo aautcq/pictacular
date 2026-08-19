@@ -57,7 +57,7 @@ model Biometrics {
   updated_at DateTime   @updatedAt
 
   credential_id String  @unique
-  pem           String
+  public_key    String
   counter       Int
 
   user_id Int

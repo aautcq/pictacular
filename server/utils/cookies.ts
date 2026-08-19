@@ -24,3 +24,14 @@ export const refreshTokenCookieOptions: CookieSerializeOptions = {
   ...genericCookieOptions,
   maxAge: refreshTokenTtl,
 }
+
+// Short-lived cookie bridging a WebAuthn options call (registration or
+// assertion) to the following verify call: the challenge those two
+// ceremonies must agree on can't be trusted from the client, and there's no
+// server-side session to stash it in before an assertion logs the user in.
+export const webauthnChallengeCookieName = 'pictacularWebauthnChallenge'
+
+export const webauthnChallengeCookieOptions: CookieSerializeOptions = {
+  ...genericCookieOptions,
+  maxAge: 5 * 60,
+}
