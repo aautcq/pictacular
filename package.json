@@ -43,6 +43,7 @@
     "bcrypt": "~5.1.1",
     "ejs": "~3.1.9",
     "jsonwebtoken": "~9.0.2",
+    "web-push": "~3.6.7",
     "zod": "~3.22.4"
   },
   "devDependencies": {
@@ -55,6 +56,7 @@
     "@types/ejs": "~3.1.5",
     "@types/jsonwebtoken": "~9.0.5",
     "@types/node": "~20.3.1",
+    "@types/web-push": "~3.6.4",
     "eslint": "^8.42.0",
     "husky": "~8.0.3",
     "lint-staged": "~15.1.0",
@@ -70,7 +72,8 @@
   },
   "pnpm": {
     "overrides": {
-      "@peculiar/asn1-schema": "2.9.3"
+      "@peculiar/asn1-schema": "2.9.3",
+      "nitropack": "~2.10.4"
     }
   }
 }
