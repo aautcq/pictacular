@@ -4,7 +4,7 @@ import {
   refreshTokenCookieName,
   refreshTokenCookieOptions,
 } from '../utils/cookies'
-import { comparePassword, hashPassword } from '../utils/crypto'
+import { compareToken, hashToken } from '../utils/crypto'
 import type { AccessToken, RefreshToken } from '../utils/jwt'
 import { createTokens, verifyToken } from '../utils/jwt'
 import { prisma } from '../utils/prisma'
@@ -49,7 +49,7 @@ export default defineEventHandler(async (event) => {
     || !session.active
     || session.user_id !== refreshPayload.userId
     || !session.refresh_token
-    || !comparePassword(refreshToken, session.refresh_token)
+    || !compareToken(refreshToken, session.refresh_token)
   )
     return
 
@@ -63,7 +63,7 @@ export default defineEventHandler(async (event) => {
   // than clobbering the winning rotation with our own stale one.
   const { count } = await prisma.session.updateMany({
     where: { id: session.id, refresh_token: session.refresh_token },
-    data: { refresh_token: hashPassword(tokens.refreshToken) },
+    data: { refresh_token: hashToken(tokens.refreshToken) },
   })
 
   if (count === 0)
