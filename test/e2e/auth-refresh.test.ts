@@ -2,7 +2,7 @@ import { $fetch, fetch, setup } from '@nuxt/test-utils/e2e'
 import jwt from 'jsonwebtoken'
 import { afterAll, describe, expect, it } from 'vitest'
 import { accessTokenCookieName, refreshTokenCookieName } from '../../server/utils/cookies'
-import { comparePassword } from '../../server/utils/crypto'
+import { compareToken } from '../../server/utils/crypto'
 import type { AccessToken } from '../../server/utils/jwt'
 import { prisma } from '../../server/utils/prisma'
 
@@ -97,7 +97,7 @@ describe('token refresh + protected-route enforcement', async () => {
     expect(newAccessToken).not.toBe(expiredAccessToken)
 
     const refreshedSession = await prisma.session.findUniqueOrThrow({ where: { id: session.id } })
-    expect(comparePassword(newRefreshToken, refreshedSession.refresh_token as string)).toBe(true)
+    expect(compareToken(newRefreshToken, refreshedSession.refresh_token as string)).toBe(true)
 
     // The refreshed session accepts the newly-issued access token going forward.
     const followUp = await $fetch('/api/test/protected', {
@@ -119,6 +119,37 @@ describe('token refresh + protected-route enforcement', async () => {
       session: { id: session.id },
     })
     expect(getCookies(response)).toHaveLength(0)
+  })
+
+  it('rejects a stale, already-rotated-out refresh token even though it is still cryptographically valid (bcrypt-72-byte-truncation regression, issue #9)', async () => {
+    const { user, session, refreshToken: staleRefreshToken } = await createLoggedInSession()
+    const expiredAccessToken = signExpiredAccessToken({ user: { id: user.id, email: user.email }, session: { id: session.id } })
+
+    // JWTs carry second-precision iat/exp: wait past the second boundary so
+    // the rotated refresh token below is a genuinely distinct JWT rather
+    // than an accidental byte-for-byte duplicate of the stale one.
+    await new Promise(resolve => setTimeout(resolve, 1100))
+
+    // Rotate the refresh token once via a legitimate silent refresh.
+    const rotateResponse = await fetch('/api/test/protected', {
+      headers: {
+        cookie: `${accessTokenCookieName}=${expiredAccessToken}; ${refreshTokenCookieName}=${staleRefreshToken}`,
+      },
+    })
+    expect(rotateResponse.status).toBe(200)
+
+    // Replaying the now-superseded refresh token must be rejected: an RS256
+    // refresh token for the same session shares its first 72 bytes with
+    // every other token for that session (only iat/exp/signature differ,
+    // all beyond byte 72), so a bcrypt-based compare would wrongly accept
+    // it against the freshly-rotated hash.
+    const replayResponse = await fetch('/api/test/protected', {
+      headers: {
+        cookie: `${accessTokenCookieName}=${expiredAccessToken}; ${refreshTokenCookieName}=${staleRefreshToken}`,
+      },
+    })
+
+    expect(replayResponse.status).toBe(401)
   })
 
   it('rejects a refresh attempt against a revoked/logged-out session', async () => {

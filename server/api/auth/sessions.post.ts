@@ -4,7 +4,7 @@ import {
   refreshTokenCookieName,
   refreshTokenCookieOptions,
 } from '../../utils/cookies'
-import { comparePassword, hashPassword } from '../../utils/crypto'
+import { comparePassword, hashToken } from '../../utils/crypto'
 import { issuePasswordResetEmail } from '../../utils/issue-password-reset-email'
 import { createTokens } from '../../utils/jwt'
 import { prisma } from '../../utils/prisma'
@@ -100,11 +100,11 @@ export default defineEventHandler(async (event) => {
 
   const { accessToken, refreshToken } = createTokens(user, session)
 
-  // hashPassword is a generic bcrypt hash, reused here for the stored
-  // refresh-token hash (matching the former CryptoService#hash reuse).
+  // See hashToken (server/utils/crypto.ts) for why refresh tokens use a
+  // SHA-256 digest rather than bcrypt hashPassword.
   await prisma.session.update({
     where: { id: session.id },
-    data: { refresh_token: hashPassword(refreshToken) },
+    data: { refresh_token: hashToken(refreshToken) },
   })
 
   let avatarUrl = null

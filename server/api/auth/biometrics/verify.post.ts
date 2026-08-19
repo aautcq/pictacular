@@ -6,7 +6,7 @@ import {
   webauthnChallengeCookieName,
   webauthnChallengeCookieOptions,
 } from '../../../utils/cookies'
-import { hashPassword } from '../../../utils/crypto'
+import { hashToken } from '../../../utils/crypto'
 import { createTokens } from '../../../utils/jwt'
 import { prisma } from '../../../utils/prisma'
 import { generateSecureAvatarUrl } from '../../../utils/storage'
@@ -84,9 +84,11 @@ export default defineEventHandler(async (event) => {
 
   const { accessToken, refreshToken } = createTokens(user, session)
 
+  // See hashToken (server/utils/crypto.ts) for why refresh tokens use a
+  // SHA-256 digest rather than bcrypt hashPassword.
   await prisma.session.update({
     where: { id: session.id },
-    data: { refresh_token: hashPassword(refreshToken) },
+    data: { refresh_token: hashToken(refreshToken) },
   })
 
   let avatarUrl = null
