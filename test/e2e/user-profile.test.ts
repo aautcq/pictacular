@@ -181,7 +181,7 @@ describe('user profile self-service', async () => {
       const user = await prisma.user.findUniqueOrThrow({ where: { email } })
 
       await prisma.biometrics.create({
-        data: { credential_id: `cred-${user.id}`, pem: 'pem', counter: 0, user: { connect: { id: user.id } } },
+        data: { credential_id: `cred-${user.id}`, public_key: 'public-key', counter: 0, user: { connect: { id: user.id } } },
       })
       await prisma.pushSubscription.create({
         data: { endpoint: 'https://push.example.com', keys: '{}', user: { connect: { id: user.id } } },
