@@ -20,8 +20,11 @@ in-flight work to strand. Prisma is kept, relocated to a root
   Socket.IO-wire-compatible, so this is a rewrite, not a lift-and-shift.
   The `nitropack` version Nuxt 3.8.2 resolves by default (2.8.0) predates
   crossws-based WS support entirely; a `pnpm.overrides` pin (`~2.10.4`,
-  still within Nuxt's `^2.8.0` peer range) is used to get a `nitropack`
+  still within Nuxt's `^2.8.0` peer range) was used to get a `nitropack`
   build that bundles a `crossws` adapter wiring `server.on('upgrade', ...)`.
+  Nuxt 4 (see #21) resolves a `crossws`-capable `nitropack` (2.13.x) on its
+  own, so the override was dropped; `test/e2e/websocket.test.ts` still
+  covers the native-WS behaviour this pin existed for.
 - **Keep-alive cron job removed**: the existing 14-minute ping
   (`cron.service.ts`) only existed to work around Render free-tier spin-down
   across _two_ services; with one service it's dead weight.
