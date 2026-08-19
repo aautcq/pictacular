@@ -46,14 +46,19 @@ export default defineEventHandler(async (event) => {
     })
   }
   catch (error) {
-    // email is a unique column: the upfront findUnique check above is
-    // TOCTOU-vulnerable to a concurrent registration for the same address,
-    // so fall back to the DB's own unique-constraint error (P2002) to keep
-    // the auth.email_taken contract under a race.
+    // email and verification_token are both unique columns: the upfront
+    // findUnique/generateUniqueVerificationToken checks above are
+    // TOCTOU-vulnerable to a concurrent registration for the same address
+    // or a colliding token, so fall back to the DB's own unique-constraint
+    // error (P2002) to keep the right contract under a race. Prisma reports
+    // which column collided via error.meta.target.
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      const target = error.meta?.target
+      const conflictsOnEmail = Array.isArray(target) ? target.includes('email') : target === 'email'
+
       throw createError({
         statusCode: 409,
-        statusMessage: 'auth.email_taken',
+        statusMessage: conflictsOnEmail ? 'auth.email_taken' : 'auth.verification_token_taken',
       })
     }
     throw error
