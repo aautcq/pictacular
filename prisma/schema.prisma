@@ -20,7 +20,7 @@ model User {
   password               String
   last_sign_in_at        DateTime?
   is_verified            Boolean    @default(false)
-  verification_token     String
+  verification_token     String     @unique
   nb_incorrect_passwords Int        @default(0)
 
   pushSubscription    PushSubscription[]
