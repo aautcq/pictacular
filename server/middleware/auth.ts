@@ -1,22 +1,77 @@
-import { accessTokenCookieName } from '../utils/cookies'
-import type { AccessToken } from '../utils/jwt'
+import {
+  accessTokenCookieName,
+  accessTokenCookieOptions,
+  refreshTokenCookieName,
+  refreshTokenCookieOptions,
+} from '../utils/cookies'
+import { comparePassword, hashPassword } from '../utils/crypto'
+import type { AccessToken, RefreshToken } from '../utils/jwt'
+import { createTokens, verifyToken } from '../utils/jwt'
+import { prisma } from '../utils/prisma'
 
 // Nitro middleware running on every request, mirroring the shape of the
 // former AuthMiddleware (which wrote to response.locals): verifies the JWT
 // from the access-token cookie and writes event.context.user/session.
 //
-// Silent refresh of an expired access token using the refresh-token cookie
-// is intentionally out of scope here (separate ticket) — an expired/absent/
-// invalid access token simply leaves the request unauthenticated.
-export default defineEventHandler((event) => {
+// When the access token is missing/expired/invalid, it falls back to a
+// silent refresh: a valid refresh-token cookie matching an active session
+// re-issues and sets new access + refresh token cookies transparently
+// before the request continues. When neither token is valid, the request
+// is simply left unauthenticated (requireAuth clears both cookies and
+// responds 401 for protected routes).
+export default defineEventHandler(async (event) => {
   const accessToken = getCookie(event, accessTokenCookieName)
-  if (!accessToken)
+
+  if (accessToken) {
+    const payload = verifyToken<AccessToken>(accessToken)
+    if (payload) {
+      event.context.user = payload.user
+      event.context.session = payload.session
+      return
+    }
+  }
+
+  const refreshToken = getCookie(event, refreshTokenCookieName)
+  if (!refreshToken)
     return
 
-  const payload = verifyToken<AccessToken>(accessToken)
-  if (!payload)
+  const refreshPayload = verifyToken<RefreshToken>(refreshToken)
+  if (!refreshPayload)
     return
 
-  event.context.user = payload.user
-  event.context.session = payload.session
+  const session = await prisma.session.findUnique({
+    where: { id: refreshPayload.sessionId },
+    include: { user: true },
+  })
+
+  if (
+    !session
+    || !session.active
+    || session.user_id !== refreshPayload.userId
+    || !session.refresh_token
+    || !comparePassword(refreshToken, session.refresh_token)
+  )
+    return
+
+  const user = { id: session.user.id, email: session.user.email }
+  const tokens = createTokens(user, session)
+
+  // Guard the rotation with a conditional update tied to the hash that was
+  // just verified: if a concurrent request (e.g. several requests racing
+  // right after the access token expired) already rotated this session's
+  // refresh token, this update matches zero rows and we bail out rather
+  // than clobbering the winning rotation with our own stale one.
+  const { count } = await prisma.session.updateMany({
+    where: { id: session.id, refresh_token: session.refresh_token },
+    data: { refresh_token: hashPassword(tokens.refreshToken) },
+  })
+
+  if (count === 0)
+    return
+
+  setCookie(event, accessTokenCookieName, tokens.accessToken, accessTokenCookieOptions)
+  setCookie(event, refreshTokenCookieName, tokens.refreshToken, refreshTokenCookieOptions)
+
+  event.context.user = user
+  event.context.session = { id: session.id }
 })
