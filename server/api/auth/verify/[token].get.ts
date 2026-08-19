@@ -1,13 +1,11 @@
 import { prisma } from '../../../utils/prisma'
 
-// Replaces the former AuthController#verify (GET /auth/verify/:token):
-// verification_token isn't a unique column, so this looks up the first
-// matching user rather than using a Prisma unique lookup.
+// Replaces the former AuthController#verify (GET /auth/verify/:token).
 export default defineEventHandler(async (event) => {
   const token = getRouterParam(event, 'token')
 
   const user = token
-    ? await prisma.user.findFirst({ where: { verification_token: token } })
+    ? await prisma.user.findUnique({ where: { verification_token: token } })
     : null
 
   if (!user) {
