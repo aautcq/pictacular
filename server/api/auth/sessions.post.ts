@@ -5,11 +5,9 @@ import {
   refreshTokenCookieOptions,
 } from '../../utils/cookies'
 import { comparePassword, hashPassword } from '../../utils/crypto'
-import { getPreferredLang } from '../../utils/i18n/lang'
+import { issuePasswordResetEmail } from '../../utils/issue-password-reset-email'
 import { createTokens } from '../../utils/jwt'
-import { sendEmail } from '../../utils/mailer'
 import { prisma } from '../../utils/prisma'
-import { generateResetPasswordToken } from '../../utils/reset-password-token'
 import { generateSecureAvatarUrl } from '../../utils/storage'
 import { loginSchema } from '../../utils/validation/login'
 
@@ -46,19 +44,6 @@ export default defineEventHandler(async (event) => {
   if (!user || !user.is_verified)
     throw invalidCredentialsError
 
-  // The reset-password token is created synchronously (it's the durable,
-  // testable side effect); only the outbound email send is fire-and-forget,
-  // matching the former controller where email delivery is not on the
-  // login's critical path/response.
-  async function sendLockoutResetEmail() {
-    const token = await generateResetPasswordToken(email)
-    const link = `${getRequestURL(event).origin}/reset-password/${token}`
-    const lang = getPreferredLang(event)
-
-    sendEmail({ email, link }, 'password-reset', lang)
-      .catch(error => console.error('Failed to send password-reset email', error))
-  }
-
   // Already locked out from a previous attempt: keep rejecting, but don't
   // resend the reset email — that's a one-time side effect of the failure
   // that trips the lock (below), not of every subsequent locked attempt,
@@ -79,7 +64,7 @@ export default defineEventHandler(async (event) => {
     // This 5th failure is the one that locks the account: send the
     // password-reset email immediately.
     if (nbIncorrectPasswords >= 5)
-      await sendLockoutResetEmail()
+      await issuePasswordResetEmail(event, email)
 
     throw invalidCredentialsError
   }
