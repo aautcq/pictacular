@@ -40,8 +40,8 @@ importers:
         specifier: ~6.0.0
         version: 6.0.0
       ejs:
-        specifier: ~3.1.9
-        version: 3.1.9
+        specifier: ~6.0.1
+        version: 6.0.1
       jsonwebtoken:
         specifier: ~9.0.2
         version: 9.0.2
@@ -4996,6 +4996,11 @@ packages:
   ejs@3.1.9:
     resolution: {integrity: sha512-rC+QVNMJWv+MtPgkt0y+0rVEIdbtxVADApW9JXrUVlzHetgcyczP/E7DJmWJ4fJCZF2cPcBk0laWO9ZHMG3DmQ==}
     engines: {node: '>=0.10.0'}
+    hasBin: true
+
+  ejs@6.0.1:
+    resolution: {integrity: sha512-UaaM14yby8U3k02ihS1Bmj5Kz2d7CCQM1scxpgs4Mhkq8F1wR2gl3+Ts4h5Ne4Mnt7M9m4Dw7jsuMr3+xO4vZA==}
+    engines: {node: '>=0.12.18'}
     hasBin: true
 
   electron-to-chromium@1.4.596:
@@ -15917,6 +15922,8 @@ snapshots:
     dependencies:
       jake: 10.8.7
 
+  ejs@6.0.1: {}
+
   electron-to-chromium@1.4.596: {}
 
   electron-to-chromium@1.5.411: {}
@@ -16753,7 +16760,7 @@ snapshots:
 
   filelist@1.0.4:
     dependencies:
-      minimatch: 5.1.6
+      minimatch: 5.1.9
 
   fill-range@7.0.1:
     dependencies:
