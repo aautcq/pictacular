@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client'
+import { Prisma } from '../../generated/prisma/client'
 import { getPreferredLang } from '../../utils/i18n/lang'
 import { sendEmail } from '../../utils/mailer'
 import { registerSchema } from '../../utils/validation/register'
