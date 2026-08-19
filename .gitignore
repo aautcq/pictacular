@@ -5,6 +5,7 @@
 .nitro
 .cache
 dist
+.nuxtrc
 
 # Node dependencies
 node_modules

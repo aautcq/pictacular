@@ -1,8 +1,8 @@
 # Pictacular
 
-Single Nuxt 3 / Nitro app at the repo root (no more `client`/`api` split) for a PWA image
+Single Nuxt 4 / Nitro app at the repo root (no more `client`/`api` split) for a PWA image
 gallery backed by an AWS S3 bucket. Node ~22.23.2, PWA via `@vite-pwa/nuxt` (client side is
-still bootstrap-stage — no `pages`/`components` yet, just `app.vue`).
+still bootstrap-stage — no `pages`/`components` yet, just `app/app.vue`).
 
 ## Setup & commands
 
@@ -58,12 +58,13 @@ Key conventions:
 
 ## Client architecture
 
-Nuxt 3 app is still bootstrap-stage: `app.vue` only renders `<NuxtPage />`; no `pages/`,
-`components/`, `composables/` directories exist yet — add them following standard Nuxt
-auto-import conventions when building features. `nuxt.config.ts` configures PWA
-manifest/workbox, `nuxt-security` CSP (must include the S3 image host in `img-src` when adding
-image sources), and a local HTTPS dev server (`server.key`/`server.crt`) at
-`pictacular.dev:4005`.
+Nuxt 4 app is still bootstrap-stage: `app/app.vue` only renders `<NuxtPage />`; no
+`app/pages/`, `app/components/`, `app/composables/` directories exist yet — add them
+following standard Nuxt auto-import conventions when building features (Nuxt 4's default
+`srcDir` is `app/`; `server/`, `public/`, and config files stay at the project root).
+`nuxt.config.ts` configures PWA manifest/workbox, `nuxt-security` CSP (must include the S3
+image host in `img-src` when adding image sources), and a local HTTPS dev server
+(`server.key`/`server.crt`) at `pictacular.dev:4005`.
 
 Source of truth for the architectural decisions above:
 `docs/adr/0001-nuxt-server-replaces-nestjs-api.md`.
