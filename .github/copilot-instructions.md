@@ -1,7 +1,7 @@
 # Pictacular
 
 Single Nuxt 3 / Nitro app at the repo root (no more `client`/`api` split) for a PWA image
-gallery backed by an AWS S3 bucket. Node ~18.7.0, PWA via `@vite-pwa/nuxt` (client side is
+gallery backed by an AWS S3 bucket. Node ~22.23.2, PWA via `@vite-pwa/nuxt` (client side is
 still bootstrap-stage — no `pages`/`components` yet, just `app.vue`).
 
 ## Setup & commands
