@@ -38,7 +38,7 @@
     "@aws-sdk/s3-request-presigner": "~3.461.0",
     "@prisma/adapter-pg": "~7.9.1",
     "@prisma/client": "~7.9.1",
-    "@sendgrid/mail": "~7.7.0",
+    "@sendgrid/mail": "~8.1.6",
     "@simplewebauthn/server": "~9.0.3",
     "@vite-pwa/nuxt": "~0.3.2",
     "bcrypt": "~6.0.0",
