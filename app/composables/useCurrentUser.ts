@@ -27,6 +27,14 @@ export function useCurrentUser() {
       // the server too, e.g. on a hard navigation to a protected page),
       // so `useRequestFetch()` is required server-side to see the same
       // auth cookies the browser already sent.
+      // With this many Nitro server routes (including issue #51's Album
+      // ones), TypeScript's own recursion limit ("Excessive stack depth
+      // comparing types") is hit resolving `useRequestFetch()`'s generic
+      // `$Fetch` type against every registered route — a known
+      // Nitro/Nuxt typed-fetch limitation (see e.g. nitrojs/nitro#470),
+      // not a real type error. The explicit `<CurrentUser>` generic below
+      // already gives this call its real return type.
+      // @ts-expect-error — see comment above.
       const requestFetch = import.meta.server ? useRequestFetch() : $fetch
       user.value = await requestFetch<CurrentUser>('/api/users/me')
     }

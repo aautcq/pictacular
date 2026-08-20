@@ -33,6 +33,12 @@ async function handleLogout() {
 
         <template v-if="isAuthenticated">
           <NuxtLink
+            to="/albums"
+            class="rounded px-2 py-1 text-sm hover:bg-slate-300 dark:hover:bg-slate-700"
+          >
+            Albums
+          </NuxtLink>
+          <NuxtLink
             to="/profile"
             class="rounded px-2 py-1 text-sm hover:bg-slate-300 dark:hover:bg-slate-700"
           >

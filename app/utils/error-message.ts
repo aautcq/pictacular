@@ -20,6 +20,11 @@ const messages: Record<string, string> = {
   'photos.storage_connection_required': 'Connect a storage bucket before uploading a photo.',
   'photos.not_found': 'That photo could not be found.',
   'photos.upload_failed': 'That photo could not be uploaded. Please try again.',
+  'albums.invalid_payload': 'Please check the information you entered.',
+  'albums.invalid_query': 'Something went wrong loading your albums.',
+  'albums.not_found': 'That album could not be found.',
+  'albums.admin_only': 'Only the album admin can do that.',
+  'albums.photo_not_found': 'That photo could not be found.',
 }
 
 export function getErrorCode(error: unknown): string {
