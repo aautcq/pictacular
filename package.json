@@ -16,7 +16,7 @@
   },
   "engines": {
     "node": "~22.23.2",
-    "npm": "~8.15.0"
+    "npm": "~10.9.8"
   },
   "scripts": {
     "afterinstall": "prisma generate && prisma db push",
@@ -71,9 +71,7 @@
     "vue-router": "~5.2.0",
     "ws": "~8.15.0"
   },
-  "pnpm": {
-    "overrides": {
-      "@peculiar/asn1-schema": "2.9.3"
-    }
+  "overrides": {
+    "@peculiar/asn1-schema": "2.9.3"
   }
 }
