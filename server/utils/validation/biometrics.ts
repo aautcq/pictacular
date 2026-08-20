@@ -13,11 +13,11 @@ export const registerCredentialSchema = z.object({
     clientDataJSON: z.string(),
     attestationObject: z.string(),
     authenticatorData: z.string().optional(),
-    transports: z.array(z.string()).optional(),
+    transports: z.array(z.enum(['ble', 'cable', 'hybrid', 'internal', 'nfc', 'smart-card', 'usb'])).optional(),
     publicKeyAlgorithm: z.number().optional(),
     publicKey: z.string().optional(),
   }),
-  authenticatorAttachment: z.string().optional(),
+  authenticatorAttachment: z.enum(['cross-platform', 'platform']).optional(),
   clientExtensionResults: z.record(z.string(), z.unknown()),
   type: z.literal('public-key'),
 })
@@ -31,7 +31,7 @@ export const verifyAssertionSchema = z.object({
     signature: z.string(),
     userHandle: z.string().optional(),
   }),
-  authenticatorAttachment: z.string().optional(),
+  authenticatorAttachment: z.enum(['cross-platform', 'platform']).optional(),
   clientExtensionResults: z.record(z.string(), z.unknown()),
   type: z.literal('public-key'),
 })
