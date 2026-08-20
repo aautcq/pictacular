@@ -5,7 +5,7 @@ import { z } from 'zod'
 // is passed through to the credential check, since a wrong-complexity
 // password is just another wrong password.
 export const loginSchema = z.object({
-  email: z.string().email(),
+  email: z.email(),
   password: z.string().min(1),
 })
 

@@ -16,7 +16,7 @@ import { hasSufficientPasswordComplexity } from './password-complexity'
 // knowing the old one.
 export const updateUserSchema = z
   .object({
-    email: z.string().email().optional(),
+    email: z.email().optional(),
     first_name: z.string().min(1).optional(),
     last_name: z.string().min(1).optional(),
     current_password: z.string().min(1).optional(),

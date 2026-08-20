@@ -51,8 +51,8 @@ importers:
         specifier: ~3.6.7
         version: 3.6.7
       zod:
-        specifier: ~3.22.4
-        version: 3.22.4
+        specifier: ~4.4.3
+        version: 4.4.3
     devDependencies:
       '@aautcq/prettier-config':
         specifier: ~2.1.4
@@ -10929,6 +10929,9 @@ packages:
 
   zod@3.22.4:
     resolution: {integrity: sha512-iC+8Io04lddc+mVqQ9AZ7OQ2MrUKGN+oIQyq1vemgt46jwCwLfhq7/pwnBnNXXXZb8VTVLKwp9EDkx+ryxIWmg==}
+
+  zod@4.4.3:
+    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
 snapshots:
 
@@ -24588,3 +24591,5 @@ snapshots:
       readable-stream: 4.7.0
 
   zod@3.22.4: {}
+
+  zod@4.4.3: {}

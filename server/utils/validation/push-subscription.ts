@@ -8,7 +8,7 @@ import { z } from 'zod'
 // a plain typed object: there was never a reason for the double-encoding
 // other than working around class-validator only validating flat DTOs.
 export const createPushSubscriptionSchema = z.object({
-  endpoint: z.string().url(),
+  endpoint: z.url(),
   keys: z.object({
     auth: z.string().min(1),
     p256dh: z.string().min(1),

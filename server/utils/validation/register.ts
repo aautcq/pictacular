@@ -6,7 +6,7 @@ import { passwordConfirmationMatches, passwordConfirmationRefinementOptions } fr
 // the password-complexity and password/password_confirmation match rules.
 export const registerSchema = z
   .object({
-    email: z.string().email(),
+    email: z.email(),
     first_name: z.string().min(1),
     last_name: z.string().min(1),
     password: z
