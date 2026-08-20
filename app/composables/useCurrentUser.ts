@@ -84,6 +84,16 @@ export function useCurrentUser() {
     user.value = null
   }
 
+  async function connectStorage(payload: { mode: 'create', access_key_id: string, secret_access_key: string } | { mode: 'connect', access_key_id: string, secret_access_key: string, bucket: string }) {
+    await $fetch('/api/storage-connections', { method: 'POST', body: payload })
+    await fetchCurrentUser()
+  }
+
+  async function checkBucket() {
+    const { has_photos } = await $fetch<{ has_photos: boolean }>('/api/storage-connections/check-bucket')
+    return has_photos
+  }
+
   return {
     user,
     isAuthenticated,
@@ -99,5 +109,7 @@ export function useCurrentUser() {
     updateProfile,
     uploadAvatar,
     deleteAccount,
+    connectStorage,
+    checkBucket,
   }
 }

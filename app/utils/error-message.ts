@@ -9,6 +9,12 @@ const messages: Record<string, string> = {
   'auth.invalid_aws_credentials': 'Your storage connection credentials are invalid.',
   'users.invalid_payload': 'Please check the information you entered.',
   'users.storage_connection_required': 'Connect a storage bucket before uploading an avatar.',
+  'storage.invalid_payload': 'Please check the information you entered.',
+  'storage.invalid_credentials': 'Those AWS credentials were rejected. Double-check your access key and secret key.',
+  'storage.bucket_not_found': 'That bucket could not be found or is not accessible with these credentials.',
+  'storage.bucket_setup_failed': 'Something went wrong setting up your bucket. Please try again.',
+  'storage.already_connected': 'You already have a storage connection.',
+  'storage.connection_required': 'Connect a storage bucket first.',
 }
 
 export function getErrorCode(error: unknown): string {

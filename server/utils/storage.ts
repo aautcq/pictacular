@@ -1,5 +1,19 @@
+import type { CORSRule } from '@aws-sdk/client-s3'
 import { Buffer } from 'node:buffer'
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { randomUUID } from 'node:crypto'
+import process from 'node:process'
+import {
+
+  CreateBucketCommand,
+  GetBucketCorsCommand,
+  GetBucketLocationCommand,
+  GetObjectCommand,
+  HeadBucketCommand,
+  ListObjectsV2Command,
+  PutBucketCorsCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { decodeAwsCredentials } from './jwt'
 
@@ -9,13 +23,23 @@ export interface AwsCredentials {
   tokens: string
 }
 
+// Bucket region used when a User asks Pictacular to create a new bucket for
+// them (they never pick one themselves); an existing/connected bucket's own
+// region is looked up instead (see connectExistingBucket below).
+const defaultRegion = 'eu-west-3'
+
+// File extensions the legacy import/check-bucket flow treated as "photos"
+// (see docs/legacy-features.md) — no per-object HeadObject/mime-type round
+// trip, matching this app's "no image resizing/thumbnailing" scope.
+const imageExtensionPattern = /\.(?:jpe?g|png|gif|webp|heic|heif|bmp|tiff?)$/i
+
 // Plain S3 client factory (no DI container, no class), ported from the
-// former NestJS StorageService. Only the client-init + signed-URL surface
-// needed for the login avatar URL is ported here; bucket lifecycle
-// management (create/list/store/destroy) belongs to the future
-// AWS-credentials/photo-upload tickets.
-function createClient(awsCredentials: AwsCredentials) {
-  const decoded = decodeAwsCredentials(awsCredentials.tokens)
+// former NestJS StorageService. `endpoint`/`forcePathStyle` are only ever
+// set in test envs, to point this at an in-process fake S3 double instead
+// of real AWS (see test/e2e/fake-s3-server.ts) — production never sets
+// AWS_S3_ENDPOINT, so real requests always go to AWS's own endpoints.
+function createClientFromTokens(tokens: string, region: string) {
+  const decoded = decodeAwsCredentials(tokens)
   if (!decoded) {
     throw createError({
       statusCode: 401,
@@ -23,13 +47,129 @@ function createClient(awsCredentials: AwsCredentials) {
     })
   }
 
+  const endpoint = process.env.AWS_S3_ENDPOINT
+
   return new S3Client({
-    region: awsCredentials.region,
+    region,
     credentials: {
       accessKeyId: decoded.access_key_id,
       secretAccessKey: decoded.secret_access_key,
     },
+    ...(endpoint && { endpoint, forcePathStyle: true }),
   })
+}
+
+function createClient(awsCredentials: AwsCredentials) {
+  return createClientFromTokens(awsCredentials.tokens, awsCredentials.region)
+}
+
+// A permissive read-only CORS rule (mirroring the legacy StorageUtility's
+// `corsRule`) scoped to this app's own origin, so the client can load
+// signed image URLs directly from the bucket.
+function corsRule(allowedOrigin: string) {
+  return {
+    ID: 'pictacular-cors',
+    AllowedHeaders: ['*'],
+    AllowedMethods: ['GET'],
+    AllowedOrigins: [allowedOrigin],
+    ExposeHeaders: [],
+    MaxAgeSeconds: 3000,
+  }
+}
+
+// S3 rejects a bad AWS key pair itself (as opposed to a bucket-specific
+// problem) with one of these error names, regardless of which operation
+// triggered it. HEAD responses (HeadBucketCommand) never carry a body per
+// HTTP semantics, so the SDK can't parse an error name/code out of them —
+// fall back to the raw 403 status for those.
+function isCredentialsError(error: unknown) {
+  const name = (error as { name?: string } | null)?.name
+  const httpStatusCode = (error as { $metadata?: { httpStatusCode?: number } } | null)?.$metadata?.httpStatusCode
+  return name === 'InvalidAccessKeyId' || name === 'SignatureDoesNotMatch' || httpStatusCode === 403
+}
+
+// Creates a brand-new private bucket for a User's Storage Connection
+// ("create new" onboarding mode) and sets up its CORS rule, porting
+// StorageUtility#createBucket + #setupBucket.
+export async function createBucket(tokens: string, allowedOrigin: string) {
+  const client = createClientFromTokens(tokens, defaultRegion)
+  const bucket = `pictacular-${randomUUID()}`
+
+  try {
+    await client.send(new CreateBucketCommand({
+      Bucket: bucket,
+      CreateBucketConfiguration: { LocationConstraint: defaultRegion },
+    }))
+    await client.send(new PutBucketCorsCommand({
+      Bucket: bucket,
+      CORSConfiguration: { CORSRules: [corsRule(allowedOrigin)] },
+    }))
+  }
+  catch (error) {
+    if (isCredentialsError(error)) {
+      throw createError({ statusCode: 401, statusMessage: 'storage.invalid_credentials' })
+    }
+    throw createError({ statusCode: 502, statusMessage: 'storage.bucket_setup_failed' })
+  }
+
+  return { bucket, region: defaultRegion }
+}
+
+// Verifies an existing bucket is reachable with the given AWS key pair
+// ("connect existing" onboarding mode), merges Pictacular's CORS rule into
+// whatever CORS configuration is already there, and reports the bucket's
+// own region — porting StorageUtility#getBucket + #setupBucket + #getRegion.
+export async function connectExistingBucket(tokens: string, bucket: string, allowedOrigin: string) {
+  const client = createClientFromTokens(tokens, defaultRegion)
+
+  try {
+    await client.send(new HeadBucketCommand({ Bucket: bucket }))
+  }
+  catch (error) {
+    if (isCredentialsError(error)) {
+      throw createError({ statusCode: 401, statusMessage: 'storage.invalid_credentials' })
+    }
+    throw createError({ statusCode: 404, statusMessage: 'storage.bucket_not_found' })
+  }
+
+  let existingRules: CORSRule[] = []
+  try {
+    const cors = await client.send(new GetBucketCorsCommand({ Bucket: bucket }))
+    existingRules = cors.CORSRules ?? []
+  }
+  catch {
+    // Bucket has no CORS configuration yet — start from an empty rule set.
+  }
+
+  await client.send(new PutBucketCorsCommand({
+    Bucket: bucket,
+    CORSConfiguration: { CORSRules: [...existingRules, corsRule(allowedOrigin)] },
+  }))
+
+  let region = defaultRegion
+  try {
+    const location = await client.send(new GetBucketLocationCommand({ Bucket: bucket }))
+    // AWS reports an empty LocationConstraint for buckets in us-east-1
+    // specifically (its historical "US Standard" default) rather than
+    // omitting/erroring — that's a *successful* lookup, not a fallback case.
+    region = location.LocationConstraint || 'us-east-1'
+  }
+  catch {
+    // Fall back to the default region when the location lookup isn't
+    // permitted by the given AWS key pair.
+  }
+
+  return { bucket, region }
+}
+
+// Reports whether a connected bucket already contains image files, so the
+// onboarding client can offer a later "import existing photos" step —
+// porting the checkBucket usecase's `has_photos` shape.
+export async function bucketHasImages(awsCredentials: AwsCredentials) {
+  const client = createClient(awsCredentials)
+  const { Contents } = await client.send(new ListObjectsV2Command({ Bucket: awsCredentials.bucket, MaxKeys: 100 }))
+
+  return (Contents ?? []).some(({ Key }) => Key && imageExtensionPattern.test(Key))
 }
 
 export async function generateSecureAvatarUrl(awsCredentials: AwsCredentials, key: string, expiresIn = 3600) {

@@ -5,7 +5,12 @@ import { prisma } from '../../server/utils/prisma'
 // Browser-driven journey test (issue #48): a visitor registers, verifies
 // their account via the emailed token link, signs in, views their
 // profile, and logs out — exercising the ported auth screens end to end
-// against the real booted app, per issue #46's testing decisions.
+// against the real booted app, per issue #46's testing decisions. Since
+// issue #49, a freshly-verified User without a Storage Connection lands on
+// the onboarding screen rather than the app's home page straight after
+// sign-in — that redirect itself is covered by
+// storage-connection-onboarding.browser.test.ts, so this journey navigates
+// directly to /profile instead of following the guard's redirect.
 describe('register -> verify -> sign in -> profile -> logout journey', async () => {
   await setup({ browser: true })
 
@@ -39,8 +44,7 @@ describe('register -> verify -> sign in -> profile -> logout journey', async () 
     await page.getByLabel('Password').fill(password)
     await page.getByRole('button', { name: 'Sign in' }).click()
 
-    await page.waitForURL('**/')
-    await page.getByText(`Welcome, Jane Doe`).waitFor()
+    await page.waitForURL('**/storage-connection')
 
     await page.goto(url('/profile'))
     await page.getByText(email).waitFor()
