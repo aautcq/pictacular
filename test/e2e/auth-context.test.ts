@@ -1,8 +1,8 @@
+import type { AccessToken } from '../../server/utils/jwt'
 import { $fetch, setup } from '@nuxt/test-utils/e2e'
 import jwt from 'jsonwebtoken'
 import { describe, expect, it } from 'vitest'
 import { accessTokenCookieName } from '../../server/utils/cookies'
-import type { AccessToken } from '../../server/utils/jwt'
 
 // Black-box HTTP tests for the auth-context plumbing (JWT verification,
 // server/middleware/auth.ts writing event.context, requireAuth guarding a

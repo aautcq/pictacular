@@ -1,9 +1,9 @@
 import { Prisma } from '../../generated/prisma/client'
+import { hashPassword } from '../../utils/crypto'
 import { getPreferredLang } from '../../utils/i18n/lang'
 import { sendEmail } from '../../utils/mailer'
-import { registerSchema } from '../../utils/validation/register'
-import { hashPassword } from '../../utils/crypto'
 import { prisma } from '../../utils/prisma'
+import { registerSchema } from '../../utils/validation/register'
 import { generateUniqueVerificationToken } from '../../utils/verification-token'
 
 // Replaces the former AuthController#register (POST /auth/users): creates

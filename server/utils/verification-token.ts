@@ -1,5 +1,5 @@
-import { prisma } from './prisma'
 import { generateRandomString } from './crypto'
+import { prisma } from './prisma'
 
 // Ported from the former UsersService#getFreshToken: keeps generating a
 // random token until one that isn't already in use is found. The DB-level

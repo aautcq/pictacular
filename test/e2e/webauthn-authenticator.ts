@@ -1,5 +1,5 @@
-import { createHash, generateKeyPairSync, randomBytes, sign } from 'node:crypto'
 import { Buffer } from 'node:buffer'
+import { createHash, generateKeyPairSync, randomBytes, sign } from 'node:crypto'
 import { isoBase64URL, isoCBOR } from '@simplewebauthn/server/helpers'
 
 // A minimal in-process "virtual authenticator" standing in for a real

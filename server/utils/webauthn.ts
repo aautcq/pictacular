@@ -1,3 +1,8 @@
+import type {
+  AuthenticationResponseJSON,
+  AuthenticatorDevice,
+  RegistrationResponseJSON,
+} from '@simplewebauthn/types'
 import type { H3Event } from 'h3'
 import {
   generateAuthenticationOptions,
@@ -6,11 +11,6 @@ import {
   verifyRegistrationResponse,
 } from '@simplewebauthn/server'
 import { isoBase64URL } from '@simplewebauthn/server/helpers'
-import type {
-  AuthenticationResponseJSON,
-  AuthenticatorDevice,
-  RegistrationResponseJSON,
-} from '@simplewebauthn/types'
 
 const rpName = 'Pictacular'
 

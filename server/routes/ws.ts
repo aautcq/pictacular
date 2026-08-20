@@ -1,7 +1,7 @@
+import type { AccessToken } from '../utils/jwt'
 import { parse } from 'cookie-es'
 import { defineWebSocketHandler } from 'h3'
 import { accessTokenCookieName } from '../utils/cookies'
-import type { AccessToken } from '../utils/jwt'
 import { verifyToken } from '../utils/jwt'
 import { prisma } from '../utils/prisma'
 import { sendPushNotification } from '../utils/web-push'

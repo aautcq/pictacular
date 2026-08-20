@@ -1,12 +1,12 @@
 import type { AddressInfo } from 'node:net'
-import process from 'node:process'
 import { Buffer } from 'node:buffer'
 import { createECDH, randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { createServer as createHttpsServer } from 'node:https'
+import process from 'node:process'
 import { fetch, setup, url } from '@nuxt/test-utils/e2e'
-import WebSocket from 'ws'
 import { afterAll, describe, expect, it } from 'vitest'
+import WebSocket from 'ws'
 import { prisma } from '../../server/utils/prisma'
 
 // `web-push` always sends over `https`, so the local fake push endpoint
