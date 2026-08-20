@@ -23,6 +23,10 @@ describe('storage connection onboarding journey', async () => {
   const password = 'Str0ng!Pass'
 
   afterAll(async () => {
+    const users = await prisma.user.findMany({ where: { email: { startsWith: emailPrefix } } })
+    const userIds = users.map(user => user.id)
+    await prisma.albumsOnPhotos.deleteMany({ where: { album: { admin_id: { in: userIds } } } })
+    await prisma.album.deleteMany({ where: { admin_id: { in: userIds } } })
     await prisma.user.deleteMany({ where: { email: { startsWith: emailPrefix } } })
     await fakeS3.close()
   })
@@ -60,6 +64,54 @@ describe('storage connection onboarding journey', async () => {
 
     await page.goto(url('/'))
     await page.getByText(`Welcome, Jane Doe`).waitFor()
+
+    await page.close()
+  }, 60_000)
+
+  // Issue #54: connecting an existing bucket that `check-bucket` reports
+  // as already containing images offers this extra "import" step, with
+  // live progress (over the same WS infra photo-import.test.ts's HTTP
+  // coverage asserts on directly) and a completion state, before an
+  // Album derived from the seeded bucket's folder structure appears.
+  it('offers an import step with live progress when connecting a bucket with existing images', async () => {
+    const importEmail = `${emailPrefix}-import@example.com`
+    await prisma.user.create({
+      data: {
+        email: importEmail,
+        first_name: 'Import',
+        last_name: 'Tester',
+        password: hashPassword(password),
+        is_verified: true,
+        verification_token: `token-${emailPrefix}-import`,
+      },
+    })
+
+    const bucket = `import-onboarding-${emailPrefix}`
+    fakeS3.seedBucket(bucket, ['vacation/photo1.jpg', 'vacation/photo2.jpg'])
+
+    const page = await createPage('/login')
+    await page.getByLabel('Email').fill(importEmail)
+    await page.getByLabel('Password').fill(password)
+    await page.getByRole('button', { name: 'Sign in' }).click()
+
+    await page.waitForURL('**/storage-connection')
+    await page.getByRole('button', { name: 'I already have a bucket' }).click()
+    await page.getByLabel('Bucket name').fill(bucket)
+    await page.getByLabel('Access key ID').fill('AKIATEST')
+    await page.getByLabel('Secret access key').fill('test-secret')
+    await page.getByRole('button', { name: 'Connect' }).click()
+
+    await page.getByText('It looks like your bucket already has some image files in it.').waitFor()
+    await page.getByRole('button', { name: 'Import my existing photos' }).click()
+
+    await page.getByText('Imported 2 photos into 1 album.').waitFor()
+    await page.getByRole('button', { name: 'Continue' }).click()
+
+    await page.waitForURL(url('/'))
+    await page.getByText(`Welcome, Import Tester`).waitFor()
+
+    await page.goto(url('/albums'))
+    await page.getByText('vacation').waitFor()
 
     await page.close()
   }, 60_000)

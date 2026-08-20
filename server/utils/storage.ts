@@ -173,6 +173,63 @@ export async function bucketHasImages(awsCredentials: AwsCredentials) {
   return (Contents ?? []).some(({ Key }) => Key && imageExtensionPattern.test(Key))
 }
 
+export interface BucketImageObject {
+  key: string
+  size: number
+  last_modified: Date
+}
+
+// Walks every page of a connected bucket's contents (issue #54's Photo
+// import), collecting every object whose key looks like an image (the
+// same extension check bucketHasImages uses, no per-object HeadObject
+// round trip) across as many `ListObjectsV2` pages as the bucket has —
+// porting the legacy StorageUtility#listData loop's pagination, minus its
+// per-object mime-type lookup (see mimeTypeFromKey below instead).
+export async function listAllBucketImages(awsCredentials: AwsCredentials): Promise<BucketImageObject[]> {
+  const client = createClient(awsCredentials)
+  const images: BucketImageObject[] = []
+  let continuationToken: string | undefined
+
+  do {
+    const { Contents, IsTruncated, NextContinuationToken } = await client.send(new ListObjectsV2Command({
+      Bucket: awsCredentials.bucket,
+      MaxKeys: 100,
+      ContinuationToken: continuationToken,
+    }))
+
+    for (const { Key, Size, LastModified } of Contents ?? []) {
+      if (Key && imageExtensionPattern.test(Key))
+        images.push({ key: Key, size: Size ?? 0, last_modified: LastModified ?? new Date() })
+    }
+
+    continuationToken = IsTruncated ? NextContinuationToken : undefined
+  } while (continuationToken)
+
+  return images
+}
+
+const mimeTypesByExtension: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  bmp: 'image/bmp',
+  tif: 'image/tiff',
+  tiff: 'image/tiff',
+}
+
+// Derives an imported Photo's mime_type from its key's file extension (no
+// per-object HeadObject round trip — see listAllBucketImages above), so
+// every imported Photo row still gets a real `image/*` mime_type despite
+// the bucket walk itself being extension-only.
+export function mimeTypeFromKey(key: string): string {
+  const extension = key.split('.').pop()?.toLowerCase() ?? ''
+  return mimeTypesByExtension[extension] ?? 'application/octet-stream'
+}
+
 // Generates a time-limited signed URL for any object in a User's own
 // bucket (avatars, Photos, ...) — generic over bucket + key, not
 // per-asset-type.

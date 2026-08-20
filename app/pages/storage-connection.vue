@@ -2,6 +2,7 @@
 definePageMeta({ middleware: 'auth' })
 
 const { connectStorage, checkBucket } = useCurrentUser()
+const { importing, progress, result, importPhotos } = useBucketImport()
 const { addError } = useAlerts()
 const router = useRouter()
 
@@ -12,9 +13,23 @@ const secret_access_key = ref('')
 const loading = ref(false)
 const hasPhotos = ref(false)
 const connected = ref(false)
+const importSkipped = ref(false)
 
 function selectMode(value: 'create' | 'connect') {
   mode.value = value
+}
+
+async function startImport() {
+  try {
+    await importPhotos()
+  }
+  catch (error) {
+    addError(translateError(error))
+  }
+}
+
+function skipImport() {
+  importSkipped.value = true
 }
 
 async function submit() {
@@ -52,14 +67,47 @@ function continueToApp() {
     </template>
 
     <div v-if="connected" class="flex flex-col items-center gap-y-6 text-center">
-      <p v-if="hasPhotos">
-        It looks like your bucket already has some image files in it. Import support is coming
-        soon — for now you can head into Pictacular and we'll pick up from there.
+      <template v-if="hasPhotos && !importSkipped && !result">
+        <p>
+          It looks like your bucket already has some image files in it. We can import them into
+          Pictacular, auto-creating Albums from your folder structure.
+        </p>
+
+        <div v-if="importing" class="flex flex-col items-center gap-y-2">
+          <p>
+            Importing your photos… {{ progress?.imported ?? 0 }}<template v-if="progress?.total">
+              / {{ progress.total }}
+            </template>
+          </p>
+        </div>
+        <div v-else class="flex justify-center gap-x-4">
+          <button
+            type="button"
+            class="h-10 rounded bg-green-500 px-4 font-medium text-white hover:bg-green-600"
+            @click="startImport"
+          >
+            Import my existing photos
+          </button>
+          <button
+            type="button"
+            class="h-10 rounded bg-slate-200 px-4 font-medium dark:bg-slate-700"
+            @click="skipImport"
+          >
+            Skip for now
+          </button>
+        </div>
+      </template>
+
+      <p v-else-if="result">
+        Imported {{ result.imported }} photo{{ result.imported === 1 ? '' : 's' }} into
+        {{ result.albums }} album{{ result.albums === 1 ? '' : 's' }}.
       </p>
       <p v-else>
         Your storage connection is ready.
       </p>
+
       <button
+        v-if="!importing"
         type="button"
         class="h-10 rounded bg-green-500 px-4 font-medium text-white hover:bg-green-600"
         @click="continueToApp"
