@@ -11,7 +11,7 @@ export default defineNuxtConfig({
   modules: [
     '@nuxt/icon',
     '@vite-pwa/nuxt',
-    '@nuxtjs/fontaine',
+    '@nuxt/fonts',
     'nuxt-security',
     '@nuxtjs/color-mode',
   ],
@@ -20,9 +20,11 @@ export default defineNuxtConfig({
     plugins: [
       tailwindcss(),
     ],
-    build: {
-      cssMinify: 'esbuild',
-    },
+  },
+  fonts: {
+    families: [
+      { name: 'Mulish', provider: 'google', global: true },
+    ],
   },
   colorMode: {
     classSuffix: '',
