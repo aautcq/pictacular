@@ -108,7 +108,11 @@ export default defineNuxtConfig({
   security: {
     headers: {
       contentSecurityPolicy: {
-        'img-src': ['\'self\'', 'https://pictacular.s3.eu-west-3.amazonaws.com'],
+        // Every User's Photos/avatar are served from their own Storage
+        // Connection bucket (any bucket name/region, per ADR 0001), not a
+        // single fixed host — a wildcard is required so signed image URLs
+        // from any User's bucket can load.
+        'img-src': ['\'self\'', 'https://*.s3.amazonaws.com', 'https://*.s3.*.amazonaws.com'],
       },
     },
   },

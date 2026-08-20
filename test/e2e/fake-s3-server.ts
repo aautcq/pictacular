@@ -1,4 +1,5 @@
 import type { AddressInfo } from 'node:net'
+import { Buffer } from 'node:buffer'
 import { createServer } from 'node:http'
 
 // A minimal in-process "virtual S3" standing in for real AWS S3 in
@@ -18,6 +19,7 @@ export const badAccessKeyId = 'BAD_ACCESS_KEY_ID'
 interface Bucket {
   cors: string | null
   keys: string[]
+  objects: Map<string, Buffer>
 }
 
 export interface FakeS3Server {
@@ -57,7 +59,7 @@ export async function startFakeS3Server(): Promise<FakeS3Server> {
     }
 
     if (req.method === 'PUT' && bucketName && !key && !url.search) {
-      buckets.set(bucketName, bucket ?? { cors: null, keys: [] })
+      buckets.set(bucketName, bucket ?? { cors: null, keys: [], objects: new Map() })
       res.writeHead(200, { Location: `/${bucketName}` })
       res.end()
       return
@@ -67,10 +69,50 @@ export async function startFakeS3Server(): Promise<FakeS3Server> {
       let body = ''
       req.on('data', chunk => (body += chunk))
       req.on('end', () => {
-        buckets.set(bucketName, { cors: body, keys: bucket?.keys ?? [] })
+        buckets.set(bucketName, { cors: body, keys: bucket?.keys ?? [], objects: bucket?.objects ?? new Map() })
         res.writeHead(200)
         res.end()
       })
+      return
+    }
+
+    // Object upload (PutObjectCommand): stores the body under its key and
+    // records it in the bucket's `keys` listing (photos/avatars uploads).
+    if (req.method === 'PUT' && bucketName && key) {
+      const chunks: Buffer[] = []
+      req.on('data', chunk => chunks.push(chunk))
+      req.on('end', () => {
+        const target = bucket ?? { cors: null, keys: [], objects: new Map() }
+        target.objects.set(key, Buffer.concat(chunks))
+        if (!target.keys.includes(key))
+          target.keys = [...target.keys, key]
+        buckets.set(bucketName, target)
+        res.writeHead(200, { ETag: '"fake-etag"' })
+        res.end()
+      })
+      return
+    }
+
+    // Object download (GetObjectCommand), used by the signed-URL flow.
+    if (req.method === 'GET' && bucketName && key && !url.search) {
+      const body = bucket?.objects.get(key)
+      if (!body) {
+        res.writeHead(404, { 'Content-Type': 'application/xml' })
+        res.end(xmlError('NoSuchKey', 'The specified key does not exist.'))
+        return
+      }
+      res.writeHead(200)
+      res.end(body)
+      return
+    }
+
+    // Object delete (DeleteObjectCommand), used when a Photo is deleted.
+    if (req.method === 'DELETE' && bucketName && key) {
+      bucket?.objects.delete(key)
+      if (bucket)
+        bucket.keys = bucket.keys.filter(existingKey => existingKey !== key)
+      res.writeHead(204)
+      res.end()
       return
     }
 
@@ -113,7 +155,7 @@ export async function startFakeS3Server(): Promise<FakeS3Server> {
   return {
     url: `http://127.0.0.1:${port}`,
     reset: () => buckets.clear(),
-    seedBucket: (bucket, keys = []) => buckets.set(bucket, { cors: null, keys }),
+    seedBucket: (bucket, keys = []) => buckets.set(bucket, { cors: null, keys, objects: new Map() }),
     close: () => new Promise((resolve, reject) => {
       server.close(error => (error ? reject(error) : resolve()))
     }),

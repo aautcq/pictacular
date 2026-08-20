@@ -1,0 +1,30 @@
+import { requirePhotoIdParam, requirePhotoStorageConnection } from '../../../utils/photo-guards'
+import { prisma } from '../../../utils/prisma'
+import { serializePhoto } from '../../../utils/serialize-photo'
+
+// Likes one of the authenticated User's own Photos (issue #50). Likes are
+// a many-to-many between Users and Photos (a Photo can later be liked by
+// Album Collaborators too), but this endpoint only covers a User liking
+// their own Photo, matching the personal-library scope of this issue.
+export default defineEventHandler(async (event) => {
+  const { user } = requireAuth(event)
+  const id = requirePhotoIdParam(event)
+
+  const account = await requirePhotoStorageConnection(user.id)
+
+  const photo = await prisma.photo.findFirst({ where: { id, user_id: user.id } })
+  if (!photo) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: 'photos.not_found',
+    })
+  }
+
+  const updated = await prisma.photo.update({
+    where: { id },
+    data: { likes: { connect: { id: user.id } } },
+    include: { likes: { select: { id: true } } },
+  })
+
+  return serializePhoto(updated, account.aws_credentials, user.id)
+})

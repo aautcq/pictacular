@@ -1,5 +1,5 @@
 import type { AwsCredentials } from './storage'
-import { generateSecureAvatarUrl } from './storage'
+import { generateSecureObjectUrl } from './storage'
 
 export interface SerializableUser {
   id: number
@@ -22,7 +22,7 @@ export async function serializeUser(user: SerializableUser) {
 
   let signedAvatarUrl = null
   if (avatar_url && aws_credentials)
-    signedAvatarUrl = await generateSecureAvatarUrl(aws_credentials, avatar_url)
+    signedAvatarUrl = await generateSecureObjectUrl(aws_credentials, avatar_url)
 
   return { ...profile, has_aws_credentials: !!aws_credentials, avatar_url: signedAvatarUrl }
 }
