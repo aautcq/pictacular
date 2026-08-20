@@ -58,7 +58,7 @@ describe('user profile self-service', async () => {
   })
 
   describe('get profile', () => {
-    it('returns id, email, created_at, last_sign_in_at for the authenticated user', async () => {
+    it('returns id, email, first_name, last_name, avatar_url, created_at, last_sign_in_at for the authenticated user', async () => {
       const email = await createVerifiedUser()
       const cookieHeader = await loginCookieHeader(email)
 
@@ -70,9 +70,34 @@ describe('user profile self-service', async () => {
       expect(response).toEqual({
         id: user.id,
         email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        has_aws_credentials: false,
+        avatar_url: null,
         created_at: user.created_at.toISOString(),
         last_sign_in_at: user.last_sign_in_at?.toISOString(),
       })
+    })
+
+    it('returns a signed avatar URL when the user has AWS credentials and an avatar set', async () => {
+      const email = await createVerifiedUser({ avatar_url: 'avatars/1' })
+      const user = await prisma.user.findUniqueOrThrow({ where: { email } })
+      await prisma.awsCredentials.create({
+        data: {
+          bucket: 'pictacular-test-bucket',
+          region: 'eu-west-3',
+          tokens: encodeAwsCredentials({ access_key_id: 'AKIATEST', secret_access_key: 'test-secret' }),
+          user: { connect: { id: user.id } },
+        },
+      })
+      const cookieHeader = await loginCookieHeader(email)
+
+      const response = await $fetch<{ has_aws_credentials: boolean, avatar_url: string | null }>('/api/users/me', {
+        headers: { cookie: cookieHeader },
+      })
+
+      expect(response.has_aws_credentials).toBe(true)
+      expect(response.avatar_url).toMatch(/^https:\/\/pictacular-test-bucket\.s3\./)
     })
 
     it('rejects an unauthenticated request with 401', async () => {
@@ -170,6 +195,45 @@ describe('user profile self-service', async () => {
     it('rejects an unauthenticated request with 401', async () => {
       await expect(
         $fetch('/api/users/me', { method: 'PATCH', body: { first_name: 'Jane' } }),
+      ).rejects.toMatchObject({ statusCode: 401 })
+    })
+  })
+
+  describe('upload avatar', () => {
+    const tinyPngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
+
+    it('rejects when the user has no Storage Connection yet', async () => {
+      const email = await createVerifiedUser()
+      const cookieHeader = await loginCookieHeader(email)
+
+      await expect(
+        $fetch('/api/users/me/avatar', {
+          method: 'PATCH',
+          headers: { cookie: cookieHeader },
+          body: { filename: 'avatar.png', mime_type: 'image/png', base64: tinyPngBase64 },
+        }),
+      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'users.storage_connection_required' })
+    })
+
+    it('rejects an invalid payload', async () => {
+      const email = await createVerifiedUser()
+      const cookieHeader = await loginCookieHeader(email)
+
+      await expect(
+        $fetch('/api/users/me/avatar', {
+          method: 'PATCH',
+          headers: { cookie: cookieHeader },
+          body: { filename: 'avatar.txt', mime_type: 'text/plain', base64: tinyPngBase64 },
+        }),
+      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'users.invalid_payload' })
+    })
+
+    it('rejects an unauthenticated request with 401', async () => {
+      await expect(
+        $fetch('/api/users/me/avatar', {
+          method: 'PATCH',
+          body: { filename: 'avatar.png', mime_type: 'image/png', base64: tinyPngBase64 },
+        }),
       ).rejects.toMatchObject({ statusCode: 401 })
     })
   })
