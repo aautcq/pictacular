@@ -18,7 +18,7 @@ export const registerCredentialSchema = z.object({
     publicKey: z.string().optional(),
   }),
   authenticatorAttachment: z.string().optional(),
-  clientExtensionResults: z.record(z.unknown()),
+  clientExtensionResults: z.record(z.string(), z.unknown()),
   type: z.literal('public-key'),
 })
 
@@ -32,7 +32,7 @@ export const verifyAssertionSchema = z.object({
     userHandle: z.string().optional(),
   }),
   authenticatorAttachment: z.string().optional(),
-  clientExtensionResults: z.record(z.unknown()),
+  clientExtensionResults: z.record(z.string(), z.unknown()),
   type: z.literal('public-key'),
 })
 
