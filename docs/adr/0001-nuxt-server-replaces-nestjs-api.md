@@ -57,3 +57,9 @@ in-flight work to strand. Prisma is kept, relocated to a root
 - **Keep Socket.IO via a standalone WS process** alongside the Nuxt server:
   rejected — reintroduces the two-service problem this migration exists to
   remove.
+
+## Update
+
+The historical mentions of the pnpm-workspace monorepo and the `pnpm.overrides` nitropack pin
+above describe the state of the project at the time of this migration and are left unchanged.
+The project has since moved from pnpm to npm — see #69.

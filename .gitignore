@@ -19,7 +19,7 @@ server.key
 # Logs
 logs
 *.log
-pnpm-debug.log*
+npm-debug.log*
 
 # Tests
 /coverage

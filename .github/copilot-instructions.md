@@ -6,16 +6,16 @@ still bootstrap-stage — no `pages`/`components` yet, just `app/app.vue`).
 
 ## Setup & commands
 
-Install deps from the repo root with `pnpm install`. The `afterinstall` script runs
+Install deps from the repo root with `npm install`. The `afterinstall` script runs
 `prisma generate && prisma db push`, so a `DATABASE_URL` must be set in `.env` (copy from
 `.env.example`) before installing/running.
 
-- `pnpm run dev` — starts the Nuxt/Nitro dev server on `https://pictacular.dev:4005` (requires
+- `npm run dev` — starts the Nuxt/Nitro dev server on `https://pictacular.dev:4005` (requires
   `pictacular.dev` in `/etc/hosts`)
-- `pnpm run build` — builds the app (`.output/`)
-- `pnpm run lint` — ESLint with `--fix` (`@antfu/eslint-config` flat config); this is also the
+- `npm run build` — builds the app (`.output/`)
+- `npm run lint` — ESLint with `--fix` (`@antfu/eslint-config` flat config); this is also the
   formatter for `*.{js,ts,vue}`
-- `pnpm run test` — Vitest, using `@nuxt/test-utils` to boot a real instance of the app and
+- `npm run test` — Vitest, using `@nuxt/test-utils` to boot a real instance of the app and
   exercise it over real HTTP/WS requests (the single black-box test seam for this app — no unit
   tests of internal `server/utils`, no mocking of Prisma/S3/JWT internals)
 

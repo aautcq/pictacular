@@ -7,7 +7,7 @@ Pictacular is a PWA built with Nuxt/Nitro, designed to display images stored in 
 Install the dependencies:
 
 ```bash
-pnpm install
+npm install
 ```
 
 A `DATABASE_URL` must be set in `.env` (copy from `.env.example`) before installing, since
@@ -19,5 +19,5 @@ Start the development server on `https://pictacular.dev:4005` (requires `pictacu
 `/etc/hosts`):
 
 ```bash
-pnpm run dev
+npm run dev
 ```
