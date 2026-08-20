@@ -4,6 +4,7 @@ defineProps<{
   label: string
   type?: string
   required?: boolean
+  disabled?: boolean
   autocomplete?: string
 }>()
 
@@ -17,8 +18,9 @@ defineEmits<{ 'update:modelValue': [value: string] }>()
       :type="type"
       :value="modelValue"
       :required="required"
+      :disabled="disabled"
       :autocomplete="autocomplete"
-      class="h-10 w-full rounded border-none bg-white px-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 dark:bg-slate-700"
+      class="h-10 w-full rounded border-none bg-white px-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 disabled:opacity-50 dark:bg-slate-700"
       @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
     >
   </label>

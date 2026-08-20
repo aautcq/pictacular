@@ -25,6 +25,8 @@ const messages: Record<string, string> = {
   'albums.not_found': 'That album could not be found.',
   'albums.admin_only': 'Only the album admin can do that.',
   'albums.photo_not_found': 'That photo could not be found.',
+  'albums.cannot_remove_admin': 'The album admin cannot be removed as a collaborator.',
+  'invitations.not_found': 'This invitation link is invalid or has expired.',
 }
 
 export function getErrorCode(error: unknown): string {

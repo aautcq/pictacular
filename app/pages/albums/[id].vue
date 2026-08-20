@@ -8,11 +8,12 @@ const router = useRouter()
 const albumId = computed(() => Number(route.params.id))
 
 const { user } = useCurrentUser()
-const { fetchAlbum, updateAlbum, deleteAlbum, addPhotoToAlbum, removePhotoFromAlbum } = useAlbums()
+const { fetchAlbum, updateAlbum, deleteAlbum, addPhotoToAlbum, removePhotoFromAlbum, addCollaborators, removeCollaborator } = useAlbums()
 const { photos: libraryPhotos, fetchNextPage: fetchNextLibraryPage, hasMore: libraryHasMore, loading: libraryLoading } = usePhotoLibrary()
 const { addError, addSuccess } = useAlerts()
 const { close: closePicker, open: openPicker } = useModal('add-photo-to-album')
 const { close: closeDeleteModal, open: openDeleteModal } = useModal('delete-album')
+const { close: closeCollaboratorsModal, open: openCollaboratorsModal } = useModal('album-collaborators')
 
 const album = ref<AlbumFull | null>(null)
 const loading = ref(true)
@@ -22,6 +23,9 @@ const titleDraft = ref('')
 const descriptionDraft = ref('')
 const savingPhotoId = ref<number | null>(null)
 const deleting = ref(false)
+const inviteEmails = ref('')
+const inviting = ref(false)
+const removingCollaboratorId = ref<number | null>(null)
 
 const isAdmin = computed(() => !!album.value && !!user.value && album.value.admin.id === user.value.id)
 const albumPhotoIds = computed(() => new Set(album.value?.photos.map(photo => photo.id) ?? []))
@@ -125,6 +129,63 @@ async function openAddPhotoPicker() {
     await fetchNextLibraryPage()
 }
 
+// Issue #52: the add-Collaborators endpoint distinguishes an email that
+// was linked immediately (an existing User) from one that was invited
+// instead (no account yet) — so the toast reports the actual outcome
+// rather than a single "Invitation sent." for both cases.
+function describeInviteResult({ linked, invited }: { linked: string[], invited: string[] }) {
+  const parts: string[] = []
+  if (linked.length)
+    parts.push(`${linked.length} collaborator${linked.length > 1 ? 's' : ''} added`)
+  if (invited.length)
+    parts.push(`${invited.length} invitation${invited.length > 1 ? 's' : ''} sent`)
+
+  const message = parts.join(' and ')
+  return `${message.charAt(0).toUpperCase()}${message.slice(1)}.`
+}
+
+async function submitInvite() {
+  if (!album.value)
+    return
+
+  const emails = inviteEmails.value
+    .split(/[\n,]/)
+    .map(email => email.trim())
+    .filter(email => email.length > 0)
+
+  if (!emails.length)
+    return
+
+  inviting.value = true
+  try {
+    const result = await addCollaborators(album.value.id, emails)
+    album.value = result
+    inviteEmails.value = ''
+    addSuccess(describeInviteResult(result))
+  }
+  catch (error) {
+    addError(translateError(error))
+  }
+  finally {
+    inviting.value = false
+  }
+}
+
+async function removeCollaboratorFromAlbum(userId: number) {
+  if (!album.value)
+    return
+  removingCollaboratorId.value = userId
+  try {
+    album.value = await removeCollaborator(album.value.id, userId)
+  }
+  catch (error) {
+    addError(translateError(error))
+  }
+  finally {
+    removingCollaboratorId.value = null
+  }
+}
+
 onMounted(loadAlbum)
 </script>
 
@@ -170,6 +231,14 @@ onMounted(loadAlbum)
         </div>
 
         <div class="flex shrink-0 gap-x-2">
+          <button
+            type="button"
+            class="flex h-10 items-center gap-x-2 rounded bg-slate-200 px-4 font-medium hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600"
+            @click="openCollaboratorsModal"
+          >
+            <Icon name="ph:users" size="1.1em" />
+            Collaborators
+          </button>
           <button
             type="button"
             class="flex h-10 items-center gap-x-2 rounded bg-green-500 px-4 font-medium text-white hover:bg-green-600"
@@ -270,6 +339,60 @@ onMounted(loadAlbum)
           type="button"
           class="mt-2 h-10 rounded bg-slate-200 px-4 font-medium hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600"
           @click="closePicker"
+        >
+          Done
+        </button>
+      </div>
+    </AppModal>
+
+    <AppModal name="album-collaborators">
+      <div class="flex flex-col gap-y-4">
+        <h2 class="text-lg font-semibold">
+          Collaborators
+        </h2>
+
+        <ul class="flex flex-col gap-y-2">
+          <li class="flex items-center justify-between gap-x-2">
+            <span>{{ album?.admin.first_name }} {{ album?.admin.last_name }} <span class="text-xs text-slate-500 dark:text-slate-300">(admin)</span></span>
+          </li>
+          <li v-for="collaborator in album?.collaborators" :key="collaborator.id" class="flex items-center justify-between gap-x-2">
+            <span>{{ collaborator.first_name }} {{ collaborator.last_name }}</span>
+            <button
+              v-if="isAdmin"
+              type="button"
+              title="Remove collaborator"
+              :disabled="removingCollaboratorId === collaborator.id"
+              class="flex h-8 w-8 items-center justify-center rounded-full text-red-500 hover:bg-slate-200 disabled:opacity-50 dark:hover:bg-slate-700"
+              @click="removeCollaboratorFromAlbum(collaborator.id)"
+            >
+              <Icon name="ph:x-bold" />
+            </button>
+          </li>
+        </ul>
+
+        <form v-if="isAdmin" class="flex flex-col gap-y-2" @submit.prevent="submitInvite">
+          <label class="flex w-full flex-col gap-y-1">
+            <span class="text-sm text-slate-600 dark:text-slate-300">Invite by email</span>
+            <input
+              v-model="inviteEmails"
+              type="text"
+              placeholder="jane@example.com, john@example.com"
+              class="h-10 w-full rounded border-none bg-white px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 dark:bg-slate-700"
+            >
+          </label>
+          <button
+            type="submit"
+            :disabled="inviting || !inviteEmails.trim()"
+            class="h-10 rounded bg-green-500 px-4 font-medium text-white hover:bg-green-600 disabled:opacity-50"
+          >
+            {{ inviting ? 'Inviting…' : 'Invite' }}
+          </button>
+        </form>
+
+        <button
+          type="button"
+          class="mt-2 h-10 rounded bg-slate-200 px-4 font-medium hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600"
+          @click="closeCollaboratorsModal"
         >
           Done
         </button>

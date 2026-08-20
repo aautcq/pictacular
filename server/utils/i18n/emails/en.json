@@ -12,5 +12,12 @@
     "content": "Please click on the button below to set a new Pictacular password.",
     "cta": "Set a new password",
     "alternative": "You can also copy and paste this link in your browser:"
+  },
+  "invitation": {
+    "subject": "You've been invited to an album on Pictacular",
+    "title": "Hello there!",
+    "content": "You've been invited to collaborate on an album on Pictacular. Click on the button below to view it and sign up.",
+    "cta": "View the album",
+    "alternative": "You can also copy and paste this link in your browser:"
   }
 }
