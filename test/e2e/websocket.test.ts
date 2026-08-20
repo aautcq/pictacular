@@ -98,7 +98,14 @@ describe('websocket real-time layer', async () => {
     expect(response.statusCode).toBe(401)
   })
 
-  it('broadcasts a message to all connected authenticated peers', async () => {
+  // #43: a client-supplied `{ type: 'broadcast', name, data }` message used
+  // to be relayed verbatim to every connected peer with no authorization or
+  // schema check, letting any authenticated peer spoof arbitrary
+  // application-level events to every other peer. That message kind was
+  // removed entirely (sendMessage is now only reachable from server-side
+  // code, never from a client-supplied WS message), so this asserts it's a
+  // silent no-op rather than being relayed.
+  it('does not relay a client-supplied `broadcast`-shaped message to other peers', async () => {
     const email = await createVerifiedUser()
     const cookieHeader = await loginCookieHeader(email)
 
@@ -108,17 +115,39 @@ describe('websocket real-time layer', async () => {
     await Promise.all([waitForOpen(socketA), waitForOpen(socketB)])
 
     const messageOnB = waitForMessage(socketB)
-    const messageOnA = waitForMessage(socketA)
 
     socketA.send(JSON.stringify({ type: 'broadcast', name: 'test-event', data: { hello: 'world' } }))
 
-    await expect(messageOnB).resolves.toEqual({ name: 'test-event', data: { hello: 'world' } })
-    // sendMessage broadcasts to every connected peer, including the sender
-    // (mirroring the former `server.emit`), so the sender receives it too.
-    await expect(messageOnA).resolves.toEqual({ name: 'test-event', data: { hello: 'world' } })
+    const outcome = await Promise.race([
+      messageOnB.then(() => 'relayed' as const),
+      new Promise<'no-op'>(resolve => setTimeout(resolve, 200, 'no-op')),
+    ])
+
+    expect(outcome).toBe('no-op')
 
     socketA.close()
     socketB.close()
+  })
+
+  it('silently ignores a `push` message with an invalid shape', async () => {
+    const email = await createVerifiedUser()
+    const cookieHeader = await loginCookieHeader(email)
+
+    const socket = new WebSocket(wsUrl(), { headers: { cookie: cookieHeader } })
+    await waitForOpen(socket)
+
+    // Missing the required `title`/`body` fields — should be rejected by
+    // the zod schema and neither crash the connection nor trigger a push.
+    socket.send(JSON.stringify({ type: 'push' }))
+
+    const outcome = await Promise.race([
+      new Promise<'closed'>(resolve => socket.once('close', () => resolve('closed'))),
+      new Promise<'still-open'>(resolve => setTimeout(resolve, 200, 'still-open')),
+    ])
+
+    expect(outcome).toBe('still-open')
+
+    socket.close()
   })
 
   it('triggers a VAPID push notification for the authenticated user\'s subscriptions', async () => {
