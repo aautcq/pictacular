@@ -13,7 +13,11 @@ export default defineNuxtConfig({
     '@vite-pwa/nuxt',
     '@nuxtjs/fontaine',
     'nuxt-security',
+    '@nuxtjs/color-mode',
   ],
+  colorMode: {
+    classSuffix: '',
+  },
   app: {
     head: {
       title: appName,

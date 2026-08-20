@@ -1,10 +1,5 @@
 <script setup lang="ts">
-const { init } = useDarkMode()
 const { fetchCurrentUser } = useCurrentUser()
-
-onMounted(() => {
-  init()
-})
 
 // Restore the session (if any) on load, so the header/route guards know
 // the current auth state without waiting on a protected page's own fetch.
