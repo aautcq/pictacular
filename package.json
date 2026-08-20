@@ -18,7 +18,6 @@
     "node": "~22.23.2",
     "npm": "~8.15.0"
   },
-  "prettier": "@aautcq/prettier-config",
   "scripts": {
     "afterinstall": "prisma generate && prisma db push",
     "postinstall": "nuxt prepare",
@@ -28,8 +27,6 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "lint": "eslint . --fix",
-    "format": "prettier --write \"**/*.css\" --ignore-path .gitignore",
-    "lf": "pnpm run lint && pnpm run format",
     "test": "vitest run"
   },
   "dependencies": {
@@ -49,7 +46,6 @@
     "zod": "~4.4.3"
   },
   "devDependencies": {
-    "@aautcq/prettier-config": "~2.1.4",
     "@antfu/eslint-config": "~9.3.0",
     "@nuxt/test-utils": "~4.1.0",
     "@nuxtjs/fontaine": "~0.5.0",

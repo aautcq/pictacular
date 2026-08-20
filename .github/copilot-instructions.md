@@ -14,16 +14,13 @@ Install deps from the repo root with `pnpm install`. The `afterinstall` script r
   `pictacular.dev` in `/etc/hosts`)
 - `pnpm run build` — builds the app (`.output/`)
 - `pnpm run lint` — ESLint with `--fix` (`@antfu/eslint-config` flat config); this is also the
-  formatter for `*.{js,ts,vue}` (its Stylistic rules replace Prettier for those files)
-- `pnpm run format` — Prettier (`@aautcq/prettier-config`), scoped to `*.css` only, since
-  `@antfu/eslint-config` already formats JS/TS/Vue and the two would otherwise fight each other
-- `pnpm run lf` — lint then format
+  formatter for `*.{js,ts,vue}`
 - `pnpm run test` — Vitest, using `@nuxt/test-utils` to boot a real instance of the app and
   exercise it over real HTTP/WS requests (the single black-box test seam for this app — no unit
   tests of internal `server/utils`, no mocking of Prisma/S3/JWT internals)
 
 A husky `pre-commit` hook blocks direct commits to `master` and runs `npx lint-staged`
-(eslint --fix on `*.{js,ts,vue}`, prettier on `*.css`).
+(eslint --fix on `*.{js,ts,vue}`).
 
 ## Server architecture (`server/`)
 
