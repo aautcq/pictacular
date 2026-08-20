@@ -137,6 +137,14 @@ describe('login + logout + session lifecycle + lockout', async () => {
     expect(cookies.some(cookie => cookie.startsWith(`${accessTokenCookieName}=`))).toBe(true)
     expect(cookies.some(cookie => cookie.startsWith(`${refreshTokenCookieName}=`))).toBe(true)
 
+    // Codifies the unchanged production cookie behavior (issue #72): this
+    // default (built, non-dev) test run must keep issuing `Secure`/`SameSite=None`
+    // auth cookies.
+    for (const cookie of cookies) {
+      expect(cookie).toMatch(/Secure/i)
+      expect(cookie).toMatch(/SameSite=None/i)
+    }
+
     const refreshedStaleSession = await prisma.session.findUniqueOrThrow({ where: { id: staleSession.id } })
     expect(refreshedStaleSession.active).toBe(false)
 

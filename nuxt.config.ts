@@ -7,11 +7,6 @@ const image
 
 export default defineNuxtConfig({
   devtools: { enabled: true },
-  devServer: {
-    host: 'pictacular.dev',
-    port: 4005,
-    https: { key: './server.key', cert: './server.crt' },
-  },
   modules: [
     '@nuxtjs/tailwindcss',
     '@nuxt/icon',
