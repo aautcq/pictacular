@@ -9,7 +9,7 @@ import {
 import { hashToken } from '../../../utils/crypto'
 import { createTokens } from '../../../utils/jwt'
 import { prisma } from '../../../utils/prisma'
-import { generateSecureAvatarUrl } from '../../../utils/storage'
+import { serializeUser } from '../../../utils/serialize-user'
 import { verifyAssertionSchema } from '../../../utils/validation/biometrics'
 import { verifyAssertion } from '../../../utils/webauthn'
 
@@ -91,23 +91,19 @@ export default defineEventHandler(async (event) => {
     data: { refresh_token: hashToken(refreshToken) },
   })
 
-  let avatarUrl = null
-  if (user.avatar_url && user.aws_credentials)
-    avatarUrl = await generateSecureAvatarUrl(user.aws_credentials, user.avatar_url)
-
   setCookie(event, accessTokenCookieName, accessToken, accessTokenCookieOptions)
   setCookie(event, refreshTokenCookieName, refreshToken, refreshTokenCookieOptions)
 
   setResponseStatus(event, 201)
 
-  return {
+  return serializeUser({
     id: user.id,
     email: user.email,
     first_name: user.first_name,
     last_name: user.last_name,
-    has_aws_credentials: !!user.aws_credentials?.id,
-    avatar_url: avatarUrl,
+    avatar_url: user.avatar_url,
+    aws_credentials: user.aws_credentials,
     created_at: user.created_at,
     last_sign_in_at,
-  }
+  })
 })

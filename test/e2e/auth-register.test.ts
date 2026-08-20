@@ -1,4 +1,4 @@
-import { $fetch, setup } from '@nuxt/test-utils/e2e'
+import { $fetch, fetch, setup } from '@nuxt/test-utils/e2e'
 import { afterAll, describe, expect, it } from 'vitest'
 import { prisma } from '../../server/utils/prisma'
 
@@ -107,6 +107,48 @@ describe('register + email verification', async () => {
     await expect($fetch('/api/auth/verify/not-a-real-token')).rejects.toMatchObject({
       statusCode: 401,
       statusMessage: 'auth.invalid_token',
+    })
+  })
+
+  describe('resend verification email', () => {
+    it('responds 204 for an unverified account', async () => {
+      const payload = validPayload()
+      await $fetch('/api/auth/users', { method: 'POST', body: payload })
+
+      const response = await fetch('/api/auth/verify', {
+        method: 'POST',
+        body: JSON.stringify({ email: payload.email }),
+        headers: { 'content-type': 'application/json' },
+      })
+
+      expect(response.status).toBe(204)
+    })
+
+    it('responds 204 identically for an unknown or already-verified email (no enumeration)', async () => {
+      const payload = validPayload()
+      await $fetch('/api/auth/users', { method: 'POST', body: payload })
+      const user = await prisma.user.findUniqueOrThrow({ where: { email: payload.email } })
+      await $fetch(`/api/auth/verify/${user.verification_token}`)
+
+      const verifiedResponse = await fetch('/api/auth/verify', {
+        method: 'POST',
+        body: JSON.stringify({ email: payload.email }),
+        headers: { 'content-type': 'application/json' },
+      })
+      expect(verifiedResponse.status).toBe(204)
+
+      const unknownResponse = await fetch('/api/auth/verify', {
+        method: 'POST',
+        body: JSON.stringify({ email: uniqueEmail() }),
+        headers: { 'content-type': 'application/json' },
+      })
+      expect(unknownResponse.status).toBe(204)
+    })
+
+    it('rejects an invalid payload', async () => {
+      await expect(
+        $fetch('/api/auth/verify', { method: 'POST', body: { email: 'not-an-email' } }),
+      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'auth.invalid_payload' })
     })
   })
 })
