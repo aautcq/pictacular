@@ -32,3 +32,20 @@ export function sendMessage(name: string, data: unknown) {
 
   for (const peer of peers) peer.send(payload)
 }
+
+// Sends { name, data } only to the peer(s) belonging to a single User
+// (issue #50's "photo uploaded" notification, scoped so only the
+// uploading User's own connections update — not every connected peer).
+// `peer.context.user` is populated during the WS upgrade in
+// server/routes/ws.ts, the same way `event.context.user` is for HTTP
+// requests, and a User may hold several open connections (e.g. multiple
+// tabs/devices), so every matching peer is sent the message.
+export function sendMessageToUser(userId: number, name: string, data: unknown) {
+  const payload = JSON.stringify({ name, data })
+
+  for (const peer of peers) {
+    const user = peer.context.user as { id: number } | undefined
+    if (user?.id === userId)
+      peer.send(payload)
+  }
+}

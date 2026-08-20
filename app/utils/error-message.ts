@@ -15,6 +15,11 @@ const messages: Record<string, string> = {
   'storage.bucket_setup_failed': 'Something went wrong setting up your bucket. Please try again.',
   'storage.already_connected': 'You already have a storage connection.',
   'storage.connection_required': 'Connect a storage bucket first.',
+  'photos.invalid_payload': 'Please check the photo you selected.',
+  'photos.invalid_query': 'Something went wrong loading your photos.',
+  'photos.storage_connection_required': 'Connect a storage bucket before uploading a photo.',
+  'photos.not_found': 'That photo could not be found.',
+  'photos.upload_failed': 'That photo could not be uploaded. Please try again.',
 }
 
 export function getErrorCode(error: unknown): string {

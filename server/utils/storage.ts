@@ -5,6 +5,7 @@ import process from 'node:process'
 import {
 
   CreateBucketCommand,
+  DeleteObjectCommand,
   GetBucketCorsCommand,
   GetBucketLocationCommand,
   GetObjectCommand,
@@ -172,7 +173,10 @@ export async function bucketHasImages(awsCredentials: AwsCredentials) {
   return (Contents ?? []).some(({ Key }) => Key && imageExtensionPattern.test(Key))
 }
 
-export async function generateSecureAvatarUrl(awsCredentials: AwsCredentials, key: string, expiresIn = 3600) {
+// Generates a time-limited signed URL for any object in a User's own
+// bucket (avatars, Photos, ...) — generic over bucket + key, not
+// per-asset-type.
+export async function generateSecureObjectUrl(awsCredentials: AwsCredentials, key: string, expiresIn = 3600) {
   const client = createClient(awsCredentials)
   const command = new GetObjectCommand({ Bucket: awsCredentials.bucket, Key: key })
 
@@ -195,4 +199,33 @@ export async function uploadAvatarObject(awsCredentials: AwsCredentials, userId:
   }))
 
   return key
+}
+
+// Uploads a Photo (base64-in-JSON, matching the avatar upload contract) to
+// a User's own Storage Connection bucket, under a key that can never
+// collide with another upload (unlike avatars, a User may have any number
+// of Photos), returning the storage key + byte size persisted on the
+// Photo row.
+export async function uploadPhotoObject(awsCredentials: AwsCredentials, userId: number, filename: string, mimeType: string, base64: string) {
+  const client = createClient(awsCredentials)
+  const body = Buffer.from(base64, 'base64')
+  const key = `photos/${userId}/${randomUUID()}-${filename}`
+
+  await client.send(new PutObjectCommand({
+    Bucket: awsCredentials.bucket,
+    Key: key,
+    Body: body,
+    ContentType: mimeType,
+  }))
+
+  return { key, size: body.byteLength }
+}
+
+// Deletes a Photo's underlying bucket object (issue #50), used alongside
+// removing its Photo row so a deleted Photo never leaves an orphaned S3
+// object behind.
+export async function deletePhotoObject(awsCredentials: AwsCredentials, key: string) {
+  const client = createClient(awsCredentials)
+
+  await client.send(new DeleteObjectCommand({ Bucket: awsCredentials.bucket, Key: key }))
 }
