@@ -8,12 +8,13 @@ const router = useRouter()
 const albumId = computed(() => Number(route.params.id))
 
 const { user } = useCurrentUser()
-const { fetchAlbum, updateAlbum, deleteAlbum, addPhotoToAlbum, removePhotoFromAlbum, addCollaborators, removeCollaborator } = useAlbums()
+const { fetchAlbum, updateAlbum, deleteAlbum, addPhotoToAlbum, removePhotoFromAlbum, addCollaborators, removeCollaborator, generateShareLink } = useAlbums()
 const { photos: libraryPhotos, fetchNextPage: fetchNextLibraryPage, hasMore: libraryHasMore, loading: libraryLoading } = usePhotoLibrary()
 const { addError, addSuccess } = useAlerts()
 const { close: closePicker, open: openPicker } = useModal('add-photo-to-album')
 const { close: closeDeleteModal, open: openDeleteModal } = useModal('delete-album')
 const { close: closeCollaboratorsModal, open: openCollaboratorsModal } = useModal('album-collaborators')
+const { close: closeShareLinkModal, open: openShareModal } = useModal('album-share-link')
 
 const album = ref<AlbumFull | null>(null)
 const loading = ref(true)
@@ -26,9 +27,17 @@ const deleting = ref(false)
 const inviteEmails = ref('')
 const inviting = ref(false)
 const removingCollaboratorId = ref<number | null>(null)
+const generatingShareLink = ref(false)
+const shareLinkCopied = ref(false)
 
 const isAdmin = computed(() => !!album.value && !!user.value && album.value.admin.id === user.value.id)
 const albumPhotoIds = computed(() => new Set(album.value?.photos.map(photo => photo.id) ?? []))
+// Issue #53: built client-side from the Album's own id-based route + the
+// admin-only share_token the full show response returns — no server-side
+// origin/URL-building needed.
+const shareUrl = computed(() => (album.value?.share_token && import.meta.client)
+  ? `${window.location.origin}/albums/public/${album.value.share_token}`
+  : null)
 
 async function loadAlbum() {
   loading.value = true
@@ -186,6 +195,51 @@ async function removeCollaboratorFromAlbum(userId: number) {
   }
 }
 
+// Issue #53: opens the Share modal, generating a fresh Public Share Link
+// token first if the Album doesn't have one yet — an admin who has never
+// shared this Album shouldn't need a separate "create" step before
+// seeing/copying a link.
+async function openShareLinkModal() {
+  openShareModal()
+  if (album.value && !album.value.share_token)
+    await regenerateShareLink()
+}
+
+async function regenerateShareLink() {
+  if (!album.value)
+    return
+  generatingShareLink.value = true
+  shareLinkCopied.value = false
+  try {
+    const share_token = await generateShareLink(album.value.id)
+    album.value = { ...album.value, share_token }
+  }
+  catch (error) {
+    addError(translateError(error))
+  }
+  finally {
+    generatingShareLink.value = false
+  }
+}
+
+async function copyShareLink() {
+  if (!shareUrl.value)
+    return
+
+  try {
+    await navigator.clipboard.writeText(shareUrl.value)
+  }
+  catch (error) {
+    addError(translateError(error))
+    return
+  }
+
+  shareLinkCopied.value = true
+  setTimeout(() => {
+    shareLinkCopied.value = false
+  }, 5000)
+}
+
 onMounted(loadAlbum)
 </script>
 
@@ -238,6 +292,15 @@ onMounted(loadAlbum)
           >
             <Icon name="ph:users" size="1.1em" />
             Collaborators
+          </button>
+          <button
+            v-if="isAdmin"
+            type="button"
+            class="flex h-10 items-center gap-x-2 rounded bg-slate-200 px-4 font-medium hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600"
+            @click="openShareLinkModal"
+          >
+            <Icon name="ph:share-network" size="1.1em" />
+            Share
           </button>
           <button
             type="button"
@@ -395,6 +458,52 @@ onMounted(loadAlbum)
           @click="closeCollaboratorsModal"
         >
           Done
+        </button>
+      </div>
+    </AppModal>
+
+    <AppModal name="album-share-link">
+      <div class="flex flex-col gap-y-4">
+        <h2 class="text-lg font-semibold">
+          Sharing "{{ album?.title }}"
+        </h2>
+
+        <p class="text-sm text-slate-600 dark:text-slate-300">
+          Anyone with this link can view this album's photos, without an account. They can't like, edit, or add photos.
+        </p>
+
+        <p v-if="generatingShareLink" class="text-sm text-slate-500 dark:text-slate-300">
+          Generating link…
+        </p>
+        <div v-else-if="shareUrl" class="break-words rounded bg-white px-3 py-2 text-sm dark:bg-slate-700">
+          {{ shareUrl }}
+        </div>
+
+        <div class="flex justify-end gap-x-2">
+          <button
+            type="button"
+            class="h-10 rounded bg-slate-200 px-4 font-medium hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600"
+            @click="regenerateShareLink"
+          >
+            Generate new link
+          </button>
+          <button
+            type="button"
+            :disabled="!shareUrl || shareLinkCopied"
+            class="flex h-10 items-center gap-x-2 rounded bg-green-500 px-4 font-medium text-white hover:bg-green-600 disabled:opacity-50"
+            @click="copyShareLink"
+          >
+            <Icon :name="shareLinkCopied ? 'ph:check-bold' : 'ph:copy'" size="1.1em" />
+            {{ shareLinkCopied ? 'Copied!' : 'Copy' }}
+          </button>
+        </div>
+
+        <button
+          type="button"
+          class="mt-2 h-10 rounded bg-slate-200 px-4 font-medium hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600"
+          @click="closeShareLinkModal"
+        >
+          Close
         </button>
       </div>
     </AppModal>

@@ -9,6 +9,9 @@ export default defineEventHandler(async (event) => {
   const id = requireAlbumIdParam(event)
 
   const album = await requireAlbumMembership(id, user.id)
+  const full = await serializeAlbumFull(album, user.id)
 
-  return serializeAlbumFull(album, user.id)
+  // Issue #53: only the admin can generate/see the Public Share Link
+  // token, so a Collaborator's full show response never leaks it.
+  return { ...full, share_token: album.admin_id === user.id ? album.share_token : null }
 })
