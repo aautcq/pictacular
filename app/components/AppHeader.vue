@@ -1,7 +1,12 @@
 <script setup lang="ts">
-const { isDark, toggle } = useDarkMode()
+const colorMode = useColorMode()
+const isDark = computed(() => colorMode.value === 'dark')
 const { isAuthenticated, fullName, logout } = useCurrentUser()
 const router = useRouter()
+
+function toggle() {
+  colorMode.preference = isDark.value ? 'light' : 'dark'
+}
 
 async function handleLogout() {
   await logout()
