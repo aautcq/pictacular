@@ -1,5 +1,5 @@
-import { prisma } from './prisma'
 import { generateRandomString } from './crypto'
+import { prisma } from './prisma'
 
 // Ported from the former AuthService#generateResetPasswordToken: creates a
 // fresh reset-password token for the user, expiring any of their previous

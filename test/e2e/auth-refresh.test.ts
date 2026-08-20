@@ -1,9 +1,9 @@
+import type { AccessToken } from '../../server/utils/jwt'
 import { $fetch, fetch, setup } from '@nuxt/test-utils/e2e'
 import jwt from 'jsonwebtoken'
 import { afterAll, describe, expect, it } from 'vitest'
 import { accessTokenCookieName, refreshTokenCookieName } from '../../server/utils/cookies'
 import { compareToken } from '../../server/utils/crypto'
-import type { AccessToken } from '../../server/utils/jwt'
 import { prisma } from '../../server/utils/prisma'
 
 // Black-box HTTP tests for token refresh + protected-route enforcement

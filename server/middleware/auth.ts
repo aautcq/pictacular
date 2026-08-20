@@ -1,3 +1,4 @@
+import type { AccessToken, RefreshToken } from '../utils/jwt'
 import {
   accessTokenCookieName,
   accessTokenCookieOptions,
@@ -5,7 +6,6 @@ import {
   refreshTokenCookieOptions,
 } from '../utils/cookies'
 import { compareToken, hashToken } from '../utils/crypto'
-import type { AccessToken, RefreshToken } from '../utils/jwt'
 import { createTokens, verifyToken } from '../utils/jwt'
 import { prisma } from '../utils/prisma'
 
@@ -50,8 +50,9 @@ export default defineEventHandler(async (event) => {
     || session.user_id !== refreshPayload.userId
     || !session.refresh_token
     || !compareToken(refreshToken, session.refresh_token)
-  )
+  ) {
     return
+  }
 
   const user = { id: session.user.id, email: session.user.email }
   const tokens = createTokens(user, session)

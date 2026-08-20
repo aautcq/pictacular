@@ -28,9 +28,9 @@ export default defineEventHandler(async (event) => {
   // expired, or is unknown.
   const { count } = token
     ? await prisma.resetPasswordToken.updateMany({
-      where: { token, expired: false, expiresAt: { gte: new Date() } },
-      data: { expired: true },
-    })
+        where: { token, expired: false, expiresAt: { gte: new Date() } },
+        data: { expired: true },
+      })
     : { count: 0 }
 
   if (count === 0) {
