@@ -1,4 +1,5 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
+import tailwindcss from '@tailwindcss/vite'
 
 const appName = 'Pictacular'
 const description = 'Pictacular is an image gallery app'
@@ -8,13 +9,21 @@ const image
 export default defineNuxtConfig({
   devtools: { enabled: true },
   modules: [
-    '@nuxtjs/tailwindcss',
     '@nuxt/icon',
     '@vite-pwa/nuxt',
     '@nuxtjs/fontaine',
     'nuxt-security',
     '@nuxtjs/color-mode',
   ],
+  css: ['~/assets/css/tailwind.css'],
+  vite: {
+    plugins: [
+      tailwindcss(),
+    ],
+    build: {
+      cssMinify: 'esbuild',
+    },
+  },
   colorMode: {
     classSuffix: '',
   },
