@@ -20,7 +20,13 @@ export function unregisterPeer(peer: Peer) {
 }
 
 // Broadcasts { name, data } to every currently connected peer (including
-// the sender, mirroring `server.emit`'s all-sockets behavior).
+// the sender, mirroring `server.emit`'s all-sockets behavior). Intended for
+// server-side code reacting to other events (e.g. a future HTTP route
+// reacting to a photo upload) — not for direct client-message triggering:
+// a client-supplied `{ type: 'broadcast', name, data }` WS message used to
+// call this verbatim with no authorization/schema check, letting any
+// connected peer spoof arbitrary events to every other peer, so that path
+// was removed from server/routes/ws.ts entirely (#43).
 export function sendMessage(name: string, data: unknown) {
   const payload = JSON.stringify({ name, data })
 

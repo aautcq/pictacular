@@ -4,21 +4,9 @@ import { defineWebSocketHandler } from 'h3'
 import { accessTokenCookieName } from '../utils/cookies'
 import { verifyToken } from '../utils/jwt'
 import { prisma } from '../utils/prisma'
+import { pushMessageSchema } from '../utils/validation/websocket'
 import { sendPushNotification } from '../utils/web-push'
-import { registerPeer, sendMessage, unregisterPeer } from '../utils/websocket'
-
-interface BroadcastMessage {
-  type: 'broadcast'
-  name: string
-  data?: unknown
-}
-
-interface PushMessage {
-  type: 'push'
-  name?: string
-  title: string
-  body: string
-}
+import { registerPeer, unregisterPeer } from '../utils/websocket'
 
 // Native-WebSocket rewrite of the former Socket.IO GatewayService, using
 // Nitro's `defineWebSocketHandler` (h3/crossws) — a wire-protocol rewrite,
@@ -46,36 +34,41 @@ export default defineWebSocketHandler({
     unregisterPeer(peer)
   },
 
+  // The only client-originated message kind accepted is `push` (triggering
+  // a push notification for the sending peer's own subscriptions), and it's
+  // validated with the same zod-schema convention every HTTP route in this
+  // rewrite uses (see server/utils/validation/websocket.ts for why the
+  // former client-triggered `broadcast` kind was removed rather than
+  // allow-listed, per #43).
   async message(peer, message) {
-    let payload: BroadcastMessage | PushMessage
+    let json: unknown
     try {
-      payload = message.json<BroadcastMessage | PushMessage>()
+      json = message.json()
     }
     catch {
       return
     }
 
-    if (payload.type === 'push') {
-      const { name = 'notification', title, body } = payload
-      const user = peer.context.user as AccessToken['user']
-      const subscriptions = await prisma.pushSubscription.findMany({ where: { user_id: user.id } })
-
-      await Promise.all(subscriptions.map(subscription =>
-        sendPushNotification(
-          { endpoint: subscription.endpoint, keys: JSON.parse(subscription.keys) },
-          name,
-          title,
-          body,
-        ).catch((error) => {
-          // A push failing (expired/invalid subscription, provider outage)
-          // shouldn't take down the WS connection, matching the former
-          // gateway's try/catch-and-log behavior.
-          console.error('Failed to send push notification', error)
-        }),
-      ))
+    const result = pushMessageSchema.safeParse(json)
+    if (!result.success)
       return
-    }
 
-    sendMessage(payload.name, payload.data)
+    const { name = 'notification', title, body } = result.data
+    const user = peer.context.user as AccessToken['user']
+    const subscriptions = await prisma.pushSubscription.findMany({ where: { user_id: user.id } })
+
+    await Promise.all(subscriptions.map(subscription =>
+      sendPushNotification(
+        { endpoint: subscription.endpoint, keys: JSON.parse(subscription.keys) },
+        name,
+        title,
+        body,
+      ).catch((error) => {
+        // A push failing (expired/invalid subscription, provider outage)
+        // shouldn't take down the WS connection, matching the former
+        // gateway's try/catch-and-log behavior.
+        console.error('Failed to send push notification', error)
+      }),
+    ))
   },
 })
