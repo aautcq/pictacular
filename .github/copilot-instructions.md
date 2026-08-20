@@ -10,8 +10,7 @@ Install deps from the repo root with `npm install`. The `afterinstall` script ru
 `prisma generate && prisma db push`, so a `DATABASE_URL` must be set in `.env` (copy from
 `.env.example`) before installing/running.
 
-- `npm run dev` — starts the Nuxt/Nitro dev server on `https://pictacular.dev:4005` (requires
-  `pictacular.dev` in `/etc/hosts`)
+- `npm run dev` — starts the Nuxt/Nitro dev server on `http://localhost:3000`
 - `npm run build` — builds the app (`.output/`)
 - `npm run lint` — ESLint with `--fix` (`@antfu/eslint-config` flat config); this is also the
   formatter for `*.{js,ts,vue}`
@@ -59,9 +58,9 @@ Nuxt 4 app is still bootstrap-stage: `app/app.vue` only renders `<NuxtPage />`; 
 `app/pages/`, `app/components/`, `app/composables/` directories exist yet — add them
 following standard Nuxt auto-import conventions when building features (Nuxt 4's default
 `srcDir` is `app/`; `server/`, `public/`, and config files stay at the project root).
-`nuxt.config.ts` configures PWA manifest/workbox, `nuxt-security` CSP (must include the S3
-image host in `img-src` when adding image sources), and a local HTTPS dev server
-(`server.key`/`server.crt`) at `pictacular.dev:4005`.
+`nuxt.config.ts` configures PWA manifest/workbox and `nuxt-security` CSP (must include the S3
+image host in `img-src` when adding image sources); the dev server runs on Nuxt's default
+`http://localhost:3000`, with no custom host/HTTPS setup needed.
 
 Source of truth for the architectural decisions above:
 `docs/adr/0001-nuxt-server-replaces-nestjs-api.md`.

@@ -15,8 +15,7 @@ A `DATABASE_URL` must be set in `.env` (copy from `.env.example`) before install
 
 ## Development Server
 
-Start the development server on `https://pictacular.dev:4005` (requires `pictacular.dev` in
-`/etc/hosts`):
+Start the development server on `http://localhost:3000`:
 
 ```bash
 npm run dev

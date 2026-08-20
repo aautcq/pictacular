@@ -7,10 +7,14 @@ import { accessTokenTtl, refreshTokenTtl } from './jwt'
 export const accessTokenCookieName = 'pictacularAccTok'
 export const refreshTokenCookieName = 'pictacularRefTok'
 
+// Dev mode serves plain `http://localhost` (see ADR 0001/issue #72): browsers
+// silently drop `Secure` cookies on a non-HTTPS response, so `secure`/`sameSite`
+// relax in dev via Nuxt's built-in `import.meta.dev` flag. Production/build
+// behavior (`secure: true`, `sameSite: 'none'`) is unchanged.
 const genericCookieOptions: CookieSerializeOptions = {
   httpOnly: true,
-  sameSite: 'none',
-  secure: true,
+  sameSite: import.meta.dev ? 'lax' : 'none',
+  secure: !import.meta.dev,
   path: '/',
   domain: process.env.COOKIE_DOMAIN,
 }
