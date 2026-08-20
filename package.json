@@ -27,7 +27,8 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "lint": "eslint . --fix",
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "nuxt typecheck"
   },
   "dependencies": {
     "@aautcq/web-utils": "~2.2.0",
@@ -65,10 +66,11 @@
     "nuxt-security": "~2.6.0",
     "prisma": "~7.9.1",
     "sass": "~1.102.0",
-    "typescript": "~5.4.5",
+    "typescript": "~6.0.3",
     "vitest": "~4.1.11",
     "vue": "~3.5.41",
     "vue-router": "~5.2.0",
+    "vue-tsc": "~3.3.10",
     "ws": "~8.15.0"
   },
   "overrides": {
