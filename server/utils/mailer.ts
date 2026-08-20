@@ -8,7 +8,7 @@ import sgMail from '@sendgrid/mail'
 import ejs from 'ejs'
 import { t } from './i18n/emails'
 
-export type EmailType = 'verification' | 'password-reset'
+export type EmailType = 'verification' | 'password-reset' | 'invitation'
 
 export interface EmailData {
   email: string

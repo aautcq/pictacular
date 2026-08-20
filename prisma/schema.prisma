@@ -146,7 +146,24 @@ model Album {
 
   users      User[] @relation("Albums")
 
+  invitations Invitation[]
+
   @@map("albums")
+}
+
+model Invitation {
+  id         Int        @id @default(autoincrement())
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+
+  email String
+  token String @unique
+
+  album_id Int
+  album    Album @relation(fields: [album_id], references: [id], onDelete: Cascade)
+
+  @@unique([album_id, email])
+  @@map("invitations")
 }
 
 model AlbumsOnPhotos {

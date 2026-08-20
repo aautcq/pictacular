@@ -36,7 +36,7 @@ export function requireAlbumIdParam(event: H3Event): number {
 }
 
 // Loads an Album only if the requesting User is one of its members (the
-// admin, or — once Collaborators ship, issue #52 — a Collaborator),
+// admin, or a Collaborator, issue #52),
 // throwing the same 404 either way an Album that doesn't exist would, so a
 // non-member can never distinguish "not found" from "not allowed" by
 // probing ids.

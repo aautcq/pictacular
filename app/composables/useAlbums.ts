@@ -20,6 +20,15 @@ export interface AlbumFull extends AlbumSummary {
   photos: Photo[]
 }
 
+// Issue #52: the add-Collaborators endpoint's response, on top of the
+// refreshed AlbumFull — which emails were linked to an existing User
+// immediately vs. which were sent an Invitation instead, so the client can
+// report an accurate outcome rather than a single generic message.
+export interface AlbumCollaboratorsResult extends AlbumFull {
+  linked: string[]
+  invited: string[]
+}
+
 // Albums list/search/CRUD state (issue #51), ported from the legacy
 // albums Pinia store as a Nuxt composable backed by useState, mirroring
 // usePhotoLibrary.ts's shape: paginated listing (keyset cursor, newest
@@ -86,6 +95,18 @@ export function useAlbums() {
     return $fetch<AlbumFull>(`/api/albums/${albumId}/photos/${photoId}`, { method: 'DELETE' })
   }
 
+  // Issue #52: adds Collaborators by email — existing Users are linked
+  // immediately, unknown emails get invited instead — returning the
+  // refreshed full Album so the show page can update its Collaborators
+  // list without a separate re-fetch.
+  async function addCollaborators(albumId: number, emails: string[]) {
+    return $fetch<AlbumCollaboratorsResult>(`/api/albums/${albumId}/collaborators`, { method: 'POST', body: { emails } })
+  }
+
+  async function removeCollaborator(albumId: number, userId: number) {
+    return $fetch<AlbumFull>(`/api/albums/${albumId}/collaborators/${userId}`, { method: 'DELETE' })
+  }
+
   return {
     albums,
     hasMore,
@@ -99,5 +120,7 @@ export function useAlbums() {
     deleteAlbum,
     addPhotoToAlbum,
     removePhotoFromAlbum,
+    addCollaborators,
+    removeCollaborator,
   }
 }

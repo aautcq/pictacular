@@ -35,3 +35,12 @@ export const albumSearchQuerySchema = z.object({
 })
 
 export type AlbumSearchQuery = z.infer<typeof albumSearchQuerySchema>
+
+// zod schema for the add-Collaborators endpoint (issue #52): a non-empty
+// list of emails, capped the same way a photo picker caps a batch, so a
+// single request can't be used to hammer the invitation-email pipeline.
+export const albumCollaboratorsSchema = z.object({
+  emails: z.array(z.email()).min(1).max(20),
+})
+
+export type AlbumCollaboratorsInput = z.infer<typeof albumCollaboratorsSchema>

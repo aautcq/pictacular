@@ -12,5 +12,12 @@
     "content": "Veuillez cliquer sur le bouton ci-dessous afin de créer un nouveau mot de passe sur Pictacular.",
     "cta": "Créer un nouveau mot de passe",
     "alternative": "Vous pouvez également copier-coller le lien suivant dans votre navigateur :"
+  },
+  "invitation": {
+    "subject": "Vous avez été invité(e) à un album sur Pictacular",
+    "title": "Bonjour !",
+    "content": "Vous avez été invité(e) à collaborer sur un album sur Pictacular. Cliquez sur le bouton ci-dessous pour le consulter et créer votre compte.",
+    "cta": "Voir l'album",
+    "alternative": "Vous pouvez également copier-coller le lien suivant dans votre navigateur :"
   }
 }
