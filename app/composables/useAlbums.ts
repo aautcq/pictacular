@@ -18,6 +18,28 @@ export interface AlbumSummary {
 export interface AlbumFull extends AlbumSummary {
   collaborators: AlbumMember[]
   photos: Photo[]
+  // Issue #53: only present (non-null) when the requesting User is the
+  // Album's admin — a Collaborator's full show response always gets null.
+  share_token: string | null
+}
+
+// Issue #53: a Public Share Link Photo omits `liked`/like-eligibility
+// entirely — there's no signed-in User to like on behalf of on the public,
+// unauthenticated view.
+export interface PublicAlbumPhoto {
+  id: number
+  url: string
+  mime_type: string
+  size: number
+  last_modified: string
+  created_at: string
+}
+
+// Issue #53: the Public Share Link response — title/description/cover/
+// admin + Photos only, deliberately narrower than AlbumFull (no
+// Collaborators, no share_token itself), matching serializeAlbumPublic.
+export interface PublicAlbum extends AlbumSummary {
+  photos: PublicAlbumPhoto[]
 }
 
 // Issue #52: the add-Collaborators endpoint's response, on top of the
@@ -107,6 +129,22 @@ export function useAlbums() {
     return $fetch<AlbumFull>(`/api/albums/${albumId}/collaborators/${userId}`, { method: 'DELETE' })
   }
 
+  // Issue #53: generates (or rotates) the admin's Public Share Link
+  // token for an Album — calling this again simply replaces whatever
+  // token was previously issued.
+  async function generateShareLink(albumId: number) {
+    const result = await $fetch<{ share_token: string }>(`/api/albums/${albumId}/share-link`, { method: 'POST' })
+    return result.share_token
+  }
+
+  // Issue #53: fetches an Album's public, read-only view by its Public
+  // Share Link token — unlike fetchAlbum, this hits a route that doesn't
+  // require auth, since the whole point of the link is to be viewable by
+  // anyone who has it, without an account.
+  async function fetchPublicAlbum(token: string) {
+    return $fetch<PublicAlbum>(`/api/albums/public/${token}`)
+  }
+
   return {
     albums,
     hasMore,
@@ -122,5 +160,7 @@ export function useAlbums() {
     removePhotoFromAlbum,
     addCollaborators,
     removeCollaborator,
+    generateShareLink,
+    fetchPublicAlbum,
   }
 }

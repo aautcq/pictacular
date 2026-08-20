@@ -15,6 +15,7 @@ export interface AlbumWithMembers {
   admin_id: number
   admin: AlbumMember
   users: AlbumMember[]
+  share_token: string | null
 }
 
 export const memberSelect = { id: true, first_name: true, last_name: true } as const

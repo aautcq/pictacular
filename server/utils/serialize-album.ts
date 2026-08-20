@@ -96,6 +96,41 @@ export async function loadAlbumCovers(albumIds: number[]): Promise<Map<number, A
   return covers
 }
 
+// Public Share Link response shape (issue #53): title/description/cover/
+// admin/created_at (the same fields as serializeAlbumSummary) + every
+// assigned Photo, deliberately narrower than serializeAlbumFull — no
+// Collaborators (anonymous visitors have no business seeing who else has
+// access), and each Photo omits `liked`/like-eligibility entirely (there's
+// no signed-in User to like on behalf of), keeping "no like/edit/
+// collaborate actions available" true at the response-shape level, not
+// just in the client UI.
+export async function serializeAlbumPublic(album: AlbumSummarySource & { id: number }) {
+  const rows = await prisma.albumsOnPhotos.findMany({
+    where: { album_id: album.id },
+    orderBy: { assigned_at: 'desc' },
+    include: { photo: { include: { user: { include: { aws_credentials: true } } } } },
+  })
+
+  const summary = await serializeAlbumSummary(album, rows[0] ?? null)
+
+  const photos = (await Promise.all(rows.map(async (row) => {
+    const { aws_credentials } = row.photo.user
+    if (!aws_credentials)
+      return null
+
+    return {
+      id: row.photo.id,
+      url: await generateSecureObjectUrl(aws_credentials, row.photo.key),
+      mime_type: row.photo.mime_type,
+      size: row.photo.size,
+      last_modified: row.photo.last_modified,
+      created_at: row.photo.created_at,
+    }
+  }))).filter(photo => photo !== null)
+
+  return { ...summary, photos }
+}
+
 export interface AlbumFullSource extends AlbumSummarySource {
   users: AlbumMember[]
 }

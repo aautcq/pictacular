@@ -137,7 +137,7 @@ model Album {
 
   title         String?
   description   String?
-  share_token   String?
+  share_token   String?    @unique
 
   admin_id Int
   admin    User @relation("AdminAlbums", fields: [admin_id], references: [id])
