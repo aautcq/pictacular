@@ -166,6 +166,33 @@ model Invitation {
   @@map("invitations")
 }
 
+enum ErrorType {
+  DATABASE
+  SOCKET
+  API
+  INTERNAL_SERVER_ERROR
+
+  @@map("error_type")
+}
+
+model ApiError {
+  id         Int        @id @default(autoincrement())
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+
+  user_id Int?
+  user_ip String?
+
+  type    ErrorType
+  path    String
+  status  Int
+  message String
+  details String?
+  raw     String?
+
+  @@map("api_errors")
+}
+
 model AlbumsOnPhotos {
   photo       Photo @relation(fields: [photo_id], references: [id])
   photo_id    Int
