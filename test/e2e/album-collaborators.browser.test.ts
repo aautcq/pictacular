@@ -40,7 +40,7 @@ describe('album collaborators + invitations journey', async () => {
     const adminPage = await createPage('/login')
     await adminPage.getByLabel('Email').fill(adminEmail)
     await adminPage.getByLabel('Password').fill(password)
-    await adminPage.getByRole('button', { name: 'Sign in' }).click()
+    await adminPage.getByRole('button', { name: 'Sign in', exact: true }).click()
     await adminPage.waitForURL(u => !u.pathname.endsWith('/login'))
 
     await adminPage.goto(url('/albums'))

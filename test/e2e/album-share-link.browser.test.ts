@@ -81,7 +81,7 @@ describe('album public share link journey', async () => {
     const adminPage = await createPage('/login', { permissions: ['clipboard-read', 'clipboard-write'] })
     await adminPage.getByLabel('Email').fill(email)
     await adminPage.getByLabel('Password').fill(password)
-    await adminPage.getByRole('button', { name: 'Sign in' }).click()
+    await adminPage.getByRole('button', { name: 'Sign in', exact: true }).click()
     await adminPage.waitForURL(url('/'))
 
     await adminPage.goto(url(`/albums/${album.id}`))

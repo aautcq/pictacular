@@ -2,12 +2,14 @@
 definePageMeta({ middleware: 'auth' })
 
 const { user, fullName, uploadAvatar, deleteAccount } = useCurrentUser()
+const { hasStoredCredential, isSupported, registerCredential } = useBiometrics()
 const { addError, addSuccess } = useAlerts()
 const { open: openDeleteConfirm, close: closeDeleteConfirm } = useModal('delete-account')
 const router = useRouter()
 
 const fileInput = ref<HTMLInputElement | null>(null)
 const deleting = ref(false)
+const registeringBiometrics = ref(false)
 
 const initials = computed(() => `${user.value?.first_name?.[0] ?? ''}${user.value?.last_name?.[0] ?? ''}`)
 
@@ -28,6 +30,20 @@ function onAvatarSelected(event: Event) {
     }
   }
   reader.readAsDataURL(file)
+}
+
+async function registerBiometrics() {
+  registeringBiometrics.value = true
+  try {
+    await registerCredential()
+    addSuccess('Biometric credential registered.')
+  }
+  catch (error) {
+    addError(translateError(error))
+  }
+  finally {
+    registeringBiometrics.value = false
+  }
 }
 
 async function confirmDelete() {
@@ -73,6 +89,15 @@ async function confirmDelete() {
     </div>
 
     <div class="flex justify-end gap-3">
+      <button
+        v-if="isSupported"
+        type="button"
+        :disabled="registeringBiometrics"
+        class="h-10 rounded border border-slate-300 px-4 font-medium hover:bg-slate-100 disabled:opacity-50 dark:border-slate-600 dark:hover:bg-slate-700"
+        @click="registerBiometrics"
+      >
+        {{ registeringBiometrics ? 'Registering…' : (hasStoredCredential ? 'Re-register a biometric credential' : 'Register a biometric credential') }}
+      </button>
       <button
         type="button"
         class="h-10 rounded bg-red-500 px-4 font-medium text-white hover:bg-red-600"
