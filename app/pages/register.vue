@@ -3,6 +3,7 @@ definePageMeta({ middleware: 'guest' })
 
 const { register } = useCurrentUser()
 const { addError } = useAlerts()
+const { translateError } = useErrorMessage()
 
 const loading = ref(false)
 const submitted = ref(false)

@@ -5,6 +5,7 @@ definePageMeta({ middleware: ['auth'] })
 
 const { albums, hasMore, loading, fetchNextPage, searchAlbums } = useAlbums()
 const { addError } = useAlerts()
+const { translateError } = useErrorMessage()
 
 const sentinel = ref<HTMLElement | null>(null)
 const query = ref('')

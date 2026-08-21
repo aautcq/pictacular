@@ -1,6 +1,7 @@
 <script setup lang="ts">
 const { resendVerification } = useCurrentUser()
 const { addError } = useAlerts()
+const { translateError } = useErrorMessage()
 
 const email = ref('')
 const loading = ref(false)

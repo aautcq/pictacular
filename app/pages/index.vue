@@ -5,6 +5,7 @@ definePageMeta({ middleware: ['auth', 'storage-connection'] })
 
 const { fullName } = useCurrentUser()
 const { addError, addSuccess } = useAlerts()
+const { translateError } = useErrorMessage()
 const { on } = useRealtime()
 const {
   photos,

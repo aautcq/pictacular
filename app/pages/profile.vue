@@ -4,6 +4,7 @@ definePageMeta({ middleware: 'auth' })
 const { user, fullName, uploadAvatar, deleteAccount } = useCurrentUser()
 const { hasStoredCredential, isSupported, registerCredential } = useBiometrics()
 const { addError, addSuccess } = useAlerts()
+const { translateError } = useErrorMessage()
 const { open: openDeleteConfirm, close: closeDeleteConfirm } = useModal('delete-account')
 const router = useRouter()
 

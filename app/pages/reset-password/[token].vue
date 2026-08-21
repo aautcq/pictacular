@@ -2,6 +2,7 @@
 const route = useRoute()
 const { setNewPassword } = useCurrentUser()
 const { addError } = useAlerts()
+const { translateError } = useErrorMessage()
 
 const password = ref('')
 const passwordConfirmation = ref('')

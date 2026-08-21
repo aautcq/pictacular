@@ -4,6 +4,7 @@ definePageMeta({ middleware: 'auth' })
 const { connectStorage, checkBucket } = useCurrentUser()
 const { importing, progress, result, importPhotos } = useBucketImport()
 const { addError } = useAlerts()
+const { translateError } = useErrorMessage()
 const router = useRouter()
 
 const mode = ref<'create' | 'connect' | null>(null)

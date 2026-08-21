@@ -3,6 +3,7 @@ definePageMeta({ middleware: ['auth'] })
 
 const { createAlbum } = useAlbums()
 const { addError } = useAlerts()
+const { translateError } = useErrorMessage()
 const router = useRouter()
 
 const title = ref('')

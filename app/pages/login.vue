@@ -4,6 +4,7 @@ definePageMeta({ middleware: 'guest' })
 const { login, loginWithBiometrics } = useCurrentUser()
 const { hasStoredCredential, isSupported } = useBiometrics()
 const { addError, addSuccess } = useAlerts()
+const { translateError } = useErrorMessage()
 const route = useRoute()
 const router = useRouter()
 

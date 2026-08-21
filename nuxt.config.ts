@@ -14,6 +14,7 @@ export default defineNuxtConfig({
     '@nuxt/fonts',
     'nuxt-security',
     '@nuxtjs/color-mode',
+    '@nuxtjs/i18n',
   ],
   css: ['~/assets/css/tailwind.css'],
   vite: {
@@ -28,6 +29,24 @@ export default defineNuxtConfig({
   },
   colorMode: {
     classSuffix: '',
+  },
+  // English-only for now (ADR 0002): no URL locale prefix, active locale
+  // persisted in a cookie (not localStorage) so SSR renders the correct
+  // locale on first paint, consistent with the app's cookie-based JWT auth.
+  // Navigator-based redirects are unnecessary with a single locale (nothing
+  // to negotiate) so `redirectOn` is left at its default, moot under
+  // `strategy: 'no_prefix'` anyway since there's no URL to redirect to.
+  i18n: {
+    restructureDir: 'app/i18n',
+    locales: [{ code: 'en', name: 'English' }],
+    defaultLocale: 'en',
+    strategy: 'no_prefix',
+    detectBrowserLanguage: {
+      useCookie: true,
+    },
+    bundle: {
+      runtimeOnly: true,
+    },
   },
   app: {
     head: {

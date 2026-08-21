@@ -9,6 +9,7 @@ const token = computed(() => route.params.token as string)
 const { fetchInvitation } = useInvitations()
 const { register, resendVerification } = useCurrentUser()
 const { addError, addSuccess } = useAlerts()
+const { translateError } = useErrorMessage()
 
 const status = ref<'loading' | 'ready' | 'error'>('loading')
 const invitation = ref<InvitationAlbum | null>(null)

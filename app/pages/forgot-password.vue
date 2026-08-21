@@ -3,6 +3,7 @@ definePageMeta({ middleware: 'guest' })
 
 const { requestPasswordReset } = useCurrentUser()
 const { addError } = useAlerts()
+const { translateError } = useErrorMessage()
 
 const email = ref('')
 const loading = ref(false)
