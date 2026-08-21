@@ -27,6 +27,10 @@ const messages: Record<string, string> = {
   'albums.photo_not_found': 'That photo could not be found.',
   'albums.cannot_remove_admin': 'The album admin cannot be removed as a collaborator.',
   'invitations.not_found': 'This invitation link is invalid or has expired.',
+  'biometrics.invalid_payload': 'Please check the information you entered.',
+  'biometrics.missing_challenge': 'That biometric prompt took too long. Please try again.',
+  'biometrics.registration_failed': 'Your device could not register a biometric credential. Please try again.',
+  'biometrics.invalid_credentials': 'That biometric credential could not be verified.',
 }
 
 export function getErrorCode(error: unknown): string {

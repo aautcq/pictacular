@@ -42,7 +42,7 @@ describe('register -> verify -> sign in -> profile -> logout journey', async () 
     await page.goto(url('/login'))
     await page.getByLabel('Email').fill(email)
     await page.getByLabel('Password').fill(password)
-    await page.getByRole('button', { name: 'Sign in' }).click()
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
 
     await page.waitForURL('**/storage-connection')
 

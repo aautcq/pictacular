@@ -61,6 +61,12 @@ export function useCurrentUser() {
     return user.value
   }
 
+  async function loginWithBiometrics() {
+    const { signIn } = useBiometrics()
+    user.value = await signIn()
+    return user.value
+  }
+
   async function logout() {
     if (user.value)
       await $fetch('/api/auth/logout', { method: 'POST' })
@@ -111,6 +117,7 @@ export function useCurrentUser() {
     resendVerification,
     verifyAccount,
     login,
+    loginWithBiometrics,
     logout,
     requestPasswordReset,
     setNewPassword,

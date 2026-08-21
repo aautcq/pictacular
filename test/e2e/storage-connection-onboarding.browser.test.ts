@@ -46,7 +46,7 @@ describe('storage connection onboarding journey', async () => {
     const page = await createPage('/login')
     await page.getByLabel('Email').fill(email)
     await page.getByLabel('Password').fill(password)
-    await page.getByRole('button', { name: 'Sign in' }).click()
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
 
     await page.waitForURL('**/storage-connection')
     await page.getByText('Connect your storage').waitFor()
@@ -92,7 +92,7 @@ describe('storage connection onboarding journey', async () => {
     const page = await createPage('/login')
     await page.getByLabel('Email').fill(importEmail)
     await page.getByLabel('Password').fill(password)
-    await page.getByRole('button', { name: 'Sign in' }).click()
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
 
     await page.waitForURL('**/storage-connection')
     await page.getByRole('button', { name: 'I already have a bucket' }).click()
