@@ -1,5 +1,12 @@
 {
-  "common": {},
+  "common": {
+    "nav": {
+      "albums": "Albums",
+      "signIn": "Sign in",
+      "logOut": "Log out"
+    },
+    "close": "Close"
+  },
   "errors": {
     "auth.invalid_payload": "Please check the information you entered.",
     "auth.invalid_credentials": "Incorrect email or password.",
