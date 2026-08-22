@@ -1,5 +1,5 @@
 import { $fetch, fetch, setup } from '@nuxt/test-utils/e2e'
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it, vi } from 'vitest'
 import { comparePassword } from '../../server/utils/crypto'
 import { prisma } from '../../server/utils/prisma'
 
@@ -43,6 +43,7 @@ describe('password reset flow', async () => {
   }
 
   afterAll(async () => {
+    await prisma.emailOutbox.deleteMany({ where: { recipient_email: { startsWith: emailPrefix } } })
     await prisma.user.deleteMany({ where: { email: { startsWith: emailPrefix } } })
   })
 
@@ -97,6 +98,22 @@ describe('password reset flow', async () => {
     const token = await prisma.resetPasswordToken.findFirst({ where: { user_id: user.id } })
     expect(token).toBeTruthy()
     expect(token?.expired).toBe(false)
+
+    // Issue #94: the self-service reset email is routed through the
+    // durable outbox instead of a bare sendEmail call, so poll for the
+    // pending row to settle rather than asserting immediately.
+    const outboxRow = await vi.waitFor(async () => {
+      const row = await prisma.emailOutbox.findFirstOrThrow({
+        where: { recipient_email: email, type: 'password-reset' },
+      })
+      expect(row.status).not.toBe('pending')
+      return row
+    })
+    expect(outboxRow).toMatchObject({
+      recipient_email: email,
+      type: 'password-reset',
+      link: expect.stringContaining('/reset-password/'),
+    })
   })
 
   it('sets a new password with a valid token, resets the failed-attempt counter, and invalidates the token', async () => {
