@@ -138,6 +138,17 @@ export default defineNuxtConfig({
   nitro: {
     experimental: {
       websocket: true,
+      // Enables auto-scanning of server/tasks/**, required for the
+      // outbox retry/purge scheduled task (issue #97).
+      tasks: true,
+    },
+    // Nitro's own scheduled-task runner (croner-backed) already no-ops
+    // under `std-env`'s `isTest` (NODE_ENV=test, as `@nuxt/test-utils`
+    // boots the server under in e2e specs), so no extra env guard is
+    // needed here for the "must not run in the test environment"
+    // requirement (issue #97).
+    scheduledTasks: {
+      '* * * * *': ['email-outbox:process'],
     },
   },
 })
