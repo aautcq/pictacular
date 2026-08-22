@@ -166,6 +166,38 @@ model Invitation {
   @@map("invitations")
 }
 
+enum EmailOutboxStatus {
+  pending
+  sent
+  failed
+  dead
+
+  @@map("email_outbox_status")
+}
+
+model EmailOutbox {
+  id         Int        @id @default(autoincrement())
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+
+  // Mirrors mailer.ts's EmailType union ('verification' | 'password-reset'
+  // | 'invitation') as a plain string rather than a Prisma enum: Prisma
+  // enum values must be valid identifiers, and mapping the hyphenated
+  // 'password-reset' literal to an underscored enum key would desync the
+  // TS-side value from what callers actually pass to sendEmail/this
+  // helper.
+  type             String
+  recipient_email  String
+  lang             String
+  link             String
+  status           EmailOutboxStatus @default(pending)
+  attempts         Int               @default(0)
+  next_attempt_at  DateTime?
+  last_error       String?
+
+  @@map("email_outbox")
+}
+
 enum ErrorType {
   DATABASE
   SOCKET
