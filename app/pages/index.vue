@@ -7,6 +7,7 @@ const { fullName } = useCurrentUser()
 const { addError, addSuccess } = useAlerts()
 const { translateError } = useErrorMessage()
 const { on } = useRealtime()
+const { t } = useI18n()
 const {
   photos,
   groupedByDate,
@@ -172,7 +173,7 @@ async function confirmDeleteSelected() {
   deleting.value = true
   try {
     await deletePhotos([...selectedIds.value])
-    addSuccess('Photos deleted.')
+    addSuccess(t('photosDeleted'))
     clearSelection()
     closeDeleteModal()
   }
@@ -245,7 +246,7 @@ onUnmounted(() => {
   <div class="mx-auto flex max-w-5xl flex-col gap-y-8 py-10">
     <div class="flex items-center justify-between">
       <h1 class="text-xl font-semibold">
-        Welcome, {{ fullName }}
+        {{ t('welcome', { name: fullName }) }}
       </h1>
 
       <button
@@ -254,7 +255,7 @@ onUnmounted(() => {
         @click="fileInput?.click()"
       >
         <Icon name="ph:upload-simple" size="1.1em" />
-        Upload photos
+        {{ t('uploadPhotos') }}
       </button>
       <input ref="fileInput" type="file" accept="image/*" multiple class="hidden" @change="onFileInputChange">
     </div>
@@ -267,7 +268,7 @@ onUnmounted(() => {
       @drop.prevent="onDrop"
     >
       <Icon name="ph:image" size="2em" />
-      <p>Drag and drop photos here, or use the Upload photos button above.</p>
+      <p>{{ t('dropzoneHint') }}</p>
     </div>
 
     <div v-if="uploads.length" class="flex flex-col gap-y-2">
@@ -284,22 +285,22 @@ onUnmounted(() => {
     </div>
 
     <div v-if="selectionMode" class="sticky top-16 z-10 flex items-center justify-between rounded bg-slate-200 px-4 py-2 dark:bg-slate-800">
-      <span>{{ selectedCount }} selected</span>
+      <span>{{ t('selectedCount', selectedCount) }}</span>
       <div class="flex gap-x-2">
         <button type="button" class="rounded px-3 py-1 hover:bg-slate-300 dark:hover:bg-slate-700" @click="downloadSelected">
-          Download
+          {{ t('download') }}
         </button>
         <button type="button" class="rounded px-3 py-1 text-red-500 hover:bg-slate-300 dark:hover:bg-slate-700" @click="openDeleteModal">
-          Delete
+          {{ t('delete') }}
         </button>
         <button type="button" class="rounded px-3 py-1 hover:bg-slate-300 dark:hover:bg-slate-700" @click="clearSelection">
-          Cancel
+          {{ t('cancel') }}
         </button>
       </div>
     </div>
 
     <div v-if="!photos.length && !loading" class="py-20 text-center text-slate-500 dark:text-slate-300">
-      <p>Your photo library is empty — upload your first photo to get started.</p>
+      <p>{{ t('empty') }}</p>
     </div>
 
     <div v-for="group in groupedByDate" :key="group.date" class="flex flex-col gap-y-3">
@@ -308,19 +309,19 @@ onUnmounted(() => {
           {{ formatDate(group.date) }}
         </h2>
         <button type="button" class="text-xs text-green-600 hover:underline dark:text-green-400" @click="selectDay(group.date)">
-          Select day
+          {{ t('selectDay') }}
         </button>
       </div>
 
       <div class="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-6">
         <div v-for="photo in group.photos" :key="photo.id" class="group relative aspect-square overflow-hidden rounded">
           <button type="button" class="absolute inset-0" @click="onPhotoClick(photo, $event)">
-            <img :src="photo.url" :alt="`Photo ${photo.id}`" class="h-full w-full object-cover" loading="lazy">
+            <img :src="photo.url" :alt="t('photoAlt', { id: photo.id })" class="h-full w-full object-cover" loading="lazy">
           </button>
 
           <button
             type="button"
-            title="Select"
+            :title="t('select')"
             class="absolute left-2 top-2 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-black/30 transition-opacity"
             :class="isSelected(photo.id) ? 'bg-green-500 opacity-100' : 'opacity-0 group-hover:opacity-100'"
             @click.stop="toggleSelection(photo, $event)"
@@ -335,21 +336,21 @@ onUnmounted(() => {
 
     <div ref="sentinel" class="h-4" />
     <p v-if="loading" class="text-center text-sm text-slate-500 dark:text-slate-300">
-      Loading…
+      {{ t('loading') }}
     </p>
 
     <AppModal name="delete-photos">
       <div class="flex flex-col gap-y-6">
         <h2 class="text-lg font-semibold">
-          Delete {{ selectedCount }} photo{{ selectedCount > 1 ? 's' : '' }}
+          {{ t('deleteModalTitle', selectedCount) }}
         </h2>
-        <p>This action is irreversible. Are you sure?</p>
+        <p>{{ t('deleteModalBody') }}</p>
         <div class="flex justify-end gap-3">
           <button type="button" class="h-10 rounded bg-slate-200 px-4 font-medium hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600" @click="closeDeleteModal">
-            Cancel
+            {{ t('cancel') }}
           </button>
           <button type="button" :disabled="deleting" class="h-10 rounded bg-red-500 px-4 font-medium text-white hover:bg-red-600 disabled:opacity-50" @click="confirmDeleteSelected">
-            {{ deleting ? 'Deleting…' : 'Delete' }}
+            {{ deleting ? t('deleting') : t('delete') }}
           </button>
         </div>
       </div>
@@ -365,7 +366,7 @@ onUnmounted(() => {
         @keydown.esc="closeDetails"
         @click.self="closeDetails"
       >
-        <button type="button" class="absolute right-4 top-4 text-white" title="Close" @click="closeDetails">
+        <button type="button" class="absolute right-4 top-4 text-white" :title="t('common.close')" @click="closeDetails">
           <Icon name="ph:x" size="1.5em" />
         </button>
 
@@ -373,22 +374,22 @@ onUnmounted(() => {
           v-if="hasPrevious"
           type="button"
           class="absolute left-4 text-white"
-          title="Previous photo"
+          :title="t('previousPhoto')"
           @click="showPrevious"
         >
           <Icon name="ph:caret-left" size="2em" />
         </button>
 
         <div class="flex max-h-[85vh] max-w-[85vw] flex-col items-center gap-y-4">
-          <img :src="detailsPhoto.url" :alt="`Photo ${detailsPhoto.id}`" class="max-h-[75vh] max-w-full rounded object-contain">
+          <img :src="detailsPhoto.url" :alt="t('photoAlt', { id: detailsPhoto.id })" class="max-h-[75vh] max-w-full rounded object-contain">
           <div class="flex items-center gap-x-4">
             <button type="button" class="flex items-center gap-x-1 text-white" @click="onToggleLike(detailsPhoto)">
               <Icon :name="detailsPhoto.liked ? 'ph:heart-fill' : 'ph:heart'" :class="detailsPhoto.liked && 'text-red-500'" />
-              {{ detailsPhoto.liked ? 'Liked' : 'Like' }}
+              {{ detailsPhoto.liked ? t('liked') : t('like') }}
             </button>
             <button type="button" class="flex items-center gap-x-1 text-white" @click="downloadPhoto(detailsPhoto)">
               <Icon name="ph:download-simple" />
-              Download
+              {{ t('download') }}
             </button>
           </div>
         </div>
@@ -397,7 +398,7 @@ onUnmounted(() => {
           v-if="hasNext"
           type="button"
           class="absolute right-4 text-white"
-          title="Next photo"
+          :title="t('nextPhoto')"
           @click="showNext"
         >
           <Icon name="ph:caret-right" size="2em" />
@@ -406,3 +407,30 @@ onUnmounted(() => {
     </Transition>
   </div>
 </template>
+
+<i18n lang="json">
+{
+  "en": {
+    "welcome": "Welcome, {name}",
+    "uploadPhotos": "Upload photos",
+    "dropzoneHint": "Drag and drop photos here, or use the Upload photos button above.",
+    "selectedCount": "{count} selected | {count} selected",
+    "download": "Download",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "empty": "Your photo library is empty — upload your first photo to get started.",
+    "selectDay": "Select day",
+    "photoAlt": "Photo {id}",
+    "select": "Select",
+    "loading": "Loading…",
+    "deleteModalTitle": "Delete {count} photo | Delete {count} photos",
+    "deleteModalBody": "This action is irreversible. Are you sure?",
+    "deleting": "Deleting…",
+    "previousPhoto": "Previous photo",
+    "nextPhoto": "Next photo",
+    "liked": "Liked",
+    "like": "Like",
+    "photosDeleted": "Photos deleted."
+  }
+}
+</i18n>
