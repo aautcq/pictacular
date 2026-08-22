@@ -1,5 +1,5 @@
+import { issueEmailViaOutbox } from '../../utils/email-outbox'
 import { getPreferredLang } from '../../utils/i18n/lang'
-import { sendEmail } from '../../utils/mailer'
 import { prisma } from '../../utils/prisma'
 import { resendVerificationSchema } from '../../utils/validation/resend-verification'
 
@@ -26,10 +26,12 @@ export default defineEventHandler(async (event) => {
     const link = `${getRequestURL(event).origin}/verification/${user.verification_token}`
     const lang = getPreferredLang(event)
 
-    // Fire-and-forget, matching the register endpoint: email delivery is
-    // not on this request's critical path/response.
-    sendEmail({ email: user.email, link }, 'verification', lang)
-      .catch(error => console.error('Failed to send verification email', error))
+    // Routed through the durable outbox (issue #92/#95) instead of a bare
+    // sendEmail call: awaiting here only waits for the pending row write
+    // (so the send outcome is queryable as soon as this responds), not
+    // for the email send itself, which stays off this endpoint's critical
+    // path/response.
+    await issueEmailViaOutbox('verification', user.email, link, lang)
   }
 
   setResponseStatus(event, 204)
