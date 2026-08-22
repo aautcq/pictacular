@@ -184,5 +184,73 @@ describe('register + email verification', async () => {
         $fetch('/api/auth/verify', { method: 'POST', body: { email: 'not-an-email' } }),
       ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'auth.invalid_payload' })
     })
+
+    // Issue #95: resend-verification is routed through the same durable
+    // outbox as registration (issue #92) instead of its own bare
+    // sendEmail call, so it also produces a queryable outbox row. Poll for
+    // it to settle, same as registration's outbox coverage.
+    it('creates an outbox row for the resent verification email reflecting the send outcome', async () => {
+      const payload = validPayload()
+      await $fetch('/api/auth/users', { method: 'POST', body: payload })
+
+      // Wait for registration's own outbox row to settle first, so the
+      // assertions below unambiguously target the resend's row.
+      await vi.waitFor(async () => {
+        const row = await prisma.emailOutbox.findFirstOrThrow({
+          where: { recipient_email: payload.email, type: 'verification' },
+        })
+        expect(row.status).not.toBe('pending')
+      })
+
+      await fetch('/api/auth/verify', {
+        method: 'POST',
+        body: JSON.stringify({ email: payload.email }),
+        headers: { 'content-type': 'application/json' },
+      })
+
+      const outboxRow = await vi.waitFor(async () => {
+        const rows = await prisma.emailOutbox.findMany({
+          where: { recipient_email: payload.email, type: 'verification' },
+          orderBy: { created_at: 'asc' },
+        })
+        expect(rows).toHaveLength(2)
+        const [, resendRow] = rows
+        expect(resendRow.status).not.toBe('pending')
+        return resendRow
+      })
+
+      expect(outboxRow).toMatchObject({
+        recipient_email: payload.email,
+        type: 'verification',
+        link: expect.stringContaining('/verification/'),
+      })
+
+      // SENDGRID_API_KEY isn't a real key in this environment, so the
+      // inline send attempt is expected to fail rather than succeed.
+      expect(outboxRow.status).toBe('failed')
+      expect(outboxRow.attempts).toBe(1)
+      expect(outboxRow.next_attempt_at).toBeTruthy()
+      expect(outboxRow.next_attempt_at!.getTime()).toBeGreaterThan(Date.now())
+      expect(outboxRow.last_error).toBeTruthy()
+    })
+
+    it('does not create an outbox row when resending for an already-verified account', async () => {
+      const payload = validPayload()
+      await $fetch('/api/auth/users', { method: 'POST', body: payload })
+      const user = await prisma.user.findUniqueOrThrow({ where: { email: payload.email } })
+      await $fetch(`/api/auth/verify/${user.verification_token}`)
+
+      await fetch('/api/auth/verify', {
+        method: 'POST',
+        body: JSON.stringify({ email: payload.email }),
+        headers: { 'content-type': 'application/json' },
+      })
+
+      const rows = await prisma.emailOutbox.findMany({
+        where: { recipient_email: payload.email, type: 'verification' },
+      })
+      // Only registration's own outbox row exists; the resend was a no-op.
+      expect(rows).toHaveLength(1)
+    })
   })
 })
