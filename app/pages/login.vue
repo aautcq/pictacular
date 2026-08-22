@@ -5,6 +5,7 @@ const { login, loginWithBiometrics } = useCurrentUser()
 const { hasStoredCredential, isSupported } = useBiometrics()
 const { addError, addSuccess } = useAlerts()
 const { translateError } = useErrorMessage()
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 
@@ -31,7 +32,7 @@ async function submit() {
   loading.value = true
   try {
     await login(email.value, password.value)
-    addSuccess('Welcome back!')
+    addSuccess(t('welcomeBack'))
     await redirectAfterSignIn()
   }
   catch (error) {
@@ -54,7 +55,7 @@ async function signInWithBiometrics({ silent = false } = {}) {
   biometricLoading.value = true
   try {
     await loginWithBiometrics()
-    addSuccess('Welcome back!')
+    addSuccess(t('welcomeBack'))
     await redirectAfterSignIn()
   }
   catch (error) {
@@ -75,16 +76,16 @@ onMounted(() => {
 <template>
   <AuthCard>
     <template #title>
-      Sign in
+      {{ t('title') }}
     </template>
 
     <form class="flex flex-col gap-y-4" @submit.prevent="submit">
-      <AppFormField v-model="email" label="Email" type="email" required autocomplete="email" />
-      <AppFormField v-model="password" label="Password" type="password" required autocomplete="current-password" />
+      <AppFormField v-model="email" :label="t('emailLabel')" type="email" required autocomplete="email" />
+      <AppFormField v-model="password" :label="t('passwordLabel')" type="password" required autocomplete="current-password" />
 
       <div class="flex justify-end">
         <NuxtLink to="/forgot-password" class="text-sm underline">
-          Forgot my password
+          {{ t('forgotPassword') }}
         </NuxtLink>
       </div>
 
@@ -93,7 +94,7 @@ onMounted(() => {
         :disabled="anyLoading"
         class="mt-2 h-10 rounded bg-green-500 px-4 font-medium text-white hover:bg-green-600 disabled:opacity-50"
       >
-        {{ loading ? 'Signing in…' : 'Sign in' }}
+        {{ loading ? t('signingIn') : t('common.nav.signIn') }}
       </button>
 
       <button
@@ -103,19 +104,36 @@ onMounted(() => {
         class="h-10 rounded border border-slate-300 px-4 font-medium hover:bg-slate-100 disabled:opacity-50 dark:border-slate-600 dark:hover:bg-slate-700"
         @click="signInWithBiometrics()"
       >
-        {{ biometricLoading ? 'Signing in…' : 'Sign in with biometrics' }}
+        {{ biometricLoading ? t('signingIn') : t('signInWithBiometrics') }}
       </button>
 
       <p class="text-center text-sm">
-        No account yet? <NuxtLink to="/register" class="underline">
-          Sign up
+        {{ t('noAccountYet') }} <NuxtLink to="/register" class="underline">
+          {{ t('signUp') }}
         </NuxtLink>
       </p>
       <p class="text-center text-sm">
         <NuxtLink to="/resend-verification" class="underline">
-          Resend verification email
+          {{ t('resendVerificationEmail') }}
         </NuxtLink>
       </p>
     </form>
   </AuthCard>
 </template>
+
+<i18n lang="json">
+{
+  "en": {
+    "title": "Sign in",
+    "emailLabel": "Email",
+    "passwordLabel": "Password",
+    "forgotPassword": "Forgot my password",
+    "signingIn": "Signing in…",
+    "signInWithBiometrics": "Sign in with biometrics",
+    "noAccountYet": "No account yet?",
+    "signUp": "Sign up",
+    "resendVerificationEmail": "Resend verification email",
+    "welcomeBack": "Welcome back!"
+  }
+}
+</i18n>
