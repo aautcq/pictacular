@@ -7,6 +7,7 @@ const { addError, addSuccess } = useAlerts()
 const { translateError } = useErrorMessage()
 const { open: openDeleteConfirm, close: closeDeleteConfirm } = useModal('delete-account')
 const router = useRouter()
+const { t } = useI18n()
 
 const fileInput = ref<HTMLInputElement | null>(null)
 const deleting = ref(false)
@@ -24,7 +25,7 @@ function onAvatarSelected(event: Event) {
     const base64 = (reader.result as string).replace(/^data:.+;base64,/, '')
     try {
       await uploadAvatar({ filename: file.name, mime_type: file.type, base64 })
-      addSuccess('Avatar updated.')
+      addSuccess(t('avatarUpdated'))
     }
     catch (error) {
       addError(translateError(error))
@@ -37,7 +38,7 @@ async function registerBiometrics() {
   registeringBiometrics.value = true
   try {
     await registerCredential()
-    addSuccess('Biometric credential registered.')
+    addSuccess(t('biometricRegistered'))
   }
   catch (error) {
     addError(translateError(error))
@@ -69,10 +70,10 @@ async function confirmDelete() {
       <button
         type="button"
         class="relative h-20 w-20 flex-none overflow-hidden rounded-full bg-slate-300 dark:bg-slate-600"
-        title="Change avatar"
+        :title="t('changeAvatar')"
         @click="fileInput?.click()"
       >
-        <img v-if="user?.avatar_url" :src="user.avatar_url" alt="Your avatar" class="h-full w-full object-cover">
+        <img v-if="user?.avatar_url" :src="user.avatar_url" :alt="t('avatarAlt')" class="h-full w-full object-cover">
         <span v-else class="flex h-full w-full items-center justify-center text-2xl font-semibold uppercase text-slate-600 dark:text-slate-200">
           {{ initials }}
         </span>
@@ -97,30 +98,30 @@ async function confirmDelete() {
         class="h-10 rounded border border-slate-300 px-4 font-medium hover:bg-slate-100 disabled:opacity-50 dark:border-slate-600 dark:hover:bg-slate-700"
         @click="registerBiometrics"
       >
-        {{ registeringBiometrics ? 'Registering…' : (hasStoredCredential ? 'Re-register a biometric credential' : 'Register a biometric credential') }}
+        {{ registeringBiometrics ? t('registering') : (hasStoredCredential ? t('reRegisterBiometric') : t('registerBiometric')) }}
       </button>
       <button
         type="button"
         class="h-10 rounded bg-red-500 px-4 font-medium text-white hover:bg-red-600"
         @click="openDeleteConfirm"
       >
-        Delete my account
+        {{ t('deleteAccount') }}
       </button>
     </div>
 
     <AppModal name="delete-account">
       <div class="flex flex-col gap-y-6">
         <h2 class="text-lg font-semibold">
-          Delete your account
+          {{ t('deleteModalTitle') }}
         </h2>
-        <p>This action is irreversible. Are you sure you want to permanently delete your account?</p>
+        <p>{{ t('deleteModalBody') }}</p>
         <div class="flex justify-end gap-3">
           <button
             type="button"
             class="h-10 rounded bg-slate-200 px-4 font-medium hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600"
             @click="closeDeleteConfirm"
           >
-            Cancel
+            {{ t('cancel') }}
           </button>
           <button
             type="button"
@@ -128,10 +129,30 @@ async function confirmDelete() {
             class="h-10 rounded bg-red-500 px-4 font-medium text-white hover:bg-red-600 disabled:opacity-50"
             @click="confirmDelete"
           >
-            {{ deleting ? 'Deleting…' : 'Delete' }}
+            {{ deleting ? t('deleting') : t('deleteButton') }}
           </button>
         </div>
       </div>
     </AppModal>
   </div>
 </template>
+
+<i18n lang="json">
+{
+  "en": {
+    "changeAvatar": "Change avatar",
+    "avatarAlt": "Your avatar",
+    "registering": "Registering…",
+    "reRegisterBiometric": "Re-register a biometric credential",
+    "registerBiometric": "Register a biometric credential",
+    "deleteAccount": "Delete my account",
+    "avatarUpdated": "Avatar updated.",
+    "biometricRegistered": "Biometric credential registered.",
+    "deleteModalTitle": "Delete your account",
+    "deleteModalBody": "This action is irreversible. Are you sure you want to permanently delete your account?",
+    "cancel": "Cancel",
+    "deleting": "Deleting…",
+    "deleteButton": "Delete"
+  }
+}
+</i18n>
