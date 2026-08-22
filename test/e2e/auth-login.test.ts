@@ -1,5 +1,5 @@
 import { $fetch, fetch, setup } from '@nuxt/test-utils/e2e'
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it, vi } from 'vitest'
 import { accessTokenCookieName, refreshTokenCookieName } from '../../server/utils/cookies'
 import { encodeAwsCredentials } from '../../server/utils/jwt'
 import { prisma } from '../../server/utils/prisma'
@@ -47,6 +47,7 @@ describe('login + logout + session lifecycle + lockout', async () => {
   }
 
   afterAll(async () => {
+    await prisma.emailOutbox.deleteMany({ where: { recipient_email: { startsWith: emailPrefix } } })
     await prisma.user.deleteMany({ where: { email: { startsWith: emailPrefix } } })
   })
 
@@ -78,6 +79,22 @@ describe('login + logout + session lifecycle + lockout', async () => {
       orderBy: { created_at: 'desc' },
     })
     expect(resetToken).toBeTruthy()
+
+    // Issue #94: the lockout's password-reset email is routed through the
+    // durable outbox instead of a bare sendEmail call, so poll for the
+    // pending row to settle rather than asserting immediately.
+    const outboxRow = await vi.waitFor(async () => {
+      const row = await prisma.emailOutbox.findFirstOrThrow({
+        where: { recipient_email: email, type: 'password-reset' },
+      })
+      expect(row.status).not.toBe('pending')
+      return row
+    })
+    expect(outboxRow).toMatchObject({
+      recipient_email: email,
+      type: 'password-reset',
+      link: expect.stringContaining('/reset-password/'),
+    })
 
     // Locked out: even the correct password is now rejected.
     await expect(
