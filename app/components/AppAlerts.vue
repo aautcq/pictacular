@@ -1,5 +1,6 @@
 <script setup lang="ts">
 const { alerts, removeAlert } = useAlerts()
+const { t } = useI18n()
 </script>
 
 <template>
@@ -18,7 +19,7 @@ const { alerts, removeAlert } = useAlerts()
         <div class="flex-auto truncate">
           {{ alert.message }}
         </div>
-        <button type="button" title="Close" class="flex-none" @click="removeAlert(alert.id)">
+        <button type="button" :title="t('common.close')" class="flex-none" @click="removeAlert(alert.id)">
           <Icon name="ph:x" />
         </button>
       </li>

@@ -3,6 +3,7 @@ const colorMode = useColorMode()
 const isDark = computed(() => colorMode.value === 'dark')
 const { isAuthenticated, fullName, logout } = useCurrentUser()
 const router = useRouter()
+const { t } = useI18n()
 
 function toggle() {
   colorMode.preference = isDark.value ? 'light' : 'dark'
@@ -25,7 +26,7 @@ async function handleLogout() {
         <button
           type="button"
           class="rounded px-2 py-1 text-sm hover:bg-slate-300 dark:hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600"
-          :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
+          :aria-label="isDark ? t('toggleToLight') : t('toggleToDark')"
           @click="toggle"
         >
           <Icon :name="isDark ? 'ph:sun' : 'ph:moon'" />
@@ -36,7 +37,7 @@ async function handleLogout() {
             to="/albums"
             class="rounded px-2 py-1 text-sm hover:bg-slate-300 dark:hover:bg-slate-700"
           >
-            Albums
+            {{ t('common.nav.albums') }}
           </NuxtLink>
           <NuxtLink
             to="/profile"
@@ -49,7 +50,7 @@ async function handleLogout() {
             class="rounded px-2 py-1 text-sm hover:bg-slate-300 dark:hover:bg-slate-700"
             @click="handleLogout"
           >
-            Log out
+            {{ t('common.nav.logOut') }}
           </button>
         </template>
         <NuxtLink
@@ -57,9 +58,18 @@ async function handleLogout() {
           to="/login"
           class="rounded px-2 py-1 text-sm hover:bg-slate-300 dark:hover:bg-slate-700"
         >
-          Sign in
+          {{ t('common.nav.signIn') }}
         </NuxtLink>
       </div>
     </nav>
   </header>
 </template>
+
+<i18n lang="json">
+{
+  "en": {
+    "toggleToLight": "Switch to light mode",
+    "toggleToDark": "Switch to dark mode"
+  }
+}
+</i18n>
