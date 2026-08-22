@@ -1,5 +1,5 @@
 import { $fetch, fetch, setup } from '@nuxt/test-utils/e2e'
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it, vi } from 'vitest'
 import { prisma } from '../../server/utils/prisma'
 
 // Black-box HTTP tests for register + email verification (issue #29):
@@ -28,6 +28,7 @@ describe('register + email verification', async () => {
   }
 
   afterAll(async () => {
+    await prisma.emailOutbox.deleteMany({ where: { recipient_email: { startsWith: emailPrefix } } })
     await prisma.user.deleteMany({ where: { email: { startsWith: emailPrefix } } })
   })
 
@@ -43,6 +44,39 @@ describe('register + email verification', async () => {
     expect(user).toMatchObject({ email: payload.email, is_verified: false })
     expect(user?.password).not.toBe(payload.password)
     expect(user?.verification_token).toBeTruthy()
+  })
+
+  // Issue #92: the verification email is routed through the durable
+  // outbox instead of a bare sendEmail call. The pending row is written
+  // before the response, but the send attempt (and the row's final
+  // status) resolves asynchronously afterwards, so poll for it to settle
+  // rather than asserting immediately.
+  it('creates an outbox row for the verification email reflecting the send outcome', async () => {
+    const payload = validPayload()
+
+    await $fetch('/api/auth/users', { method: 'POST', body: payload })
+
+    const outboxRow = await vi.waitFor(async () => {
+      const row = await prisma.emailOutbox.findFirstOrThrow({
+        where: { recipient_email: payload.email, type: 'verification' },
+      })
+      expect(row.status).not.toBe('pending')
+      return row
+    })
+
+    expect(outboxRow).toMatchObject({
+      recipient_email: payload.email,
+      type: 'verification',
+      link: expect.stringContaining('/verification/'),
+    })
+
+    // SENDGRID_API_KEY isn't a real key in this environment, so the inline
+    // send attempt is expected to fail rather than succeed.
+    expect(outboxRow.status).toBe('failed')
+    expect(outboxRow.attempts).toBe(1)
+    expect(outboxRow.next_attempt_at).toBeTruthy()
+    expect(outboxRow.next_attempt_at!.getTime()).toBeGreaterThan(Date.now())
+    expect(outboxRow.last_error).toBeTruthy()
   })
 
   it('rejects registering with a taken email with auth.email_taken', async () => {
