@@ -10,6 +10,7 @@ const { fetchInvitation } = useInvitations()
 const { register, resendVerification } = useCurrentUser()
 const { addError, addSuccess } = useAlerts()
 const { translateError } = useErrorMessage()
+const { t } = useI18n()
 
 const status = ref<'loading' | 'ready' | 'error'>('loading')
 const invitation = ref<InvitationAlbum | null>(null)
@@ -67,7 +68,7 @@ async function resend() {
   try {
     await resendVerification(invitation.value.email)
     resent.value = true
-    addSuccess('Verification email resent.')
+    addSuccess(t('verificationResent'))
   }
   catch (error) {
     addError(translateError(error))
@@ -83,42 +84,51 @@ onMounted(loadInvitation)
 <template>
   <AuthCard>
     <template #title>
-      Album invitation
+      {{ t('title') }}
     </template>
 
     <p v-if="status === 'loading'" class="text-center text-sm text-slate-500 dark:text-slate-300">
-      Loading invitation…
+      {{ t('loadingInvitation') }}
     </p>
 
     <div v-else-if="status === 'error'" class="flex flex-col items-center gap-y-6 text-center">
-      <p>This invitation link is invalid or has expired.</p>
+      <p>{{ t('invalidLink') }}</p>
       <NuxtLink to="/login" class="text-sm underline">
-        Go to sign in
+        {{ t('goToSignIn') }}
       </NuxtLink>
     </div>
 
     <div v-else-if="submitted" class="flex flex-col items-center gap-y-6 text-center">
-      <p>
-        Check your inbox: we've sent a verification link to <strong>{{ invitation!.email }}</strong>.
-        Once you verify your account, you'll automatically get access to
-        <strong>{{ invitation!.title }}</strong>.
-      </p>
+      <i18n-t keypath="checkInboxNew" tag="p">
+        <template #email>
+          <strong>{{ invitation!.email }}</strong>
+        </template>
+        <template #title>
+          <strong>{{ invitation!.title }}</strong>
+        </template>
+      </i18n-t>
       <NuxtLink to="/resend-verification" class="text-sm underline">
-        Didn't receive it? Resend the verification email
+        {{ t('resendDidntReceive') }}
       </NuxtLink>
     </div>
 
     <div v-else-if="invitation!.has_pending_account" class="flex flex-col items-center gap-y-6 text-center">
-      <p v-if="!resent">
-        You've already started signing up with <strong>{{ invitation!.email }}</strong>.
-        Resend your verification email to finish and get access to
-        <strong>{{ invitation!.title }}</strong>.
-      </p>
-      <p v-else>
-        Check your inbox: we've resent a verification link to <strong>{{ invitation!.email }}</strong>.
-        Once you verify your account, you'll automatically get access to
-        <strong>{{ invitation!.title }}</strong>.
-      </p>
+      <i18n-t v-if="!resent" keypath="alreadyStarted" tag="p">
+        <template #email>
+          <strong>{{ invitation!.email }}</strong>
+        </template>
+        <template #title>
+          <strong>{{ invitation!.title }}</strong>
+        </template>
+      </i18n-t>
+      <i18n-t v-else keypath="checkInboxResent" tag="p">
+        <template #email>
+          <strong>{{ invitation!.email }}</strong>
+        </template>
+        <template #title>
+          <strong>{{ invitation!.title }}</strong>
+        </template>
+      </i18n-t>
       <button
         v-if="!resent"
         type="button"
@@ -126,38 +136,71 @@ onMounted(loadInvitation)
         class="h-10 rounded bg-green-500 px-4 font-medium text-white hover:bg-green-600 disabled:opacity-50"
         @click="resend"
       >
-        {{ resending ? 'Resending…' : 'Resend verification email' }}
+        {{ resending ? t('resending') : t('resendButton') }}
       </button>
       <NuxtLink to="/login" class="text-sm underline">
-        Already verified? Sign in
+        {{ t('alreadyVerifiedSignIn') }}
       </NuxtLink>
     </div>
 
     <form v-else class="flex flex-col gap-y-4" @submit.prevent="submit">
-      <p class="text-center text-sm text-slate-600 dark:text-slate-300">
-        <strong>{{ invitation!.admin.first_name }} {{ invitation!.admin.last_name }}</strong>
-        invited you to collaborate on <strong>{{ invitation!.title }}</strong>. Sign up to accept.
-      </p>
+      <i18n-t keypath="invitedBy" tag="p" class="text-center text-sm text-slate-600 dark:text-slate-300">
+        <template #name>
+          <strong>{{ invitation!.admin.first_name }} {{ invitation!.admin.last_name }}</strong>
+        </template>
+        <template #title>
+          <strong>{{ invitation!.title }}</strong>
+        </template>
+      </i18n-t>
 
-      <AppFormField :model-value="invitation!.email" label="Email" type="email" disabled autocomplete="email" />
-      <AppFormField v-model="form.first_name" label="First name" required autocomplete="given-name" />
-      <AppFormField v-model="form.last_name" label="Last name" required autocomplete="family-name" />
-      <AppFormField v-model="form.password" label="Password" type="password" required autocomplete="new-password" />
-      <AppFormField v-model="form.password_confirmation" label="Confirm password" type="password" required autocomplete="new-password" />
+      <AppFormField :model-value="invitation!.email" :label="t('emailLabel')" type="email" disabled autocomplete="email" />
+      <AppFormField v-model="form.first_name" :label="t('firstNameLabel')" required autocomplete="given-name" />
+      <AppFormField v-model="form.last_name" :label="t('lastNameLabel')" required autocomplete="family-name" />
+      <AppFormField v-model="form.password" :label="t('passwordLabel')" type="password" required autocomplete="new-password" />
+      <AppFormField v-model="form.password_confirmation" :label="t('confirmPasswordLabel')" type="password" required autocomplete="new-password" />
 
       <button
         type="submit"
         :disabled="loading"
         class="mt-2 h-10 rounded bg-green-500 px-4 font-medium text-white hover:bg-green-600 disabled:opacity-50"
       >
-        {{ loading ? 'Signing up…' : 'Sign up and join album' }}
+        {{ loading ? t('signingUp') : t('submit') }}
       </button>
 
       <p class="text-center text-sm">
-        Already have an account? <NuxtLink to="/login" class="underline">
-          Sign in
+        {{ t('alreadyHaveAccount') }} <NuxtLink to="/login" class="underline">
+          {{ t('signIn') }}
         </NuxtLink>
       </p>
     </form>
   </AuthCard>
 </template>
+
+<i18n lang="json">
+{
+  "en": {
+    "title": "Album invitation",
+    "loadingInvitation": "Loading invitation…",
+    "invalidLink": "This invitation link is invalid or has expired.",
+    "goToSignIn": "Go to sign in",
+    "checkInboxNew": "Check your inbox: we've sent a verification link to {email}. Once you verify your account, you'll automatically get access to {title}.",
+    "resendDidntReceive": "Didn't receive it? Resend the verification email",
+    "alreadyStarted": "You've already started signing up with {email}. Resend your verification email to finish and get access to {title}.",
+    "checkInboxResent": "Check your inbox: we've resent a verification link to {email}. Once you verify your account, you'll automatically get access to {title}.",
+    "resending": "Resending…",
+    "resendButton": "Resend verification email",
+    "alreadyVerifiedSignIn": "Already verified? Sign in",
+    "invitedBy": "{name} invited you to collaborate on {title}. Sign up to accept.",
+    "emailLabel": "Email",
+    "firstNameLabel": "First name",
+    "lastNameLabel": "Last name",
+    "passwordLabel": "Password",
+    "confirmPasswordLabel": "Confirm password",
+    "signingUp": "Signing up…",
+    "submit": "Sign up and join album",
+    "alreadyHaveAccount": "Already have an account?",
+    "signIn": "Sign in",
+    "verificationResent": "Verification email resent."
+  }
+}
+</i18n>

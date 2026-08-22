@@ -6,6 +6,7 @@ definePageMeta({ middleware: ['auth'] })
 const { albums, hasMore, loading, fetchNextPage, searchAlbums } = useAlbums()
 const { addError } = useAlerts()
 const { translateError } = useErrorMessage()
+const { t } = useI18n()
 
 const sentinel = ref<HTMLElement | null>(null)
 const query = ref('')
@@ -66,7 +67,7 @@ onUnmounted(() => {
   <div class="mx-auto flex max-w-5xl flex-col gap-y-8 py-10">
     <div class="flex items-center justify-between">
       <h1 class="text-xl font-semibold">
-        Albums
+        {{ t('common.nav.albums') }}
       </h1>
 
       <NuxtLink
@@ -74,26 +75,26 @@ onUnmounted(() => {
         class="flex h-10 items-center gap-x-2 rounded bg-green-500 px-4 font-medium text-white hover:bg-green-600"
       >
         <Icon name="ph:plus" size="1.1em" />
-        New album
+        {{ t('newAlbum') }}
       </NuxtLink>
     </div>
 
     <label class="flex w-full flex-col gap-y-1">
-      <span class="sr-only">Search albums</span>
+      <span class="sr-only">{{ t('searchLabel') }}</span>
       <input
         v-model="query"
         type="search"
-        placeholder="Search albums…"
+        :placeholder="t('searchPlaceholder')"
         class="h-10 w-full rounded border-none bg-white px-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 dark:bg-slate-700"
       >
     </label>
 
     <div v-if="!displayedAlbums.length && !loading && !searching" class="py-20 text-center text-slate-500 dark:text-slate-300">
       <p v-if="searchResults">
-        No albums match your search.
+        {{ t('noResults') }}
       </p>
       <p v-else>
-        You don't have any albums yet — create your first one to get started.
+        {{ t('empty') }}
       </p>
     </div>
 
@@ -105,7 +106,7 @@ onUnmounted(() => {
         class="flex flex-col gap-y-2 overflow-hidden rounded"
       >
         <div class="aspect-square overflow-hidden rounded bg-slate-200 dark:bg-slate-700">
-          <img v-if="album.cover" :src="album.cover" :alt="album.title ?? 'Album cover'" class="h-full w-full object-cover">
+          <img v-if="album.cover" :src="album.cover" :alt="album.title ?? t('albumCoverAlt')" class="h-full w-full object-cover">
           <div v-else class="flex h-full w-full items-center justify-center text-slate-400">
             <Icon name="ph:image" size="2em" />
           </div>
@@ -119,7 +120,21 @@ onUnmounted(() => {
 
     <div ref="sentinel" class="h-4" />
     <p v-if="loading" class="text-center text-sm text-slate-500 dark:text-slate-300">
-      Loading…
+      {{ t('loading') }}
     </p>
   </div>
 </template>
+
+<i18n lang="json">
+{
+  "en": {
+    "newAlbum": "New album",
+    "searchLabel": "Search albums",
+    "searchPlaceholder": "Search albums…",
+    "noResults": "No albums match your search.",
+    "empty": "You don't have any albums yet — create your first one to get started.",
+    "albumCoverAlt": "Album cover",
+    "loading": "Loading…"
+  }
+}
+</i18n>

@@ -4,6 +4,7 @@ definePageMeta({ middleware: ['auth'] })
 const { createAlbum } = useAlbums()
 const { addError } = useAlerts()
 const { translateError } = useErrorMessage()
+const { t } = useI18n()
 const router = useRouter()
 
 const title = ref('')
@@ -28,14 +29,14 @@ async function submit() {
 <template>
   <div class="mx-auto flex max-w-lg flex-col gap-y-6 py-10">
     <h1 class="text-xl font-semibold">
-      New album
+      {{ t('title') }}
     </h1>
 
     <form class="flex flex-col gap-y-4" @submit.prevent="submit">
-      <AppFormField v-model="title" label="Title" required autocomplete="off" />
+      <AppFormField v-model="title" :label="t('titleLabel')" required autocomplete="off" />
 
       <label class="flex w-full flex-col gap-y-1">
-        <span class="text-sm text-slate-600 dark:text-slate-300">Description</span>
+        <span class="text-sm text-slate-600 dark:text-slate-300">{{ t('descriptionLabel') }}</span>
         <textarea
           v-model="description"
           rows="3"
@@ -48,8 +49,20 @@ async function submit() {
         :disabled="loading"
         class="mt-2 h-10 rounded bg-green-500 px-4 font-medium text-white hover:bg-green-600 disabled:opacity-50"
       >
-        {{ loading ? 'Creating…' : 'Create album' }}
+        {{ loading ? t('creating') : t('submit') }}
       </button>
     </form>
   </div>
 </template>
+
+<i18n lang="json">
+{
+  "en": {
+    "title": "New album",
+    "titleLabel": "Title",
+    "descriptionLabel": "Description",
+    "creating": "Creating…",
+    "submit": "Create album"
+  }
+}
+</i18n>
