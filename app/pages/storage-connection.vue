@@ -5,6 +5,7 @@ const { connectStorage, checkBucket } = useCurrentUser()
 const { importing, progress, result, importPhotos } = useBucketImport()
 const { addError } = useAlerts()
 const { translateError } = useErrorMessage()
+const { t } = useI18n()
 const router = useRouter()
 
 const mode = ref<'create' | 'connect' | null>(null)
@@ -59,24 +60,33 @@ async function submit() {
 function continueToApp() {
   router.push('/')
 }
+
+const importResultText = computed(() => {
+  if (!result.value)
+    return ''
+
+  return t('importResult', {
+    photoCount: t('photoCount', result.value.imported),
+    albumCount: t('albumCount', result.value.albums),
+  })
+})
 </script>
 
 <template>
   <AuthCard>
     <template #title>
-      Connect your storage
+      {{ t('title') }}
     </template>
 
     <div v-if="connected" class="flex flex-col items-center gap-y-6 text-center">
       <template v-if="hasPhotos && !importSkipped && !result">
         <p>
-          It looks like your bucket already has some image files in it. We can import them into
-          Pictacular, auto-creating Albums from your folder structure.
+          {{ t('importPrompt') }}
         </p>
 
         <div v-if="importing" class="flex flex-col items-center gap-y-2">
           <p>
-            Importing your photos… {{ progress?.imported ?? 0 }}<template v-if="progress?.total">
+            {{ t('importingProgress') }} {{ progress?.imported ?? 0 }}<template v-if="progress?.total">
               / {{ progress.total }}
             </template>
           </p>
@@ -87,24 +97,23 @@ function continueToApp() {
             class="h-10 rounded bg-green-500 px-4 font-medium text-white hover:bg-green-600"
             @click="startImport"
           >
-            Import my existing photos
+            {{ t('importButton') }}
           </button>
           <button
             type="button"
             class="h-10 rounded bg-slate-200 px-4 font-medium dark:bg-slate-700"
             @click="skipImport"
           >
-            Skip for now
+            {{ t('skipImport') }}
           </button>
         </div>
       </template>
 
       <p v-else-if="result">
-        Imported {{ result.imported }} photo{{ result.imported === 1 ? '' : 's' }} into
-        {{ result.albums }} album{{ result.albums === 1 ? '' : 's' }}.
+        {{ importResultText }}
       </p>
       <p v-else>
-        Your storage connection is ready.
+        {{ t('connectionReady') }}
       </p>
 
       <button
@@ -113,16 +122,14 @@ function continueToApp() {
         class="h-10 rounded bg-green-500 px-4 font-medium text-white hover:bg-green-600"
         @click="continueToApp"
       >
-        Continue
+        {{ t('continue') }}
       </button>
     </div>
 
     <div v-else class="flex flex-col gap-y-6">
       <div class="flex flex-col gap-y-3 text-sm text-slate-600 dark:text-slate-300">
         <p>
-          Pictacular stores your photos in your own AWS S3 bucket. Provide an AWS access key +
-          secret key, then either create a new bucket for Pictacular or connect one you
-          already have.
+          {{ t('description') }}
         </p>
       </div>
 
@@ -133,7 +140,7 @@ function continueToApp() {
           :class="mode === 'create' ? 'bg-green-500 text-white' : 'bg-slate-200 dark:bg-slate-700'"
           @click="selectMode('create')"
         >
-          Create a new bucket for me
+          {{ t('createBucket') }}
         </button>
         <button
           type="button"
@@ -141,23 +148,48 @@ function continueToApp() {
           :class="mode === 'connect' ? 'bg-green-500 text-white' : 'bg-slate-200 dark:bg-slate-700'"
           @click="selectMode('connect')"
         >
-          I already have a bucket
+          {{ t('connectBucket') }}
         </button>
       </div>
 
       <form v-if="mode" class="flex flex-col gap-y-4" @submit.prevent="submit">
-        <AppFormField v-if="mode === 'connect'" v-model="bucket" label="Bucket name" required autocomplete="off" />
-        <AppFormField v-model="access_key_id" label="Access key ID" type="password" required autocomplete="off" />
-        <AppFormField v-model="secret_access_key" label="Secret access key" type="password" required autocomplete="off" />
+        <AppFormField v-if="mode === 'connect'" v-model="bucket" :label="t('bucketNameLabel')" required autocomplete="off" />
+        <AppFormField v-model="access_key_id" :label="t('accessKeyLabel')" type="password" required autocomplete="off" />
+        <AppFormField v-model="secret_access_key" :label="t('secretKeyLabel')" type="password" required autocomplete="off" />
 
         <button
           type="submit"
           :disabled="loading"
           class="mt-2 h-10 rounded bg-green-500 px-4 font-medium text-white hover:bg-green-600 disabled:opacity-50"
         >
-          {{ loading ? 'Connecting…' : 'Connect' }}
+          {{ loading ? t('connecting') : t('connect') }}
         </button>
       </form>
     </div>
   </AuthCard>
 </template>
+
+<i18n lang="json">
+{
+  "en": {
+    "title": "Connect your storage",
+    "importPrompt": "It looks like your bucket already has some image files in it. We can import them into Pictacular, auto-creating Albums from your folder structure.",
+    "importingProgress": "Importing your photos…",
+    "importButton": "Import my existing photos",
+    "skipImport": "Skip for now",
+    "photoCount": "{count} photo | {count} photos",
+    "albumCount": "{count} album | {count} albums",
+    "importResult": "Imported {photoCount} into {albumCount}.",
+    "connectionReady": "Your storage connection is ready.",
+    "continue": "Continue",
+    "description": "Pictacular stores your photos in your own AWS S3 bucket. Provide an AWS access key + secret key, then either create a new bucket for Pictacular or connect one you already have.",
+    "createBucket": "Create a new bucket for me",
+    "connectBucket": "I already have a bucket",
+    "bucketNameLabel": "Bucket name",
+    "accessKeyLabel": "Access key ID",
+    "secretKeyLabel": "Secret access key",
+    "connecting": "Connecting…",
+    "connect": "Connect"
+  }
+}
+</i18n>
