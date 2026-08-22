@@ -1,5 +1,5 @@
 import { $fetch, fetch, setup } from '@nuxt/test-utils/e2e'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { prisma } from '../../server/utils/prisma'
 
 // Black-box HTTP tests for Album Collaborators + Invitations (issue #52):
@@ -76,6 +76,7 @@ describe('album collaborators + invitations', async () => {
   })
 
   afterAll(async () => {
+    await prisma.emailOutbox.deleteMany({ where: { recipient_email: { startsWith: emailPrefix } } })
     await prisma.invitation.deleteMany({ where: { email: { startsWith: emailPrefix } } })
     await prisma.album.deleteMany({ where: { admin_id: { in: [admin.id, existingUser.id, other.id] } } })
     await prisma.user.deleteMany({ where: { email: { startsWith: emailPrefix } } })
@@ -117,6 +118,22 @@ describe('album collaborators + invitations', async () => {
         where: { album_id_email: { album_id: album.id, email: invitedEmail } },
       })
       expect(invitation.token).toBeTruthy()
+
+      // Issue #96: the invitation email is routed through the durable
+      // outbox instead of a bare sendEmail call, so poll for the pending
+      // row to settle rather than asserting immediately.
+      const outboxRow = await vi.waitFor(async () => {
+        const row = await prisma.emailOutbox.findFirstOrThrow({
+          where: { recipient_email: invitedEmail, type: 'invitation' },
+        })
+        expect(row.status).not.toBe('pending')
+        return row
+      })
+      expect(outboxRow).toMatchObject({
+        recipient_email: invitedEmail,
+        type: 'invitation',
+        link: expect.stringContaining(`/invitations/${invitation.token}`),
+      })
     })
 
     it('resends rather than erroring when re-inviting an already-pending email', async () => {
@@ -141,6 +158,19 @@ describe('album collaborators + invitations', async () => {
       const invitations = await prisma.invitation.findMany({ where: { album_id: album.id, email: invitedEmail } })
       expect(invitations).toHaveLength(1)
       expect(invitations[0]!.token).toBe(first.token)
+
+      // Issue #96: each resend creates its own outbox row (the send is
+      // re-attempted with the same reused token/link), so there should be
+      // two settled rows for this email by now.
+      const outboxRows = await vi.waitFor(async () => {
+        const rows = await prisma.emailOutbox.findMany({
+          where: { recipient_email: invitedEmail, type: 'invitation' },
+        })
+        expect(rows).toHaveLength(2)
+        expect(rows.every(row => row.status !== 'pending')).toBe(true)
+        return rows
+      })
+      expect(outboxRows.every(row => row.link.includes(`/invitations/${first.token}`))).toBe(true)
     })
 
     it('rejects a non-admin member with 403', async () => {
