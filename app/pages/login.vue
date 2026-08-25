@@ -6,6 +6,7 @@ const { hasStoredCredential, isSupported } = useBiometrics()
 const toast = useToast()
 const { translateError } = useErrorMessage()
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
+const { t: tg } = useI18n({ useScope: 'global' })
 const route = useRoute()
 
 const email = shallowRef('')
@@ -116,7 +117,7 @@ if (isSupported && hasStoredCredential.value)
         :disabled="anyLoading"
         :loading="loading"
         block
-        :label="loading ? t('signingIn') : t('common.nav.signIn')"
+        :label="loading ? t('signingIn') : tg('common.nav.signIn')"
       />
 
       <UButton

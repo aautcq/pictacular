@@ -34,6 +34,7 @@
     "@aws-sdk/s3-request-presigner": "~3.1113.0",
     "@nuxt/fonts": "~0.14.0",
     "@nuxt/icon": "~2.5.0",
+    "@nuxt/image": "~2.1.0",
     "@nuxt/ui": "~4.11.0",
     "@nuxtjs/i18n": "~10.6.0",
     "@nuxtjs/seo": "~5.3.14",
@@ -88,6 +89,8 @@
     "esbuild@0.25.12": true,
     "prisma@7.9.1": true,
     "@prisma/engines@7.9.1": true,
-    "vue-demi@0.14.10": true
+    "vue-demi@0.14.10": true,
+    "fsevents@2.3.2": true,
+    "fsevents@2.3.3": true
   }
 }

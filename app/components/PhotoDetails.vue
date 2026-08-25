@@ -16,6 +16,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
+const { t: tg } = useI18n({ useScope: 'global' })
 
 const detailsRef = useTemplateRef('detailsRef')
 useFocusTrap(detailsRef, { immediate: true })
@@ -28,7 +29,7 @@ function onDetailsKeydown(event: KeyboardEvent) {
 }
 
 async function downloadPhoto(photo: Photo) {
-  await downloadFile(photo.url, photo.url.split('/').pop()?.split('?')[0] ?? `photo-${photo.id}`)
+  await downloadFile(photo.url, getPhotoFileName(photo))
 }
 </script>
 
@@ -43,7 +44,7 @@ async function downloadPhoto(photo: Photo) {
     <button
       type="button"
       class="absolute right-4 top-4 text-white"
-      :aria-label="t('common.close')"
+      :aria-label="tg('common.close')"
       @click="emit('close')"
     >
       <Icon name="ph:x" size="1.5em" />
@@ -60,7 +61,11 @@ async function downloadPhoto(photo: Photo) {
     </button>
 
     <div class="flex max-h-[85vh] max-w-[85vw] flex-col items-center gap-y-4">
-      <img :src="photo.url" :alt="t('photoAlt', { id: photo.id })" class="max-h-[75vh] max-w-full rounded object-contain">
+      <BaseImg
+        :src="photo.url"
+        :alt="t('photoAlt', { id: photo.id })"
+        class="max-h-[75vh] max-w-full rounded object-contain"
+      />
       <div class="flex items-center gap-x-4">
         <button type="button" class="flex items-center gap-x-1 text-white" @click="emit('toggleLike', photo)">
           <Icon :name="photo.liked ? 'ph:heart-fill' : 'ph:heart'" :class="photo.liked && 'text-red-500'" />

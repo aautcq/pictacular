@@ -5,7 +5,7 @@
 // (app/i18n/locales/en.json, see ADR 0002) rather than a hardcoded map, so
 // it flows through vue-i18n like every other rendered string.
 export function useErrorMessage() {
-  const { t, te } = useI18n()
+  const { t, te } = useI18n({ useScope: 'global' })
 
   function getErrorCode(error: unknown): string {
     if (error && typeof error === 'object') {

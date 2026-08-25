@@ -1,11 +1,6 @@
 <script setup lang="ts">
-const { isAuthenticated, fullName, logout } = useCurrentUser()
+const { isAuthenticated, fullName, user } = useCurrentUser()
 const { t } = useI18n({ useScope: 'global' })
-
-async function handleLogout() {
-  await logout()
-  await navigateTo('/login')
-}
 </script>
 
 <template>
@@ -15,8 +10,10 @@ async function handleLogout() {
         Pictacular
       </NuxtLink>
 
-      <div class="flex items-center gap-4">
+      <div class="flex items-center gap-x-2">
         <template v-if="isAuthenticated">
+          <slot name="actions" />
+
           <UTooltip :text="t('common.nav.albums')">
             <UButton
               to="/albums"
@@ -27,25 +24,21 @@ async function handleLogout() {
               :aria-label="t('common.nav.albums')"
             />
           </UTooltip>
+
           <UTooltip :text="fullName">
-            <UButton
+            <NuxtLink
+              v-slot="{ isActive }"
               to="/profile"
-              color="neutral"
-              active-color="success"
-              variant="soft"
               :aria-label="fullName"
-              icon="ph:user"
-            />
-          </UTooltip>
-          <UTooltip :text="t('common.nav.logOut')">
-            <UButton
-              type="button"
-              color="neutral"
-              variant="soft"
-              icon="ph:power"
-              :aria-label="t('common.nav.logOut')"
-              @click="handleLogout"
-            />
+              class="ml-5 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 dark:focus-visible:ring-neutral-600"
+            >
+              <UAvatar
+                :src="user?.avatar_url ?? undefined"
+                :alt="fullName"
+                size="md"
+                :color="isActive ? 'success' : 'neutral'"
+              />
+            </NuxtLink>
           </UTooltip>
         </template>
         <UTooltip v-else :text="t('common.nav.signIn')">
@@ -53,7 +46,7 @@ async function handleLogout() {
             to="/login"
             color="neutral"
             variant="soft"
-            icon="ph:power"
+            icon="ph:sign-in"
             :aria-label="t('common.nav.signIn')"
           />
         </UTooltip>

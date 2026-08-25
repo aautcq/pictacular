@@ -27,7 +27,7 @@
 
 .page-enter-active,
 .page-leave-active {
-  @apply transition-all;
+  @apply transition-all duration-100;
 }
 .page-enter-from,
 .page-leave-to {

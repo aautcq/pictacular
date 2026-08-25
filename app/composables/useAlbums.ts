@@ -68,7 +68,7 @@ export function useAlbums() {
 
   async function fetchNextPage() {
     if (loading.value || (loaded.value && nextCursor.value === null))
-      return
+      return null
 
     loading.value = true
     try {
@@ -78,6 +78,7 @@ export function useAlbums() {
       albums.value = [...albums.value, ...response.albums]
       nextCursor.value = response.next_cursor
       loaded.value = true
+      return albums.value
     }
     finally {
       loading.value = false

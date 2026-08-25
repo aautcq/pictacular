@@ -1,4 +1,3 @@
-// https://nuxt.com/docs/api/configuration/nuxt-config
 import tailwindcss from '@tailwindcss/vite'
 
 const appName = 'Pictacular'
@@ -9,6 +8,7 @@ export default defineNuxtConfig({
 
   modules: [
     '@nuxt/icon',
+    '@nuxt/image',
     '@vite-pwa/nuxt',
     '@nuxt/fonts',
     'nuxt-security',
@@ -142,8 +142,10 @@ export default defineNuxtConfig({
     },
   },
   icon: {
-    mode: 'css',
-    cssLayer: 'base',
+    clientBundle: {
+      scan: true,
+      sizeLimitKb: 256,
+    },
   },
   nitro: {
     experimental: {

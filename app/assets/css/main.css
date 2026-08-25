@@ -15,3 +15,7 @@
 .dark {
   --ui-bg: var(--ui-color-neutral-950);
 }
+
+body {
+  @apply relative;
+}

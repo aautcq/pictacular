@@ -8,9 +8,8 @@ await callOnce('fetch-current-user', () => fetchCurrentUser())
 
 <template>
   <UApp>
-    <AppHeader />
-    <main class="container relative mx-auto mt-20 max-w-5xl px-6">
+    <NuxtLayout>
       <NuxtPage />
-    </main>
+    </NuxtLayout>
   </UApp>
 </template>

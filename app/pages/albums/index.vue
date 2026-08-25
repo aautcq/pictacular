@@ -6,7 +6,8 @@ definePageMeta({ middleware: ['auth'] })
 const { albums, hasMore, loading, fetchNextPage, searchAlbums } = useAlbums()
 const toast = useToast()
 const { translateError } = useErrorMessage()
-const { t } = useI18n()
+const { t } = useI18n({ useScope: 'local', inheritLocale: true })
+const { t: tg } = useI18n({ useScope: 'global' })
 
 const sentinel = useTemplateRef<HTMLElement | null>('sentinel')
 const query = shallowRef('')
@@ -52,25 +53,19 @@ useIntersectionObserver(sentinel, ([entry]) => {
 
 <template>
   <div class="mx-auto flex max-w-5xl flex-col gap-y-8">
-    <div class="flex items-center justify-between">
-      <h1 class="text-xl font-semibold">
-        {{ t('common.nav.albums') }}
-      </h1>
-
-      <UButton
-        to="/albums/new"
-        icon="ph:plus"
-        :label="t('newAlbum')"
-      />
-    </div>
+    <h1 class="text-xl font-semibold">
+      {{ tg('common.nav.albums') }}
+    </h1>
 
     <label>
       <span class="sr-only">{{ t('searchLabel') }}</span>
       <UInput
         v-model="query"
         type="search"
+        variant="soft"
         autofocus
         :placeholder="t('searchPlaceholder')"
+        icon="ph:magnifying-glass"
         class="w-full"
       />
     </label>
@@ -86,18 +81,29 @@ useIntersectionObserver(sentinel, ([entry]) => {
 
     <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
       <NuxtLink
+        to="/albums/new"
+        class="flex flex-col gap-y-2 overflow-hidden rounded"
+      >
+        <div class="aspect-square overflow-hidden rounded bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+          <Icon name="ph:plus" size="2em" class="text-gray-400" />
+        </div>
+        <div class="flex flex-col">
+          <span class="truncate font-medium">{{ t('newAlbum') }}</span>
+        </div>
+      </NuxtLink>
+
+      <NuxtLink
         v-for="album in displayedAlbums"
         :key="album.id"
         :to="`/albums/${album.id}`"
         class="flex flex-col gap-y-2 overflow-hidden rounded"
       >
         <div class="aspect-square overflow-hidden rounded bg-gray-200 dark:bg-gray-700">
-          <img
+          <BaseImg
             v-if="album.cover"
             :src="album.cover"
             :alt="album.title ?? t('albumCoverAlt')"
-            class="h-full w-full object-cover"
-          >
+          />
           <div v-else class="flex h-full w-full items-center justify-center text-gray-400">
             <Icon name="ph:image" size="2em" />
           </div>
