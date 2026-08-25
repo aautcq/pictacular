@@ -1,6 +1,6 @@
-import { issuePasswordResetEmail } from '../../utils/issue-password-reset-email'
-import { prisma } from '../../utils/prisma'
-import { resetPasswordSchema } from '../../utils/validation/reset-password'
+import { issuePasswordResetEmail } from '#server/utils/issue-password-reset-email'
+import { prisma } from '#server/utils/prisma'
+import { resetPasswordSchema } from '#server/utils/validation/reset-password'
 
 // Replaces the former AuthController#resetPassword
 // (POST /auth/send_password_reset_email): always responds 204 whether or

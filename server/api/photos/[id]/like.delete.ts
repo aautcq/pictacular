@@ -1,6 +1,6 @@
-import { requirePhotoIdParam, requirePhotoStorageConnection } from '../../../utils/photo-guards'
-import { prisma } from '../../../utils/prisma'
-import { serializePhoto } from '../../../utils/serialize-photo'
+import { requirePhotoIdParam, requirePhotoStorageConnection } from '#server/utils/photo-guards'
+import { prisma } from '#server/utils/prisma'
+import { serializePhoto } from '#server/utils/serialize-photo'
 
 // Unlikes one of the authenticated User's own Photos (issue #50) — the
 // inverse of POST /api/photos/[id]/like.

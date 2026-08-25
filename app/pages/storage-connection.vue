@@ -1,21 +1,26 @@
 <script setup lang="ts">
 definePageMeta({ middleware: 'auth' })
 
-const { connectStorage, checkBucket } = useCurrentUser()
+const { connectStorage, checkBucket, user } = useCurrentUser()
 const { importing, progress, result, importPhotos } = useBucketImport()
-const { addError } = useAlerts()
+const toast = useToast()
 const { translateError } = useErrorMessage()
-const { t } = useI18n()
-const router = useRouter()
+const { t } = useI18n({ useScope: 'local', inheritLocale: true })
 
-const mode = ref<'create' | 'connect' | null>(null)
-const bucket = ref('')
-const access_key_id = ref('')
-const secret_access_key = ref('')
-const loading = ref(false)
-const hasPhotos = ref(false)
-const connected = ref(false)
-const importSkipped = ref(false)
+const mode = shallowRef<'create' | 'connect' | null>(null)
+const bucket = shallowRef('')
+const access_key_id = shallowRef('')
+const secret_access_key = shallowRef('')
+const loading = shallowRef(false)
+const connected = shallowRef(user.value?.has_aws_credentials ?? false)
+const importSkipped = shallowRef(false)
+
+const { data: hasPhotos } = useAsyncData(async () => {
+  if (connected.value && !importSkipped.value) {
+    return await checkBucket()
+  }
+  return false
+})
 
 function selectMode(value: 'create' | 'connect') {
   mode.value = value
@@ -26,7 +31,7 @@ async function startImport() {
     await importPhotos()
   }
   catch (error) {
-    addError(translateError(error))
+    toast.add({ title: translateError(error), color: 'error' })
   }
 }
 
@@ -50,15 +55,11 @@ async function submit() {
     hasPhotos.value = mode.value === 'connect' ? await checkBucket() : false
   }
   catch (error) {
-    addError(translateError(error))
+    toast.add({ title: translateError(error), color: 'error' })
   }
   finally {
     loading.value = false
   }
-}
-
-function continueToApp() {
-  router.push('/')
 }
 
 const importResultText = computed(() => {
@@ -84,28 +85,32 @@ const importResultText = computed(() => {
           {{ t('importPrompt') }}
         </p>
 
-        <div v-if="importing" class="flex flex-col items-center gap-y-2">
+        <div v-if="importing" class="flex flex-col items-center gap-y-4 w-full">
           <p>
-            {{ t('importingProgress') }} {{ progress?.imported ?? 0 }}<template v-if="progress?.total">
-              / {{ progress.total }}
-            </template>
+            {{ t('importingProgress') }}
           </p>
+          <UProgress
+            :model-value="progress?.imported ?? 0"
+            :max="progress?.total"
+          >
+            <template #status>
+              {{ progress?.imported ?? 0 }} / {{ progress?.total ?? 0 }}
+            </template>
+          </UProgress>
         </div>
         <div v-else class="flex justify-center gap-x-4">
-          <button
+          <UButton
             type="button"
-            class="h-10 rounded bg-green-500 px-4 font-medium text-white hover:bg-green-600"
+            :label="t('importButton')"
+            variant="soft"
             @click="startImport"
-          >
-            {{ t('importButton') }}
-          </button>
-          <button
+          />
+          <UButton
             type="button"
-            class="h-10 rounded bg-slate-200 px-4 font-medium dark:bg-slate-700"
+            :label="t('skipImport')"
+            variant="soft"
             @click="skipImport"
-          >
-            {{ t('skipImport') }}
-          </button>
+          />
         </div>
       </template>
 
@@ -116,55 +121,91 @@ const importResultText = computed(() => {
         {{ t('connectionReady') }}
       </p>
 
-      <button
+      <UButton
         v-if="!importing"
-        type="button"
-        class="h-10 rounded bg-green-500 px-4 font-medium text-white hover:bg-green-600"
-        @click="continueToApp"
-      >
-        {{ t('continue') }}
-      </button>
+        :label="t('continue')"
+        to="/"
+      />
     </div>
 
     <div v-else class="flex flex-col gap-y-6">
-      <div class="flex flex-col gap-y-3 text-sm text-slate-600 dark:text-slate-300">
+      <div class="flex flex-col gap-y-3 text-sm text-gray-600 dark:text-gray-300">
         <p>
           {{ t('description') }}
         </p>
       </div>
 
       <div class="flex justify-center gap-x-4">
-        <button
+        <UButton
           type="button"
-          class="h-10 rounded px-4 font-medium"
-          :class="mode === 'create' ? 'bg-green-500 text-white' : 'bg-slate-200 dark:bg-slate-700'"
+          :active="mode === 'create'"
+          variant="soft"
+          active-variant="solid"
+          color="neutral"
+          active-color="success"
+          :label="t('createBucket')"
           @click="selectMode('create')"
-        >
-          {{ t('createBucket') }}
-        </button>
-        <button
+        />
+        <UButton
           type="button"
-          class="h-10 rounded px-4 font-medium"
-          :class="mode === 'connect' ? 'bg-green-500 text-white' : 'bg-slate-200 dark:bg-slate-700'"
+          :active="mode === 'connect'"
+          variant="soft"
+          active-variant="solid"
+          color="neutral"
+          active-color="success"
+          :label="t('connectBucket')"
           @click="selectMode('connect')"
-        >
-          {{ t('connectBucket') }}
-        </button>
+        />
       </div>
 
-      <form v-if="mode" class="flex flex-col gap-y-4" @submit.prevent="submit">
-        <AppFormField v-if="mode === 'connect'" v-model="bucket" :label="t('bucketNameLabel')" required autocomplete="off" />
-        <AppFormField v-model="access_key_id" :label="t('accessKeyLabel')" type="password" required autocomplete="off" />
-        <AppFormField v-model="secret_access_key" :label="t('secretKeyLabel')" type="password" required autocomplete="off" />
+      <UForm
+        v-if="mode"
+        class="space-y-4"
+        :state="{ bucket, access_key_id, secret_access_key }"
+        novalidate
+        @submit.prevent="submit"
+      >
+        <UFormField v-if="mode === 'connect'" :label="t('bucketNameLabel')" name="bucket">
+          <UInput
+            v-model="bucket"
+            type="text"
+            autocomplete="off"
+            autofocus
+            required
+            :placeholder="t('bucketPlaceholder')"
+            class="w-full"
+          />
+        </UFormField>
 
-        <button
+        <UFormField :label="t('accessKeyLabel')" name="access_key_id">
+          <UInput
+            v-model="access_key_id"
+            type="password"
+            autocomplete="off"
+            required
+            :placeholder="t('accessKeyPlaceholder')"
+            class="w-full"
+          />
+        </UFormField>
+
+        <UFormField :label="t('secretKeyLabel')" name="secret_access_key">
+          <UInput
+            v-model="secret_access_key"
+            type="password"
+            autocomplete="off"
+            required
+            :placeholder="t('secretKeyPlaceholder')"
+            class="w-full"
+          />
+        </UFormField>
+
+        <UButton
           type="submit"
-          :disabled="loading"
-          class="mt-2 h-10 rounded bg-green-500 px-4 font-medium text-white hover:bg-green-600 disabled:opacity-50"
-        >
-          {{ loading ? t('connecting') : t('connect') }}
-        </button>
-      </form>
+          :loading="loading"
+          :label="loading ? t('connecting') : t('connect')"
+          block
+        />
+      </UForm>
     </div>
   </AuthCard>
 </template>
@@ -186,8 +227,11 @@ const importResultText = computed(() => {
     "createBucket": "Create a new bucket for me",
     "connectBucket": "I already have a bucket",
     "bucketNameLabel": "Bucket name",
+    "bucketPlaceholder": "Enter your bucket name",
     "accessKeyLabel": "Access key ID",
+    "accessKeyPlaceholder": "Enter your access key ID",
     "secretKeyLabel": "Secret access key",
+    "secretKeyPlaceholder": "Enter your secret access key",
     "connecting": "Connecting…",
     "connect": "Connect"
   }

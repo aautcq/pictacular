@@ -1,5 +1,5 @@
-import { prisma } from '../../utils/prisma'
-import { bucketHasImages } from '../../utils/storage'
+import { prisma } from '#server/utils/prisma'
+import { bucketHasImages } from '#server/utils/storage'
 
 // Reports whether the authenticated User's connected bucket already
 // contains images (issue #49's `check-bucket`), so the onboarding client

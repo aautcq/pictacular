@@ -1,8 +1,8 @@
-import { memberSelect, requireAlbumAdmin, requireAlbumIdParam, requireAlbumMembership } from '../../../utils/album-guards'
-import { issueInvitationEmail } from '../../../utils/issue-invitation-email'
-import { prisma } from '../../../utils/prisma'
-import { serializeAlbumFull } from '../../../utils/serialize-album'
-import { albumCollaboratorsSchema } from '../../../utils/validation/album'
+import { memberSelect, requireAlbumAdmin, requireAlbumIdParam, requireAlbumMembership } from '#server/utils/album-guards'
+import { issueInvitationEmail } from '#server/utils/issue-invitation-email'
+import { prisma } from '#server/utils/prisma'
+import { serializeAlbumFull } from '#server/utils/serialize-album'
+import { albumCollaboratorsSchema } from '#server/utils/validation/album'
 
 // Adds Collaborators to an Album by email (issue #52), admin-only: an
 // email matching an existing User connects them to the Album immediately;

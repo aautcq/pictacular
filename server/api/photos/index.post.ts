@@ -1,9 +1,9 @@
-import { requirePhotoStorageConnection } from '../../utils/photo-guards'
-import { prisma } from '../../utils/prisma'
-import { serializePhoto } from '../../utils/serialize-photo'
-import { uploadPhotoObject } from '../../utils/storage'
-import { photoUploadSchema } from '../../utils/validation/photo'
-import { sendMessageToUser } from '../../utils/websocket'
+import { requirePhotoStorageConnection } from '#server/utils/photo-guards'
+import { prisma } from '#server/utils/prisma'
+import { serializePhoto } from '#server/utils/serialize-photo'
+import { uploadPhotoObject } from '#server/utils/storage'
+import { photoUploadSchema } from '#server/utils/validation/photo'
+import { sendMessageToUser } from '#server/utils/websocket'
 
 // Uploads a new Photo into the authenticated User's own Storage
 // Connection bucket (issue #50), persists a Photo row for it, and emits a

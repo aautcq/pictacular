@@ -1,6 +1,6 @@
-import { memberSelect } from '../../../utils/album-guards'
-import { prisma } from '../../../utils/prisma'
-import { serializeAlbumPublic } from '../../../utils/serialize-album'
+import { memberSelect } from '#server/utils/album-guards'
+import { prisma } from '#server/utils/prisma'
+import { serializeAlbumPublic } from '#server/utils/serialize-album'
 
 // Public endpoint (no auth) backing an Album's Public Share Link (issue
 // #53): resolves a share token to that Album's title/cover/Photos only —

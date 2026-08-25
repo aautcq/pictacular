@@ -1,6 +1,6 @@
-import { memberSelect } from '../../utils/album-guards'
-import { prisma } from '../../utils/prisma'
-import { loadAlbumCover, serializeAlbumSummary } from '../../utils/serialize-album'
+import { memberSelect } from '#server/utils/album-guards'
+import { prisma } from '#server/utils/prisma'
+import { loadAlbumCover, serializeAlbumSummary } from '#server/utils/serialize-album'
 
 // Public endpoint (no auth) backing the Invitation screen (issue #52):
 // resolves an Invitation token to its Album's summary (title/description/

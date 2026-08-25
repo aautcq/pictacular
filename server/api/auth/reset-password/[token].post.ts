@@ -1,6 +1,6 @@
-import { hashPassword } from '../../../utils/crypto'
-import { prisma } from '../../../utils/prisma'
-import { setPasswordSchema } from '../../../utils/validation/set-password'
+import { hashPassword } from '#server/utils/crypto'
+import { prisma } from '#server/utils/prisma'
+import { setPasswordSchema } from '#server/utils/validation/set-password'
 
 // Replaces the former AuthController#setPassword
 // (POST /auth/reset_password/:token): given a valid, non-expired, unused

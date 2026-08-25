@@ -1,6 +1,6 @@
 import type { Task } from 'nitropack/types'
-import { attemptEmailOutboxSend } from '../../utils/email-outbox'
-import { prisma } from '../../utils/prisma'
+import { attemptEmailOutboxSend } from '#server/utils/email-outbox'
+import { prisma } from '#server/utils/prisma'
 
 // Not using Nitro's `defineTask` runtime helper here (it's normally
 // auto-imported): that module's `runTask` export pulls in a

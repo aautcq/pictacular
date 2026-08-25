@@ -1,13 +1,13 @@
-import type { AccessToken, RefreshToken } from '../utils/jwt'
+import type { AccessToken, RefreshToken } from '#server/utils/jwt'
 import {
   accessTokenCookieName,
   accessTokenCookieOptions,
   refreshTokenCookieName,
   refreshTokenCookieOptions,
-} from '../utils/cookies'
-import { compareToken, hashToken } from '../utils/crypto'
-import { createTokens, verifyToken } from '../utils/jwt'
-import { prisma } from '../utils/prisma'
+} from '#server/utils/cookies'
+import { compareToken, hashToken } from '#server/utils/crypto'
+import { createTokens, verifyToken } from '#server/utils/jwt'
+import { prisma } from '#server/utils/prisma'
 
 // Nitro middleware running on every request, mirroring the shape of the
 // former AuthMiddleware (which wrote to response.locals): verifies the JWT

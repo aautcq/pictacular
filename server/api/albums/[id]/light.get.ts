@@ -1,5 +1,5 @@
-import { requireAlbumIdParam, requireAlbumMembership } from '../../../utils/album-guards'
-import { loadAlbumCover, serializeAlbumLight } from '../../../utils/serialize-album'
+import { requireAlbumIdParam, requireAlbumMembership } from '#server/utils/album-guards'
+import { loadAlbumCover, serializeAlbumLight } from '#server/utils/serialize-album'
 
 // Lightweight Album show (issue #51): cover + admin only, for fast
 // summary contexts (e.g. a photo picker listing which Albums a Photo

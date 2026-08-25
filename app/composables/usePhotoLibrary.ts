@@ -55,11 +55,13 @@ export function usePhotoLibrary() {
 
     loading.value = true
     try {
-      const query = nextCursor.value ? `?cursor=${nextCursor.value}` : ''
-      const response = await $fetch<{ photos: Photo[], next_cursor: number | null }>(`/api/photos${query}`)
+      const response = await useRequestFetch()<{ photos: Photo[], next_cursor: number | null }>('/api/photos', {
+        query: nextCursor.value === null ? undefined : { cursor: nextCursor.value },
+      })
       photos.value = [...photos.value, ...response.photos]
       nextCursor.value = response.next_cursor
       loaded.value = true
+      return photos.value
     }
     finally {
       loading.value = false
@@ -70,58 +72,6 @@ export function usePhotoLibrary() {
     if (photos.value.some(existing => existing.id === photo.id))
       return
     photos.value = [photo, ...photos.value]
-  }
-
-  // Uploads a File to the User's own bucket via base64-in-JSON (matching
-  // the avatar-upload contract), reporting 0-100 progress via a plain
-  // `XMLHttpRequest` — `$fetch` has no upload-progress event to hook into.
-  function uploadPhoto(file: File, onProgress?: (percent: number) => void) {
-    return new Promise<Photo>((resolve, reject) => {
-      const reader = new FileReader()
-
-      reader.onerror = () => reject(reader.error ?? new Error('file_read_failed'))
-      reader.onloadend = () => {
-        const base64 = (reader.result as string).replace(/^data:.+;base64,/, '')
-        const xhr = new XMLHttpRequest()
-
-        xhr.open('POST', '/api/photos')
-        xhr.setRequestHeader('Content-Type', 'application/json')
-
-        xhr.upload.addEventListener('progress', (event) => {
-          if (event.lengthComputable)
-            onProgress?.(Math.round((event.loaded / event.total) * 100))
-        })
-
-        xhr.addEventListener('load', () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            const photo = JSON.parse(xhr.responseText) as Photo
-            addUploadedPhoto(photo)
-            resolve(photo)
-          }
-          else {
-            let statusMessage = 'photos.upload_failed'
-            try {
-              statusMessage = JSON.parse(xhr.responseText)?.statusMessage ?? statusMessage
-            }
-            catch {
-              // Non-JSON error body — fall back to the generic message.
-            }
-            reject(createError({ statusCode: xhr.status, statusMessage }))
-          }
-        })
-
-        xhr.addEventListener('error', () => reject(createError({ statusCode: 0, statusMessage: 'photos.upload_failed' })))
-
-        xhr.send(JSON.stringify({
-          filename: file.name,
-          mime_type: file.type,
-          base64,
-          last_modified: new Date(file.lastModified).toISOString(),
-        }))
-      }
-
-      reader.readAsDataURL(file)
-    })
   }
 
   async function deletePhoto(id: number) {
@@ -149,7 +99,6 @@ export function usePhotoLibrary() {
     loading,
     fetchNextPage,
     addUploadedPhoto,
-    uploadPhoto,
     deletePhoto,
     deletePhotos,
     toggleLike,

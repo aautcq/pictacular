@@ -1,13 +1,13 @@
 # Pictacular
 
 Single Nuxt 4 / Nitro app at the repo root (no more `client`/`api` split) for a PWA image
-gallery backed by an AWS S3 bucket. Node ~22.23.2, PWA via `@vite-pwa/nuxt` (client side is
+gallery backed by an AWS S3 bucket. Node ~24.19.0, PWA via `@vite-pwa/nuxt` (client side is
 still bootstrap-stage — no `pages`/`components` yet, just `app/app.vue`).
 
 ## Setup & commands
 
-Install deps from the repo root with `npm install`. The `afterinstall` script runs
-`prisma generate && prisma db push`, so a `DATABASE_URL` must be set in `.env` (copy from
+Install deps from the repo root with `npm install`. The `db:push` script runs
+`prisma generate && prisma db push`, so a `NUXT_DATABASE_URL` must be set in `.env` (copy from
 `.env.example`) before installing/running.
 
 - `npm run dev` — starts the Nuxt/Nitro dev server on `http://localhost:3000`
@@ -47,7 +47,7 @@ Key conventions:
 - Validation uses `zod` schemas (replacing `class-validator`/`class-transformer`).
 - `prisma/schema.prisma` lives at the repo root, uses snake_case DB columns (`@map`) with
   camelCase-free Prisma field names matching snake_case (e.g. `created_at`, `user_id`), and
-  explicit `@@map("table_name")` per model. `afterinstall`/`prisma db push` applies schema
+  explicit `@@map("table_name")` per model. `db:push`/`prisma db push` applies schema
   changes (no migration files are checked in).
 - API error responses return a namespaced machine-readable string error code only (e.g.
   `auth.invalid_credentials`); the frontend owns all user-facing translation.

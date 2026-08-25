@@ -1,5 +1,5 @@
-import { requireAlbumIdParam, requireAlbumMembership } from '../../utils/album-guards'
-import { serializeAlbumFull } from '../../utils/serialize-album'
+import { requireAlbumIdParam, requireAlbumMembership } from '#server/utils/album-guards'
+import { serializeAlbumFull } from '#server/utils/serialize-album'
 
 // Full Album show (issue #51): photos, admin, and Collaborators, for the
 // Album's own page. Restricted to members (404 for anyone else, so a

@@ -3,8 +3,8 @@ import {
   accessTokenCookieOptions,
   refreshTokenCookieName,
   refreshTokenCookieOptions,
-} from '../../utils/cookies'
-import { prisma } from '../../utils/prisma'
+} from '#server/utils/cookies'
+import { prisma } from '#server/utils/prisma'
 
 // Replaces the former AuthController#logout (protected POST /auth/logout):
 // deactivates the current session and clears both auth cookies.

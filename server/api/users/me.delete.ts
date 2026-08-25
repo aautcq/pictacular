@@ -3,8 +3,8 @@ import {
   accessTokenCookieOptions,
   refreshTokenCookieName,
   refreshTokenCookieOptions,
-} from '../../utils/cookies'
-import { prisma } from '../../utils/prisma'
+} from '#server/utils/cookies'
+import { prisma } from '#server/utils/prisma'
 
 // Replaces the former UsersController#remove (protected DELETE /users/:id):
 // deletes the authenticated user's own account. Sessions, biometrics, push

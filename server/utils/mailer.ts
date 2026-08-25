@@ -1,6 +1,5 @@
 import type { EmailLang } from './i18n/emails'
 
-import process from 'node:process'
 import sgMail from '@sendgrid/mail'
 // ejs 6's ESM build only exposes a default export (no named `render`
 // export), unlike the CJS build's exports object — so we import the
@@ -36,7 +35,8 @@ function loadTemplate() {
 // NestJS MailerService: same @sendgrid/mail SDK call and ejs HTML template,
 // with nestjs-i18n replaced by the minimal t(key, lang) dictionary util.
 export async function sendEmail(data: EmailData, type: EmailType, lang: EmailLang = 'en') {
-  sgMail.setApiKey(process.env.SENDGRID_API_KEY ?? '')
+  const config = useRuntimeConfig()
+  sgMail.setApiKey(config.sendgridApiKey)
 
   const template = await loadTemplate()
 

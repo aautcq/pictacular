@@ -1,7 +1,7 @@
-import { issueEmailViaOutbox } from '../../utils/email-outbox'
-import { getPreferredLang } from '../../utils/i18n/lang'
-import { prisma } from '../../utils/prisma'
-import { resendVerificationSchema } from '../../utils/validation/resend-verification'
+import { issueEmailViaOutbox } from '#server/utils/email-outbox'
+import { getPreferredLang } from '#server/utils/i18n/lang'
+import { prisma } from '#server/utils/prisma'
+import { resendVerificationSchema } from '#server/utils/validation/resend-verification'
 
 // Replaces the former AuthController#sendVerificationEmail
 // (POST /auth/send_verification_email): always responds 204 whether or

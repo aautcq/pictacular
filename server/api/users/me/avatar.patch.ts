@@ -1,7 +1,7 @@
-import { prisma } from '../../../utils/prisma'
-import { serializeUser } from '../../../utils/serialize-user'
-import { uploadAvatarObject } from '../../../utils/storage'
-import { avatarUploadSchema } from '../../../utils/validation/avatar'
+import { prisma } from '#server/utils/prisma'
+import { serializeUser } from '#server/utils/serialize-user'
+import { uploadAvatarObject } from '#server/utils/storage'
+import { avatarUploadSchema } from '#server/utils/validation/avatar'
 
 // Replaces the former UsersController#updateAvatar (protected PATCH
 // /me/avatar): uploads/replaces the authenticated user's avatar image in

@@ -1,6 +1,6 @@
-import { requireAlbumIdParam, requireAlbumMembership, requirePhotoIdRouteParam } from '../../../../utils/album-guards'
-import { prisma } from '../../../../utils/prisma'
-import { serializeAlbumFull } from '../../../../utils/serialize-album'
+import { requireAlbumIdParam, requireAlbumMembership, requirePhotoIdRouteParam } from '#server/utils/album-guards'
+import { prisma } from '#server/utils/prisma'
+import { serializeAlbumFull } from '#server/utils/serialize-album'
 
 // Removes a Photo from an Album (issue #51). Only removes the
 // AlbumsOnPhotos join row — the Photo itself is untouched, since it still

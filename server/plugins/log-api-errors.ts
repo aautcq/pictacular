@@ -1,5 +1,5 @@
 import { getRequestIP, isError } from 'h3'
-import { prisma } from '../utils/prisma'
+import { prisma } from '#server/utils/prisma'
 
 // Replaces the former Express errorsHandler middleware: hooks into Nitro's
 // global `error` hook (fired once per request for every thrown/handled

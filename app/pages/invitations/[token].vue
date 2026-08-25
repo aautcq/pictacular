@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import type { InvitationAlbum } from '~/composables/useInvitations'
-
 definePageMeta({ middleware: 'guest' })
 
 const route = useRoute()
@@ -8,33 +6,27 @@ const token = computed(() => route.params.token as string)
 
 const { fetchInvitation } = useInvitations()
 const { register, resendVerification } = useCurrentUser()
-const { addError, addSuccess } = useAlerts()
+const toast = useToast()
 const { translateError } = useErrorMessage()
-const { t } = useI18n()
+const { t } = useI18n({ useScope: 'local', inheritLocale: true })
 
-const status = ref<'loading' | 'ready' | 'error'>('loading')
-const invitation = ref<InvitationAlbum | null>(null)
-const submitted = ref(false)
-const loading = ref(false)
-const resent = ref(false)
-const resending = ref(false)
-const form = reactive({
+const { data: invitation, status } = await useAsyncData(
+  `invitation-${token.value}`,
+  async () => await fetchInvitation(token.value),
+)
+
+useHead({ title: computed(() => invitation.value?.title) })
+
+const submitted = shallowRef(false)
+const loading = shallowRef(false)
+const resent = shallowRef(false)
+const resending = shallowRef(false)
+const state = reactive({
   first_name: '',
   last_name: '',
   password: '',
   password_confirmation: '',
 })
-
-async function loadInvitation() {
-  status.value = 'loading'
-  try {
-    invitation.value = await fetchInvitation(token.value)
-    status.value = 'ready'
-  }
-  catch {
-    status.value = 'error'
-  }
-}
 
 async function submit() {
   if (!invitation.value)
@@ -42,11 +34,11 @@ async function submit() {
 
   loading.value = true
   try {
-    await register({ ...form, email: invitation.value.email })
+    await register({ ...state, email: invitation.value.email })
     submitted.value = true
   }
   catch (error) {
-    addError(translateError(error))
+    toast.add({ title: translateError(error), color: 'error' })
   }
   finally {
     loading.value = false
@@ -68,17 +60,15 @@ async function resend() {
   try {
     await resendVerification(invitation.value.email)
     resent.value = true
-    addSuccess(t('verificationResent'))
+    toast.add({ title: t('verificationResent') })
   }
   catch (error) {
-    addError(translateError(error))
+    toast.add({ title: translateError(error), color: 'error' })
   }
   finally {
     resending.value = false
   }
 }
-
-onMounted(loadInvitation)
 </script>
 
 <template>
@@ -87,7 +77,7 @@ onMounted(loadInvitation)
       {{ t('title') }}
     </template>
 
-    <p v-if="status === 'loading'" class="text-center text-sm text-slate-500 dark:text-slate-300">
+    <p v-if="status === 'pending'" class="text-center text-sm text-gray-500 dark:text-gray-300">
       {{ t('loadingInvitation') }}
     </p>
 
@@ -143,8 +133,14 @@ onMounted(loadInvitation)
       </NuxtLink>
     </div>
 
-    <form v-else class="flex flex-col gap-y-4" @submit.prevent="submit">
-      <i18n-t keypath="invitedBy" tag="p" class="text-center text-sm text-slate-600 dark:text-slate-300">
+    <UForm
+      v-else
+      class="space-y-4"
+      :state="{ ...state, email: invitation!.email }"
+      novalidate
+      @submit.prevent="submit"
+    >
+      <i18n-t keypath="invitedBy" tag="p" class="text-center text-sm text-gray-600 dark:text-gray-300">
         <template #name>
           <strong>{{ invitation!.admin.first_name }} {{ invitation!.admin.last_name }}</strong>
         </template>
@@ -153,26 +149,70 @@ onMounted(loadInvitation)
         </template>
       </i18n-t>
 
-      <AppFormField :model-value="invitation!.email" :label="t('emailLabel')" type="email" disabled autocomplete="email" />
-      <AppFormField v-model="form.first_name" :label="t('firstNameLabel')" required autocomplete="given-name" />
-      <AppFormField v-model="form.last_name" :label="t('lastNameLabel')" required autocomplete="family-name" />
-      <AppFormField v-model="form.password" :label="t('passwordLabel')" type="password" required autocomplete="new-password" />
-      <AppFormField v-model="form.password_confirmation" :label="t('confirmPasswordLabel')" type="password" required autocomplete="new-password" />
+      <UFormField :label="t('emailLabel')" name="email">
+        <UInput
+          :model-value="invitation!.email"
+          type="email"
+          disabled
+          autocomplete="email"
+          required
+          class="w-full"
+        />
+      </UFormField>
 
-      <button
+      <UFormField :label="t('firstNameLabel')" name="first_name">
+        <UInput
+          v-model="state.first_name"
+          type="text"
+          required
+          autocomplete="given-name"
+          autofocus
+          class="w-full"
+        />
+      </UFormField>
+
+      <UFormField :label="t('lastNameLabel')" name="last_name">
+        <UInput
+          v-model="state.last_name"
+          type="text"
+          required
+          autocomplete="family-name"
+          class="w-full"
+        />
+      </UFormField>
+
+      <UFormField :label="t('passwordLabel')" name="password">
+        <UInput
+          v-model="state.password"
+          type="password"
+          required
+          autocomplete="new-password"
+          class="w-full"
+        />
+      </UFormField>
+
+      <UFormField :label="t('confirmPasswordLabel')" name="password_confirmation">
+        <UInput
+          v-model="state.password_confirmation"
+          type="password"
+          required
+          autocomplete="new-password"
+          class="w-full"
+        />
+      </UFormField>
+
+      <UButton
         type="submit"
-        :disabled="loading"
-        class="mt-2 h-10 rounded bg-green-500 px-4 font-medium text-white hover:bg-green-600 disabled:opacity-50"
-      >
-        {{ loading ? t('signingUp') : t('submit') }}
-      </button>
+        :loading="loading"
+        :label="loading ? t('signingUp') : t('submit')"
+      />
 
       <p class="text-center text-sm">
         {{ t('alreadyHaveAccount') }} <NuxtLink to="/login" class="underline">
           {{ t('signIn') }}
         </NuxtLink>
       </p>
-    </form>
+    </UForm>
   </AuthCard>
 </template>
 

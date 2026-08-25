@@ -1,7 +1,7 @@
-import { memberSelect, requireAlbumIdParam, requireAlbumMembership } from '../../utils/album-guards'
-import { prisma } from '../../utils/prisma'
-import { loadAlbumCover, serializeAlbumSummary } from '../../utils/serialize-album'
-import { albumUpdateSchema } from '../../utils/validation/album'
+import { memberSelect, requireAlbumIdParam, requireAlbumMembership } from '#server/utils/album-guards'
+import { prisma } from '#server/utils/prisma'
+import { loadAlbumCover, serializeAlbumSummary } from '#server/utils/serialize-album'
+import { albumUpdateSchema } from '#server/utils/validation/album'
 
 // Updates an Album's title/description (issue #51). Any member (not just
 // the admin) can rename/edit it — only delete is admin-restricted, per

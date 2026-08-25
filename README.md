@@ -10,7 +10,7 @@ Install the dependencies:
 npm install
 ```
 
-A `DATABASE_URL` must be set in `.env` (copy from `.env.example`) before installing, since
+A `NUXT_DATABASE_URL` must be set in `.env` (copy from `.env.example`) before installing, since
 `prisma generate && prisma db push` runs as part of install.
 
 ## Development Server

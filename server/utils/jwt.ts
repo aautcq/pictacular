@@ -1,4 +1,3 @@
-import process from 'node:process'
 import jwt from 'jsonwebtoken'
 
 export interface AccessToken {
@@ -32,18 +31,19 @@ export function createTokens(
   user: { id: number, email: string },
   session: { id: number },
 ) {
+  const config = useRuntimeConfig()
   const accessToken = jwt.sign(
     {
       user: { id: user.id, email: user.email },
       session: { id: session.id },
     },
-    process.env.JWT_PRIVATE_KEY as string,
+    config.jwt.privateKey,
     { expiresIn: accessTokenTtl, algorithm: 'RS256' },
   )
 
   const refreshToken = jwt.sign(
     { userId: user.id, sessionId: session.id },
-    process.env.JWT_PRIVATE_KEY as string,
+    config.jwt.privateKey,
     { expiresIn: refreshTokenTtl, algorithm: 'RS256' },
   )
 
@@ -52,7 +52,7 @@ export function createTokens(
 
 export function verifyToken<T>(token: string): T | null {
   try {
-    return jwt.verify(token, process.env.JWT_PUBLIC_KEY as string, {
+    return jwt.verify(token, useRuntimeConfig().jwt.publicKey, {
       algorithms: ['RS256'],
     }) as T
   }
@@ -62,7 +62,7 @@ export function verifyToken<T>(token: string): T | null {
 }
 
 export function encodeAwsCredentials(payload: AwsCredentialsTokens) {
-  return jwt.sign(payload, process.env.JWT_PRIVATE_KEY as string, {
+  return jwt.sign(payload, useRuntimeConfig().jwt.privateKey, {
     expiresIn: refreshTokenTtl,
     algorithm: 'RS256',
   })

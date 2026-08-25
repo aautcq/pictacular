@@ -1,6 +1,6 @@
-import { requirePhotoIdParam, requirePhotoStorageConnection } from '../../../utils/photo-guards'
-import { prisma } from '../../../utils/prisma'
-import { serializePhoto } from '../../../utils/serialize-photo'
+import { requirePhotoIdParam, requirePhotoStorageConnection } from '#server/utils/photo-guards'
+import { prisma } from '#server/utils/prisma'
+import { serializePhoto } from '#server/utils/serialize-photo'
 
 // Likes one of the authenticated User's own Photos (issue #50). Likes are
 // a many-to-many between Users and Photos (a Photo can later be liked by

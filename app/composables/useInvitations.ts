@@ -15,7 +15,8 @@ export interface InvitationAlbum {
 // reachable by someone who doesn't have an account yet.
 export function useInvitations() {
   async function fetchInvitation(token: string) {
-    return $fetch<InvitationAlbum>(`/api/invitations/${token}`)
+    const requestFetch = import.meta.server ? useRequestFetch() : $fetch
+    return await requestFetch<InvitationAlbum>(`/api/invitations/${token}`)
   }
 
   return { fetchInvitation }

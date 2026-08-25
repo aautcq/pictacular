@@ -3,16 +3,16 @@ definePageMeta({ middleware: 'guest' })
 
 const { login, loginWithBiometrics } = useCurrentUser()
 const { hasStoredCredential, isSupported } = useBiometrics()
-const { addError, addSuccess } = useAlerts()
+const toast = useToast()
 const { translateError } = useErrorMessage()
-const { t } = useI18n()
+const { t } = useI18n({ useScope: 'local', inheritLocale: true })
+const { t: tg } = useI18n({ useScope: 'global' })
 const route = useRoute()
-const router = useRouter()
 
-const email = ref('')
-const password = ref('')
-const loading = ref(false)
-const biometricLoading = ref(false)
+const email = shallowRef('')
+const password = shallowRef('')
+const loading = shallowRef(false)
+const biometricLoading = shallowRef(false)
 // Only one sign-in ceremony may be in flight at a time: both `login` and
 // `loginWithBiometrics` create a new Session and revoke the User's other
 // active sessions server-side, so letting the password form and the
@@ -22,7 +22,7 @@ const anyLoading = computed(() => loading.value || biometricLoading.value)
 
 async function redirectAfterSignIn() {
   const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
-  await router.push(redirect)
+  await navigateTo(redirect)
 }
 
 async function submit() {
@@ -32,11 +32,11 @@ async function submit() {
   loading.value = true
   try {
     await login(email.value, password.value)
-    addSuccess(t('welcomeBack'))
+    toast.add({ title: t('welcomeBack') })
     await redirectAfterSignIn()
   }
   catch (error) {
-    addError(translateError(error))
+    toast.add({ title: translateError(error), color: 'error' })
   }
   finally {
     loading.value = false
@@ -55,22 +55,20 @@ async function signInWithBiometrics({ silent = false } = {}) {
   biometricLoading.value = true
   try {
     await loginWithBiometrics()
-    addSuccess(t('welcomeBack'))
+    toast.add({ title: t('welcomeBack') })
     await redirectAfterSignIn()
   }
   catch (error) {
     if (!silent)
-      addError(translateError(error))
+      toast.add({ title: translateError(error), color: 'error' })
   }
   finally {
     biometricLoading.value = false
   }
 }
 
-onMounted(() => {
-  if (isSupported && hasStoredCredential.value)
-    signInWithBiometrics({ silent: true })
-})
+if (isSupported && hasStoredCredential.value)
+  signInWithBiometrics({ silent: true })
 </script>
 
 <template>
@@ -79,9 +77,34 @@ onMounted(() => {
       {{ t('title') }}
     </template>
 
-    <form class="flex flex-col gap-y-4" @submit.prevent="submit">
-      <AppFormField v-model="email" :label="t('emailLabel')" type="email" required autocomplete="email" />
-      <AppFormField v-model="password" :label="t('passwordLabel')" type="password" required autocomplete="current-password" />
+    <UForm
+      class="space-y-4"
+      :state="{ email, password }"
+      novalidate
+      @submit.prevent="submit"
+    >
+      <UFormField :label="t('emailLabel')" name="email">
+        <UInput
+          v-model="email"
+          type="email"
+          required
+          autocomplete="email"
+          :placeholder="t('emailPlaceholder')"
+          autofocus
+          class="w-full"
+        />
+      </UFormField>
+
+      <UFormField :label="t('passwordLabel')" name="password">
+        <UInput
+          v-model="password"
+          type="password"
+          required
+          autocomplete="current-password"
+          :placeholder="t('passwordPlaceholder')"
+          class="w-full"
+        />
+      </UFormField>
 
       <div class="flex justify-end">
         <NuxtLink to="/forgot-password" class="text-sm underline">
@@ -89,23 +112,25 @@ onMounted(() => {
         </NuxtLink>
       </div>
 
-      <button
+      <UButton
         type="submit"
         :disabled="anyLoading"
-        class="mt-2 h-10 rounded bg-green-500 px-4 font-medium text-white hover:bg-green-600 disabled:opacity-50"
-      >
-        {{ loading ? t('signingIn') : t('common.nav.signIn') }}
-      </button>
+        :loading="loading"
+        block
+        :label="loading ? t('signingIn') : tg('common.nav.signIn')"
+      />
 
-      <button
+      <UButton
         v-if="isSupported"
         type="button"
+        block
+        color="neutral"
+        variant="soft"
         :disabled="anyLoading"
-        class="h-10 rounded border border-slate-300 px-4 font-medium hover:bg-slate-100 disabled:opacity-50 dark:border-slate-600 dark:hover:bg-slate-700"
+        :loading="biometricLoading"
+        :label="biometricLoading ? t('signingIn') : t('signInWithBiometrics')"
         @click="signInWithBiometrics()"
-      >
-        {{ biometricLoading ? t('signingIn') : t('signInWithBiometrics') }}
-      </button>
+      />
 
       <p class="text-center text-sm">
         {{ t('noAccountYet') }} <NuxtLink to="/register" class="underline">
@@ -117,7 +142,7 @@ onMounted(() => {
           {{ t('resendVerificationEmail') }}
         </NuxtLink>
       </p>
-    </form>
+    </UForm>
   </AuthCard>
 </template>
 
@@ -126,7 +151,9 @@ onMounted(() => {
   "en": {
     "title": "Sign in",
     "emailLabel": "Email",
+    "emailPlaceholder": "Enter your email",
     "passwordLabel": "Password",
+    "passwordPlaceholder": "Enter your password",
     "forgotPassword": "Forgot my password",
     "signingIn": "Signing in…",
     "signInWithBiometrics": "Sign in with biometrics",

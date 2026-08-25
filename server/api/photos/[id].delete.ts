@@ -1,6 +1,6 @@
-import { requirePhotoIdParam, requirePhotoStorageConnection } from '../../utils/photo-guards'
-import { prisma } from '../../utils/prisma'
-import { deletePhotoObject } from '../../utils/storage'
+import { requirePhotoIdParam, requirePhotoStorageConnection } from '#server/utils/photo-guards'
+import { prisma } from '#server/utils/prisma'
+import { deletePhotoObject } from '#server/utils/storage'
 
 // Deletes one of the authenticated User's own Photos (issue #50): removes
 // both the DB row and its underlying bucket object, so a delete never
