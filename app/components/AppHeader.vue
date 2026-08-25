@@ -1,75 +1,63 @@
 <script setup lang="ts">
-const colorMode = useColorMode()
-const isDark = computed(() => colorMode.value === 'dark')
 const { isAuthenticated, fullName, logout } = useCurrentUser()
-const router = useRouter()
-const { t } = useI18n()
-
-function toggle() {
-  colorMode.preference = isDark.value ? 'light' : 'dark'
-}
+const { t } = useI18n({ useScope: 'global' })
 
 async function handleLogout() {
   await logout()
-  await router.push('/login')
+  await navigateTo('/login')
 }
 </script>
 
 <template>
-  <header class="fixed inset-x-0 top-0 z-20 h-16 bg-slate-200 dark:bg-slate-800">
+  <header class="fixed inset-x-0 top-0 z-20 h-12 bg-gray-200 dark:bg-gray-900">
     <nav class="mx-auto flex h-full max-w-5xl items-center justify-between px-6">
-      <NuxtLink to="/" class="font-semibold text-slate-900 dark:text-slate-100">
+      <NuxtLink to="/" class="font-semibold text-gray-900 dark:text-gray-100">
         Pictacular
       </NuxtLink>
 
       <div class="flex items-center gap-4">
-        <button
-          type="button"
-          class="rounded px-2 py-1 text-sm hover:bg-slate-300 dark:hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600"
-          :aria-label="isDark ? t('toggleToLight') : t('toggleToDark')"
-          @click="toggle"
-        >
-          <Icon :name="isDark ? 'ph:sun' : 'ph:moon'" />
-        </button>
-
         <template v-if="isAuthenticated">
-          <NuxtLink
-            to="/albums"
-            class="rounded px-2 py-1 text-sm hover:bg-slate-300 dark:hover:bg-slate-700"
-          >
-            {{ t('common.nav.albums') }}
-          </NuxtLink>
-          <NuxtLink
-            to="/profile"
-            class="rounded px-2 py-1 text-sm hover:bg-slate-300 dark:hover:bg-slate-700"
-          >
-            {{ fullName }}
-          </NuxtLink>
-          <button
-            type="button"
-            class="rounded px-2 py-1 text-sm hover:bg-slate-300 dark:hover:bg-slate-700"
-            @click="handleLogout"
-          >
-            {{ t('common.nav.logOut') }}
-          </button>
+          <UTooltip :text="t('common.nav.albums')">
+            <UButton
+              to="/albums"
+              color="neutral"
+              active-color="success"
+              variant="soft"
+              icon="ph:folders"
+              :aria-label="t('common.nav.albums')"
+            />
+          </UTooltip>
+          <UTooltip :text="fullName">
+            <UButton
+              to="/profile"
+              color="neutral"
+              active-color="success"
+              variant="soft"
+              :aria-label="fullName"
+              icon="ph:user"
+            />
+          </UTooltip>
+          <UTooltip :text="t('common.nav.logOut')">
+            <UButton
+              type="button"
+              color="neutral"
+              variant="soft"
+              icon="ph:power"
+              :aria-label="t('common.nav.logOut')"
+              @click="handleLogout"
+            />
+          </UTooltip>
         </template>
-        <NuxtLink
-          v-else
-          to="/login"
-          class="rounded px-2 py-1 text-sm hover:bg-slate-300 dark:hover:bg-slate-700"
-        >
-          {{ t('common.nav.signIn') }}
-        </NuxtLink>
+        <UTooltip v-else :text="t('common.nav.signIn')">
+          <UButton
+            to="/login"
+            color="neutral"
+            variant="soft"
+            icon="ph:power"
+            :aria-label="t('common.nav.signIn')"
+          />
+        </UTooltip>
       </div>
     </nav>
   </header>
 </template>
-
-<i18n lang="json">
-{
-  "en": {
-    "toggleToLight": "Switch to light mode",
-    "toggleToDark": "Switch to dark mode"
-  }
-}
-</i18n>

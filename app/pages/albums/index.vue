@@ -4,22 +4,23 @@ import type { AlbumSummary } from '~/composables/useAlbums'
 definePageMeta({ middleware: ['auth'] })
 
 const { albums, hasMore, loading, fetchNextPage, searchAlbums } = useAlbums()
-const { addError } = useAlerts()
+const toast = useToast()
 const { translateError } = useErrorMessage()
 const { t } = useI18n()
 
-const sentinel = ref<HTMLElement | null>(null)
-const query = ref('')
+const sentinel = useTemplateRef<HTMLElement | null>('sentinel')
+const query = shallowRef('')
+const debouncedQuery = refDebounced(query, 300)
 const searchResults = ref<AlbumSummary[] | null>(null)
-const searching = ref(false)
+const searching = shallowRef(false)
 
 const displayedAlbums = computed(() => searchResults.value ?? albums.value)
+
+await useAsyncData('albums', fetchNextPage)
 
 function formatDate(date: string) {
   return new Date(date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
 }
-
-let searchDebounce: ReturnType<typeof setTimeout> | undefined
 
 async function runSearch(keyword: string) {
   searching.value = true
@@ -27,69 +28,54 @@ async function runSearch(keyword: string) {
     searchResults.value = await searchAlbums(keyword)
   }
   catch (error) {
-    addError(translateError(error))
+    toast.add({ title: translateError(error), color: 'error' })
   }
   finally {
     searching.value = false
   }
 }
 
-watch(query, (value) => {
-  clearTimeout(searchDebounce)
-
+watch(debouncedQuery, (value) => {
   if (!value.trim()) {
     searchResults.value = null
     return
   }
 
-  searchDebounce = setTimeout(() => runSearch(value.trim()), 300)
+  runSearch(value.trim())
 })
 
-let observer: IntersectionObserver | null = null
-
-onMounted(async () => {
-  await fetchNextPage()
-
-  observer = new IntersectionObserver((entries) => {
-    if (entries[0]?.isIntersecting && !searchResults.value && hasMore.value && !loading.value)
-      fetchNextPage()
-  })
-  if (sentinel.value)
-    observer.observe(sentinel.value)
-})
-
-onUnmounted(() => {
-  observer?.disconnect()
+useIntersectionObserver(sentinel, ([entry]) => {
+  if (entry?.isIntersecting && !searchResults.value && hasMore.value && !loading.value)
+    fetchNextPage()
 })
 </script>
 
 <template>
-  <div class="mx-auto flex max-w-5xl flex-col gap-y-8 py-10">
+  <div class="mx-auto flex max-w-5xl flex-col gap-y-8">
     <div class="flex items-center justify-between">
       <h1 class="text-xl font-semibold">
         {{ t('common.nav.albums') }}
       </h1>
 
-      <NuxtLink
+      <UButton
         to="/albums/new"
-        class="flex h-10 items-center gap-x-2 rounded bg-green-500 px-4 font-medium text-white hover:bg-green-600"
-      >
-        <Icon name="ph:plus" size="1.1em" />
-        {{ t('newAlbum') }}
-      </NuxtLink>
+        icon="ph:plus"
+        :label="t('newAlbum')"
+      />
     </div>
 
-    <label class="flex w-full flex-col gap-y-1">
+    <label>
       <span class="sr-only">{{ t('searchLabel') }}</span>
-      <input
+      <UInput
         v-model="query"
         type="search"
+        autofocus
         :placeholder="t('searchPlaceholder')"
-        class="h-10 w-full rounded border-none bg-white px-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 dark:bg-slate-700"
-      >
+        class="w-full"
+      />
     </label>
 
-    <div v-if="!displayedAlbums.length && !loading && !searching" class="py-20 text-center text-slate-500 dark:text-slate-300">
+    <div v-if="!displayedAlbums.length && !loading && !searching" class="py-20 text-center text-gray-500 dark:text-gray-300">
       <p v-if="searchResults">
         {{ t('noResults') }}
       </p>
@@ -105,21 +91,26 @@ onUnmounted(() => {
         :to="`/albums/${album.id}`"
         class="flex flex-col gap-y-2 overflow-hidden rounded"
       >
-        <div class="aspect-square overflow-hidden rounded bg-slate-200 dark:bg-slate-700">
-          <img v-if="album.cover" :src="album.cover" :alt="album.title ?? t('albumCoverAlt')" class="h-full w-full object-cover">
-          <div v-else class="flex h-full w-full items-center justify-center text-slate-400">
+        <div class="aspect-square overflow-hidden rounded bg-gray-200 dark:bg-gray-700">
+          <img
+            v-if="album.cover"
+            :src="album.cover"
+            :alt="album.title ?? t('albumCoverAlt')"
+            class="h-full w-full object-cover"
+          >
+          <div v-else class="flex h-full w-full items-center justify-center text-gray-400">
             <Icon name="ph:image" size="2em" />
           </div>
         </div>
         <div class="flex flex-col">
           <span class="truncate font-medium">{{ album.title }}</span>
-          <span class="text-xs text-slate-500 dark:text-slate-300">{{ formatDate(album.created_at) }}</span>
+          <span class="text-xs text-gray-500 dark:text-gray-300">{{ formatDate(album.created_at) }}</span>
         </div>
       </NuxtLink>
     </div>
 
     <div ref="sentinel" class="h-4" />
-    <p v-if="loading" class="text-center text-sm text-slate-500 dark:text-slate-300">
+    <p v-if="loading" class="text-center text-sm text-gray-500 dark:text-gray-300">
       {{ t('loading') }}
     </p>
   </div>

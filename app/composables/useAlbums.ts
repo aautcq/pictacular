@@ -52,7 +52,7 @@ export interface AlbumCollaboratorsResult extends AlbumFull {
 }
 
 // Albums list/search/CRUD state (issue #51), ported from the legacy
-// albums Pinia store as a Nuxt composable backed by useState, mirroring
+// albums Pinia store as a Nuxt composable mirroring
 // usePhotoLibrary.ts's shape: paginated listing (keyset cursor, newest
 // first) for the albums list page, plus create/update/delete and
 // add/remove-Photo actions shared with the Album show page. Search is
@@ -72,8 +72,9 @@ export function useAlbums() {
 
     loading.value = true
     try {
-      const query = nextCursor.value ? `?cursor=${nextCursor.value}` : ''
-      const response = await $fetch<{ albums: AlbumSummary[], next_cursor: number | null }>(`/api/albums${query}`)
+      const response = await useRequestFetch()<{ albums: AlbumSummary[], next_cursor: number | null }>('/api/albums', {
+        query: nextCursor.value === null ? undefined : { cursor: nextCursor.value },
+      })
       albums.value = [...albums.value, ...response.albums]
       nextCursor.value = response.next_cursor
       loaded.value = true
@@ -95,7 +96,9 @@ export function useAlbums() {
   }
 
   async function fetchAlbum(id: number) {
-    return $fetch<AlbumFull>(`/api/albums/${id}`)
+    // @ts-expect-error — $fetch does not forward the auth cookie.
+    const requestFetch = import.meta.server ? useRequestFetch() : $fetch
+    return await requestFetch<AlbumFull>(`/api/albums/${id}`)
   }
 
   async function updateAlbum(id: number, payload: { title?: string, description?: string }) {
@@ -142,7 +145,8 @@ export function useAlbums() {
   // require auth, since the whole point of the link is to be viewable by
   // anyone who has it, without an account.
   async function fetchPublicAlbum(token: string) {
-    return $fetch<PublicAlbum>(`/api/albums/public/${token}`)
+    const requestFetch = import.meta.server ? useRequestFetch() : $fetch
+    return await requestFetch<PublicAlbum>(`/api/albums/public/${token}`)
   }
 
   return {

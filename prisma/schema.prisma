@@ -140,7 +140,7 @@ model Album {
   share_token   String?    @unique
 
   admin_id Int
-  admin    User @relation("AdminAlbums", fields: [admin_id], references: [id])
+  admin    User @relation("AdminAlbums", fields: [admin_id], references: [id], onDelete: Cascade)
 
   photos     AlbumsOnPhotos[]
 
@@ -226,10 +226,10 @@ model ApiError {
 }
 
 model AlbumsOnPhotos {
-  photo       Photo @relation(fields: [photo_id], references: [id])
+  photo       Photo @relation(fields: [photo_id], references: [id], onDelete: Cascade)
   photo_id    Int
 
-  album       Album @relation(fields: [album_id], references: [id])
+  album       Album @relation(fields: [album_id], references: [id], onDelete: Cascade)
   album_id    Int
 
   assigned_at DateTime @default(now())

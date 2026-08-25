@@ -15,16 +15,15 @@
     "url": "https://github.com/aautcq/pictacular/issues"
   },
   "engines": {
-    "node": "~22.23.2",
-    "npm": "~10.9.8"
+    "node": "~24.19.0",
+    "npm": "~11.17.0"
   },
   "scripts": {
-    "afterinstall": "prisma generate && prisma db push",
     "postinstall": "nuxt prepare",
     "prepare": "husky install",
+    "db:push": "prisma generate && prisma db push",
     "dev": "nuxt dev",
     "build": "nuxt build",
-    "generate": "nuxt generate",
     "preview": "nuxt preview",
     "lint": "eslint . --fix",
     "test": "vitest run",
@@ -35,22 +34,28 @@
     "@aws-sdk/s3-request-presigner": "~3.1113.0",
     "@nuxt/fonts": "~0.14.0",
     "@nuxt/icon": "~2.5.0",
-    "@nuxtjs/color-mode": "~4.0.1",
+    "@nuxt/ui": "~4.11.0",
     "@nuxtjs/i18n": "~10.6.0",
+    "@nuxtjs/seo": "~5.3.14",
     "@prisma/adapter-pg": "~7.9.1",
     "@prisma/client": "~7.9.1",
     "@sendgrid/mail": "~8.1.6",
     "@simplewebauthn/browser": "~9.0.1",
     "@simplewebauthn/server": "~9.0.3",
     "@vite-pwa/nuxt": "~1.1.1",
+    "@vueuse/core": "~14.4.0",
+    "@vueuse/integrations": "~14.4.0",
+    "@vueuse/nuxt": "~14.4.0",
     "bcrypt": "~6.0.0",
     "ejs": "~6.0.1",
+    "focus-trap": "~7.8.0",
     "jsonwebtoken": "~9.0.2",
     "web-push": "~3.6.7",
     "zod": "~4.4.3"
   },
   "devDependencies": {
     "@antfu/eslint-config": "~9.3.0",
+    "@iconify-json/ph": "~1.2.2",
     "@nuxt/test-utils": "~4.1.0",
     "@playwright/test": "~1.62.1",
     "@tailwindcss/vite": "~4.3.3",
@@ -75,5 +80,14 @@
   },
   "overrides": {
     "@peculiar/asn1-schema": "2.9.3"
+  },
+  "allowScripts": {
+    "bcrypt@6.0.0": true,
+    "esbuild@0.27.7": true,
+    "esbuild@0.28.2": true,
+    "esbuild@0.25.12": true,
+    "prisma@7.9.1": true,
+    "@prisma/engines@7.9.1": true,
+    "vue-demi@0.14.10": true
   }
 }

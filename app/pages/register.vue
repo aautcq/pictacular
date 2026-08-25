@@ -2,13 +2,14 @@
 definePageMeta({ middleware: 'guest' })
 
 const { register } = useCurrentUser()
-const { addError } = useAlerts()
+const toast = useToast()
 const { translateError } = useErrorMessage()
-const { t } = useI18n()
+const { t } = useI18n({ useScope: 'local', inheritLocale: true })
 
-const loading = ref(false)
-const submitted = ref(false)
-const form = reactive({
+const form = useTemplateRef('form')
+const loading = shallowRef(false)
+const submitted = shallowRef(false)
+const state = reactive({
   first_name: '',
   last_name: '',
   email: '',
@@ -19,11 +20,15 @@ const form = reactive({
 async function submit() {
   loading.value = true
   try {
-    await register({ ...form })
+    await register({ ...state })
     submitted.value = true
   }
   catch (error) {
-    addError(translateError(error))
+    const withData = error as { data?: { data?: { name: string, message: string }[] } }
+    if (withData?.data?.data?.length) {
+      form.value?.setErrors(withData.data.data)
+    }
+    toast.add({ title: translateError(error), color: 'error' })
   }
   finally {
     loading.value = false
@@ -40,7 +45,7 @@ async function submit() {
     <div v-if="submitted" class="flex flex-col items-center gap-y-6 text-center">
       <i18n-t keypath="checkInbox" tag="p">
         <template #email>
-          <strong>{{ form.email }}</strong>
+          <strong>{{ state.email }}</strong>
         </template>
       </i18n-t>
       <NuxtLink to="/resend-verification" class="text-sm underline">
@@ -48,27 +53,80 @@ async function submit() {
       </NuxtLink>
     </div>
 
-    <form v-else class="flex flex-col gap-y-4" @submit.prevent="submit">
-      <AppFormField v-model="form.first_name" :label="t('firstNameLabel')" required autocomplete="given-name" />
-      <AppFormField v-model="form.last_name" :label="t('lastNameLabel')" required autocomplete="family-name" />
-      <AppFormField v-model="form.email" :label="t('emailLabel')" type="email" required autocomplete="email" />
-      <AppFormField v-model="form.password" :label="t('passwordLabel')" type="password" required autocomplete="new-password" />
-      <AppFormField v-model="form.password_confirmation" :label="t('confirmPasswordLabel')" type="password" required autocomplete="new-password" />
+    <UForm
+      v-else
+      ref="form"
+      :state="state"
+      class="space-y-4"
+      novalidate
+      @submit.prevent="submit"
+    >
+      <UFormField :label="t('firstNameLabel')" name="first_name">
+        <UInput
+          v-model="state.first_name"
+          type="text"
+          autocomplete="given-name"
+          autofocus
+          :placeholder="t('firstNamePlaceholder')"
+          class="w-full"
+        />
+      </UFormField>
 
-      <button
+      <UFormField :label="t('lastNameLabel')" name="last_name">
+        <UInput
+          v-model="state.last_name"
+          type="text"
+          autocomplete="family-name"
+          :placeholder="t('lastNamePlaceholder')"
+          class="w-full"
+        />
+      </UFormField>
+
+      <UFormField :label="t('emailLabel')" name="email">
+        <UInput
+          v-model="state.email"
+          type="email"
+          autocomplete="email"
+          :placeholder="t('emailPlaceholder')"
+          class="w-full"
+        />
+      </UFormField>
+
+      <UFormField :label="t('passwordLabel')" name="password">
+        <UInput
+          v-model="state.password"
+          type="password"
+          required
+          autocomplete="new-password"
+          :placeholder="t('passwordPlaceholder')"
+          class="w-full"
+        />
+      </UFormField>
+
+      <UFormField :label="t('confirmPasswordLabel')" name="password_confirmation">
+        <UInput
+          v-model="state.password_confirmation"
+          type="password"
+          required
+          autocomplete="new-password"
+          :placeholder="t('confirmPasswordPlaceholder')"
+          class="w-full"
+        />
+      </UFormField>
+
+      <UButton
         type="submit"
-        :disabled="loading"
-        class="mt-2 h-10 rounded bg-green-500 px-4 font-medium text-white hover:bg-green-600 disabled:opacity-50"
-      >
-        {{ loading ? t('submitting') : t('submit') }}
-      </button>
+        :loading="loading"
+        block
+        :label="loading ? t('submitting') : t('submit')"
+      />
 
       <p class="text-center text-sm">
         {{ t('alreadyHaveAccount') }} <NuxtLink to="/login" class="underline">
           {{ t('signIn') }}
         </NuxtLink>
       </p>
-    </form>
+    </UForm>
   </AuthCard>
 </template>
 
@@ -77,10 +135,15 @@ async function submit() {
   "en": {
     "title": "Sign up",
     "firstNameLabel": "First name",
+    "firstNamePlaceholder": "Enter your first name",
     "lastNameLabel": "Last name",
+    "lastNamePlaceholder": "Enter your last name",
     "emailLabel": "Email",
+    "emailPlaceholder": "Enter your email address",
     "passwordLabel": "Password",
+    "passwordPlaceholder": "Enter your password",
     "confirmPasswordLabel": "Confirm password",
+    "confirmPasswordPlaceholder": "Confirm your password",
     "submit": "Sign up",
     "submitting": "Signing up…",
     "checkInbox": "Check your inbox: we've sent a verification link to {email}. You must verify your account before signing in.",

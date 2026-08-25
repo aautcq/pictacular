@@ -1,9 +1,17 @@
-@import url('_transitions.css');
-
 @import 'tailwindcss';
+@import '@nuxt/ui';
+@import '_transitions.css';
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --font-main: 'Mulish', ui-sans-serif, system-ui, -apple-system;
+}
+
+:root {
+  --ui-bg: var(--ui-color-neutral-50);
+}
+
+.dark {
+  --ui-bg: var(--ui-color-neutral-950);
 }

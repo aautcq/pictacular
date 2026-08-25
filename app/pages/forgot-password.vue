@@ -2,13 +2,13 @@
 definePageMeta({ middleware: 'guest' })
 
 const { requestPasswordReset } = useCurrentUser()
-const { addError } = useAlerts()
+const toast = useToast()
 const { translateError } = useErrorMessage()
-const { t } = useI18n()
+const { t } = useI18n({ useScope: 'local', inheritLocale: true })
 
-const email = ref('')
-const loading = ref(false)
-const sent = ref(false)
+const email = shallowRef('')
+const loading = shallowRef(false)
+const sent = shallowRef(false)
 
 async function submit() {
   loading.value = true
@@ -17,7 +17,7 @@ async function submit() {
     sent.value = true
   }
   catch (error) {
-    addError(translateError(error))
+    toast.add({ title: translateError(error), color: 'error' })
   }
   finally {
     loading.value = false
@@ -42,23 +42,38 @@ async function submit() {
       </NuxtLink>
     </div>
 
-    <form v-else class="flex flex-col gap-y-4" @submit.prevent="submit">
-      <AppFormField v-model="email" :label="t('emailLabel')" type="email" required autocomplete="email" />
+    <UForm
+      v-else
+      :state="{ email }"
+      class="space-y-4"
+      novalidate
+      @submit.prevent="submit"
+    >
+      <UFormField :label="t('emailLabel')" name="email">
+        <UInput
+          v-model="email"
+          type="email"
+          required
+          autocomplete="email"
+          :placeholder="t('emailPlaceholder')"
+          autofocus
+          class="w-full"
+        />
+      </UFormField>
 
-      <button
+      <UButton
         type="submit"
-        :disabled="loading"
-        class="mt-2 h-10 rounded bg-green-500 px-4 font-medium text-white hover:bg-green-600 disabled:opacity-50"
-      >
-        {{ loading ? t('submitting') : t('submit') }}
-      </button>
+        :loading="loading"
+        block
+        :label="loading ? t('submitting') : t('submit')"
+      />
 
       <p class="text-center text-sm">
         <NuxtLink to="/login" class="underline">
           {{ t('backToSignIn') }}
         </NuxtLink>
       </p>
-    </form>
+    </UForm>
   </AuthCard>
 </template>
 
@@ -67,6 +82,7 @@ async function submit() {
   "en": {
     "title": "Password forgotten",
     "emailLabel": "Email",
+    "emailPlaceholder": "Enter your email address",
     "submit": "Reset password",
     "submitting": "Sending…",
     "sentMessage": "If an account exists for {email}, we've sent a link to reset your password.",

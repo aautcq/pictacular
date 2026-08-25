@@ -1,36 +1,38 @@
 <script setup lang="ts">
-import type { AlbumFull } from '~/composables/useAlbums'
-
 definePageMeta({ middleware: ['auth'] })
 
 const route = useRoute()
-const router = useRouter()
 const albumId = computed(() => Number(route.params.id))
 
 const { user } = useCurrentUser()
 const { fetchAlbum, updateAlbum, deleteAlbum, addPhotoToAlbum, removePhotoFromAlbum, addCollaborators, removeCollaborator, generateShareLink } = useAlbums()
 const { photos: libraryPhotos, fetchNextPage: fetchNextLibraryPage, hasMore: libraryHasMore, loading: libraryLoading } = usePhotoLibrary()
-const { addError, addSuccess } = useAlerts()
+const toast = useToast()
 const { translateError } = useErrorMessage()
 const { t } = useI18n()
-const { close: closePicker, open: openPicker } = useModal('add-photo-to-album')
-const { close: closeDeleteModal, open: openDeleteModal } = useModal('delete-album')
-const { close: closeCollaboratorsModal, open: openCollaboratorsModal } = useModal('album-collaborators')
-const { close: closeShareLinkModal, open: openShareModal } = useModal('album-share-link')
 
-const album = ref<AlbumFull | null>(null)
-const loading = ref(true)
-const editingTitle = ref(false)
-const editingDescription = ref(false)
-const titleDraft = ref('')
-const descriptionDraft = ref('')
-const savingPhotoId = ref<number | null>(null)
-const deleting = ref(false)
-const inviteEmails = ref('')
-const inviting = ref(false)
-const removingCollaboratorId = ref<number | null>(null)
-const generatingShareLink = ref(false)
-const shareLinkCopied = ref(false)
+const editingTitle = shallowRef(false)
+const editingDescription = shallowRef(false)
+const titleDraft = shallowRef('')
+const descriptionDraft = shallowRef('')
+const savingPhotoId = shallowRef<number | null>(null)
+const deleting = shallowRef(false)
+const inviteEmails = shallowRef('')
+const inviting = shallowRef(false)
+const removingCollaboratorId = shallowRef<number | null>(null)
+const generatingShareLink = shallowRef(false)
+const shareLinkCopied = shallowRef(false)
+const isDeleteModalOpen = shallowRef(false)
+const isAddPhotoPickerOpen = shallowRef(false)
+const isCollaboratorsModalOpen = shallowRef(false)
+const isShareModalOpen = shallowRef(false)
+
+const { data: album, pending } = await useAsyncData(
+  'album',
+  async () => await fetchAlbum(albumId.value),
+)
+
+useHead({ title: computed(() => album.value?.title) })
 
 const isAdmin = computed(() => !!album.value && !!user.value && album.value.admin.id === user.value.id)
 const albumPhotoIds = computed(() => new Set(album.value?.photos.map(photo => photo.id) ?? []))
@@ -40,20 +42,6 @@ const albumPhotoIds = computed(() => new Set(album.value?.photos.map(photo => ph
 const shareUrl = computed(() => (album.value?.share_token && import.meta.client)
   ? `${window.location.origin}/albums/public/${album.value.share_token}`
   : null)
-
-async function loadAlbum() {
-  loading.value = true
-  try {
-    album.value = await fetchAlbum(albumId.value)
-  }
-  catch (error) {
-    addError(translateError(error))
-    await router.push('/albums')
-  }
-  finally {
-    loading.value = false
-  }
-}
 
 function startEditTitle() {
   titleDraft.value = album.value?.title ?? ''
@@ -73,7 +61,7 @@ async function saveTitle() {
     album.value = { ...album.value, ...updated }
   }
   catch (error) {
-    addError(translateError(error))
+    toast.add({ title: translateError(error), color: 'error' })
   }
 }
 
@@ -95,7 +83,7 @@ async function saveDescription() {
     album.value = { ...album.value, ...updated }
   }
   catch (error) {
-    addError(translateError(error))
+    toast.add({ title: translateError(error), color: 'error' })
   }
 }
 
@@ -105,15 +93,15 @@ async function confirmDelete() {
   deleting.value = true
   try {
     await deleteAlbum(album.value.id)
-    addSuccess(t('albumDeleted'))
-    await router.push('/albums')
+    toast.add({ title: t('albumDeleted') })
+    await navigateTo('/albums')
   }
   catch (error) {
-    addError(translateError(error))
+    toast.add({ title: translateError(error), color: 'error' })
   }
   finally {
     deleting.value = false
-    closeDeleteModal()
+    isDeleteModalOpen.value = false
   }
 }
 
@@ -127,7 +115,7 @@ async function togglePhoto(photoId: number) {
       : await addPhotoToAlbum(album.value.id, photoId)
   }
   catch (error) {
-    addError(translateError(error))
+    toast.add({ title: translateError(error), color: 'error' })
   }
   finally {
     savingPhotoId.value = null
@@ -135,7 +123,6 @@ async function togglePhoto(photoId: number) {
 }
 
 async function openAddPhotoPicker() {
-  openPicker()
   if (!libraryPhotos.value.length)
     await fetchNextLibraryPage()
 }
@@ -172,10 +159,10 @@ async function submitInvite() {
     const result = await addCollaborators(album.value.id, emails)
     album.value = result
     inviteEmails.value = ''
-    addSuccess(describeInviteResult(result))
+    toast.add({ title: describeInviteResult(result) })
   }
   catch (error) {
-    addError(translateError(error))
+    toast.add({ title: translateError(error), color: 'error' })
   }
   finally {
     inviting.value = false
@@ -190,7 +177,7 @@ async function removeCollaboratorFromAlbum(userId: number) {
     album.value = await removeCollaborator(album.value.id, userId)
   }
   catch (error) {
-    addError(translateError(error))
+    toast.add({ title: translateError(error), color: 'error' })
   }
   finally {
     removingCollaboratorId.value = null
@@ -202,7 +189,6 @@ async function removeCollaboratorFromAlbum(userId: number) {
 // shared this Album shouldn't need a separate "create" step before
 // seeing/copying a link.
 async function openShareLinkModal() {
-  openShareModal()
   if (album.value && !album.value.share_token)
     await regenerateShareLink()
 }
@@ -217,7 +203,7 @@ async function regenerateShareLink() {
     album.value = { ...album.value, share_token }
   }
   catch (error) {
-    addError(translateError(error))
+    toast.add({ title: translateError(error), color: 'error' })
   }
   finally {
     generatingShareLink.value = false
@@ -232,7 +218,7 @@ async function copyShareLink() {
     await navigator.clipboard.writeText(shareUrl.value)
   }
   catch (error) {
-    addError(translateError(error))
+    toast.add({ title: translateError(error), color: 'error' })
     return
   }
 
@@ -241,13 +227,11 @@ async function copyShareLink() {
     shareLinkCopied.value = false
   }, 5000)
 }
-
-onMounted(loadAlbum)
 </script>
 
 <template>
-  <div class="mx-auto flex max-w-5xl flex-col gap-y-8 py-10">
-    <p v-if="loading" class="text-center text-sm text-slate-500 dark:text-slate-300">
+  <div class="mx-auto flex max-w-5xl flex-col gap-y-8">
+    <p v-if="pending" class="text-center text-sm text-gray-500 dark:text-gray-300">
       {{ t('loading') }}
     </p>
 
@@ -258,12 +242,17 @@ onMounted(loadAlbum)
             v-if="editingTitle"
             v-model="titleDraft"
             autofocus
-            class="h-10 w-full max-w-md rounded border-none bg-white px-3 text-xl font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 dark:bg-slate-700"
+            class="w-fit rounded border-none text-xl font-semibold focus-visible:outline-none focus-visible:ring focus-visible:ring-green-600 bg-white dark:bg-gray-800"
             @keyup.enter="saveTitle"
             @keyup.esc="editingTitle = false"
             @blur="saveTitle"
           >
-          <button v-else type="button" class="w-fit text-left text-xl font-semibold hover:underline" @click="startEditTitle">
+          <button
+            v-else
+            type="button"
+            class="w-fit text-left text-xl font-semibold"
+            @click="startEditTitle"
+          >
             {{ album.title }}
           </button>
 
@@ -272,14 +261,14 @@ onMounted(loadAlbum)
             v-model="descriptionDraft"
             autofocus
             rows="2"
-            class="w-full max-w-md rounded border-none bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 dark:bg-slate-700"
+            class="w-full max-w-md rounded border-none text-sm focus-visible:outline-none focus-visible:ring focus-visible:ring-green-600 bg-white dark:bg-gray-800"
             @keyup.esc="editingDescription = false"
             @blur="saveDescription"
           />
           <button
             v-else
             type="button"
-            class="w-fit text-left text-sm text-slate-500 hover:underline dark:text-slate-300"
+            class="w-fit text-left text-sm text-gray-500 dark:text-gray-300"
             @click="startEditDescription"
           >
             {{ album.description || t('addDescriptionPlaceholder') }}
@@ -287,44 +276,222 @@ onMounted(loadAlbum)
         </div>
 
         <div class="flex shrink-0 gap-x-2">
-          <button
-            type="button"
-            class="flex h-10 items-center gap-x-2 rounded bg-slate-200 px-4 font-medium hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600"
-            @click="openCollaboratorsModal"
+          <UModal
+            v-model:open="isCollaboratorsModalOpen"
+            :title="t('collaboratorsButton')"
           >
-            <Icon name="ph:users" size="1.1em" />
-            {{ t('collaboratorsButton') }}
-          </button>
-          <button
+            <UTooltip :text="t('collaboratorsButton')">
+              <UButton
+                type="button"
+                :aria-label="t('collaboratorsButton')"
+                color="neutral"
+                variant="soft"
+                icon="ph:users"
+              />
+            </UTooltip>
+
+            <template #body>
+              <ul class="flex flex-col gap-y-2">
+                <li class="flex items-center justify-between gap-x-2">
+                  <span>{{ album?.admin.first_name }} {{ album?.admin.last_name }} <span class="text-xs text-gray-500 dark:text-gray-300">({{ t('admin') }})</span></span>
+                </li>
+                <li v-for="collaborator in album?.collaborators" :key="collaborator.id" class="flex items-center justify-between gap-x-2">
+                  <span>{{ collaborator.first_name }} {{ collaborator.last_name }}</span>
+                  <button
+                    v-if="isAdmin"
+                    type="button"
+                    :title="t('removeCollaboratorTitle')"
+                    :disabled="removingCollaboratorId === collaborator.id"
+                    class="flex h-8 w-8 items-center justify-center rounded-full text-red-500 hover:bg-gray-200 disabled:opacity-50 dark:hover:bg-gray-700"
+                    @click="removeCollaboratorFromAlbum(collaborator.id)"
+                  >
+                    <Icon name="ph:x-bold" />
+                  </button>
+                </li>
+              </ul>
+
+              <UForm
+                v-if="isAdmin"
+                class="space-y-2"
+                :state="{ inviteEmails }"
+                novalidate
+                @submit.prevent="submitInvite"
+              >
+                <UFormField :label="t('inviteByEmailLabel')" name="inviteEmails">
+                  <UInput
+                    v-model="inviteEmails"
+                    type="text"
+                    autofocus
+                    :placeholder="t('inviteByEmailPlaceholder')"
+                    autocomplete="off"
+                    class="w-full"
+                  />
+                </UFormField>
+                <UButton
+                  type="submit"
+                  :disabled="!inviteEmails.trim()"
+                  :loading="inviting"
+                  block
+                  :label="inviting ? t('inviting') : t('inviteButton')"
+                />
+              </UForm>
+            </template>
+
+            <template #footer="{ close }">
+              <UButton
+                type="button"
+                :label="t('done')"
+                color="neutral"
+                variant="soft"
+                @click="close"
+              />
+            </template>
+          </UModal>
+
+          <UModal
             v-if="isAdmin"
-            type="button"
-            class="flex h-10 items-center gap-x-2 rounded bg-slate-200 px-4 font-medium hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600"
-            @click="openShareLinkModal"
+            v-model:open="isShareModalOpen"
+            :title="album?.title ?? ''"
+            :description="t('shareDescription')"
           >
-            <Icon name="ph:share-network" size="1.1em" />
-            {{ t('shareButton') }}
-          </button>
-          <button
-            type="button"
-            class="flex h-10 items-center gap-x-2 rounded bg-green-500 px-4 font-medium text-white hover:bg-green-600"
-            @click="openAddPhotoPicker"
+            <UTooltip :text="t('shareButton')">
+              <UButton
+                type="button"
+                :aria-label="t('shareButton')"
+                color="neutral"
+                variant="soft"
+                icon="ph:share-network"
+                @click="openShareLinkModal"
+              />
+            </UTooltip>
+
+            <template #body>
+              <p v-if="generatingShareLink" class="text-sm text-gray-500 dark:text-gray-300">
+                {{ t('generatingLink') }}
+              </p>
+              <div v-else-if="shareUrl" class="wrap-break-words font-light rounded bg-white px-3 py-2 text-sm dark:bg-gray-700">
+                {{ shareUrl }}
+              </div>
+            </template>
+
+            <template #footer>
+              <UButton
+                type="button"
+                :label="t('generateNewLink')"
+                color="neutral"
+                variant="soft"
+                @click="regenerateShareLink"
+              />
+              <UButton
+                type="button"
+                :disabled="!shareUrl || shareLinkCopied"
+                :icon="shareLinkCopied ? 'ph:check-bold' : 'ph:copy'"
+                :label="shareLinkCopied ? t('copied') : t('copy')"
+                color="neutral"
+                variant="soft"
+                @click="copyShareLink"
+              />
+            </template>
+          </UModal>
+
+          <UModal
+            v-model:open="isAddPhotoPickerOpen"
+            :title="t('addPhotosModalTitle')"
           >
-            <Icon name="ph:plus" size="1.1em" />
-            {{ t('addPhotosButton') }}
-          </button>
-          <button
+            <UTooltip :text="t('addPhotosButton')">
+              <UButton
+                type="button"
+                :aria-label="t('addPhotosButton')"
+                color="neutral"
+                variant="soft"
+                icon="ph:plus"
+                @click="openAddPhotoPicker"
+              />
+            </UTooltip>
+
+            <template #body>
+              <p v-if="!libraryPhotos.length && !libraryLoading" class="text-gray-500 dark:text-gray-300">
+                {{ t('libraryEmpty') }}
+              </p>
+
+              <div class="grid grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4">
+                <button
+                  v-for="photo in libraryPhotos"
+                  :key="photo.id"
+                  type="button"
+                  :disabled="savingPhotoId === photo.id"
+                  class="group relative aspect-square overflow-hidden rounded disabled:opacity-50"
+                  @click="togglePhoto(photo.id)"
+                >
+                  <img :src="photo.url" :alt="t('photoAlt', { id: photo.id })" class="h-full w-full object-cover">
+                  <div
+                    v-if="albumPhotoIds.has(photo.id)"
+                    class="absolute inset-0 flex items-center justify-center bg-green-500/50"
+                  >
+                    <Icon name="ph:check-bold" class="text-white" size="1.5em" />
+                  </div>
+                </button>
+              </div>
+
+              <button
+                v-if="libraryHasMore"
+                type="button"
+                class="text-sm text-green-600 hover:underline dark:text-green-400"
+                :disabled="libraryLoading"
+                @click="fetchNextLibraryPage"
+              >
+                {{ libraryLoading ? t('loading') : t('loadMore') }}
+              </button>
+            </template>
+
+            <template #footer="{ close }">
+              <UButton
+                type="button"
+                :label="t('done')"
+                color="neutral"
+                variant="soft"
+                @click="close"
+              />
+            </template>
+          </UModal>
+
+          <UModal
             v-if="isAdmin"
-            type="button"
-            class="flex h-10 items-center gap-x-2 rounded bg-slate-200 px-4 font-medium text-red-500 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600"
-            @click="openDeleteModal"
+            v-model:open="isDeleteModalOpen"
+            :title="t('deleteModalTitle')"
+            :description="t('deleteModalBody')"
           >
-            <Icon name="ph:trash" size="1.1em" />
-            {{ t('deleteButton') }}
-          </button>
+            <UTooltip :text="t('deleteButton')">
+              <UButton
+                type="button"
+                :aria-label="t('deleteButton')"
+                color="error"
+                variant="soft"
+                icon="ph:trash"
+              />
+            </UTooltip>
+
+            <template #footer="{ close }">
+              <UButton
+                type="button"
+                :label="t('cancel')"
+                color="neutral"
+                variant="soft"
+                @click="close"
+              />
+              <UButton
+                type="button"
+                :loading="deleting"
+                :label="deleting ? t('deleting') : t('deleteButton')"
+                color="error"
+                @click="confirmDelete"
+              />
+            </template>
+          </UModal>
         </div>
       </div>
 
-      <div v-if="!album.photos.length" class="py-20 text-center text-slate-500 dark:text-slate-300">
+      <div v-if="!album.photos.length" class="py-20 text-center text-gray-500 dark:text-gray-300">
         <p>{{ t('emptyAlbum') }}</p>
       </div>
 
@@ -343,174 +510,6 @@ onMounted(loadAlbum)
         </div>
       </div>
     </template>
-
-    <AppModal name="delete-album">
-      <div class="flex flex-col gap-y-6">
-        <h2 class="text-lg font-semibold">
-          {{ t('deleteModalTitle') }}
-        </h2>
-        <p>{{ t('deleteModalBody') }}</p>
-        <div class="flex justify-end gap-3">
-          <button type="button" class="h-10 rounded bg-slate-200 px-4 font-medium hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600" @click="closeDeleteModal">
-            {{ t('cancel') }}
-          </button>
-          <button type="button" :disabled="deleting" class="h-10 rounded bg-red-500 px-4 font-medium text-white hover:bg-red-600 disabled:opacity-50" @click="confirmDelete">
-            {{ deleting ? t('deleting') : t('deleteButton') }}
-          </button>
-        </div>
-      </div>
-    </AppModal>
-
-    <AppModal name="add-photo-to-album">
-      <div class="flex max-h-[80vh] flex-col gap-y-4">
-        <h2 class="text-lg font-semibold">
-          {{ t('addPhotosModalTitle') }}
-        </h2>
-
-        <div v-if="!libraryPhotos.length && !libraryLoading" class="py-10 text-center text-slate-500 dark:text-slate-300">
-          <p>{{ t('libraryEmpty') }}</p>
-        </div>
-
-        <div class="grid grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4">
-          <button
-            v-for="photo in libraryPhotos"
-            :key="photo.id"
-            type="button"
-            :disabled="savingPhotoId === photo.id"
-            class="group relative aspect-square overflow-hidden rounded disabled:opacity-50"
-            @click="togglePhoto(photo.id)"
-          >
-            <img :src="photo.url" :alt="t('photoAlt', { id: photo.id })" class="h-full w-full object-cover">
-            <div
-              v-if="albumPhotoIds.has(photo.id)"
-              class="absolute inset-0 flex items-center justify-center bg-green-500/50"
-            >
-              <Icon name="ph:check-bold" class="text-white" size="1.5em" />
-            </div>
-          </button>
-        </div>
-
-        <button
-          v-if="libraryHasMore"
-          type="button"
-          class="text-sm text-green-600 hover:underline dark:text-green-400"
-          :disabled="libraryLoading"
-          @click="fetchNextLibraryPage"
-        >
-          {{ libraryLoading ? t('loading') : t('loadMore') }}
-        </button>
-
-        <button
-          type="button"
-          class="mt-2 h-10 rounded bg-slate-200 px-4 font-medium hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600"
-          @click="closePicker"
-        >
-          {{ t('done') }}
-        </button>
-      </div>
-    </AppModal>
-
-    <AppModal name="album-collaborators">
-      <div class="flex flex-col gap-y-4">
-        <h2 class="text-lg font-semibold">
-          {{ t('collaboratorsButton') }}
-        </h2>
-
-        <ul class="flex flex-col gap-y-2">
-          <li class="flex items-center justify-between gap-x-2">
-            <span>{{ album?.admin.first_name }} {{ album?.admin.last_name }} <span class="text-xs text-slate-500 dark:text-slate-300">({{ t('admin') }})</span></span>
-          </li>
-          <li v-for="collaborator in album?.collaborators" :key="collaborator.id" class="flex items-center justify-between gap-x-2">
-            <span>{{ collaborator.first_name }} {{ collaborator.last_name }}</span>
-            <button
-              v-if="isAdmin"
-              type="button"
-              :title="t('removeCollaboratorTitle')"
-              :disabled="removingCollaboratorId === collaborator.id"
-              class="flex h-8 w-8 items-center justify-center rounded-full text-red-500 hover:bg-slate-200 disabled:opacity-50 dark:hover:bg-slate-700"
-              @click="removeCollaboratorFromAlbum(collaborator.id)"
-            >
-              <Icon name="ph:x-bold" />
-            </button>
-          </li>
-        </ul>
-
-        <form v-if="isAdmin" class="flex flex-col gap-y-2" @submit.prevent="submitInvite">
-          <label class="flex w-full flex-col gap-y-1">
-            <span class="text-sm text-slate-600 dark:text-slate-300">{{ t('inviteByEmailLabel') }}</span>
-            <input
-              v-model="inviteEmails"
-              type="text"
-              :placeholder="t('inviteByEmailPlaceholder')"
-              class="h-10 w-full rounded border-none bg-white px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 dark:bg-slate-700"
-            >
-          </label>
-          <button
-            type="submit"
-            :disabled="inviting || !inviteEmails.trim()"
-            class="h-10 rounded bg-green-500 px-4 font-medium text-white hover:bg-green-600 disabled:opacity-50"
-          >
-            {{ inviting ? t('inviting') : t('inviteButton') }}
-          </button>
-        </form>
-
-        <button
-          type="button"
-          class="mt-2 h-10 rounded bg-slate-200 px-4 font-medium hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600"
-          @click="closeCollaboratorsModal"
-        >
-          {{ t('done') }}
-        </button>
-      </div>
-    </AppModal>
-
-    <AppModal name="album-share-link">
-      <div class="flex flex-col gap-y-4">
-        <i18n-t keypath="shareHeading" tag="h2" class="text-lg font-semibold">
-          <template #title>
-            {{ album?.title }}
-          </template>
-        </i18n-t>
-
-        <p class="text-sm text-slate-600 dark:text-slate-300">
-          {{ t('shareDescription') }}
-        </p>
-
-        <p v-if="generatingShareLink" class="text-sm text-slate-500 dark:text-slate-300">
-          {{ t('generatingLink') }}
-        </p>
-        <div v-else-if="shareUrl" class="break-words rounded bg-white px-3 py-2 text-sm dark:bg-slate-700">
-          {{ shareUrl }}
-        </div>
-
-        <div class="flex justify-end gap-x-2">
-          <button
-            type="button"
-            class="h-10 rounded bg-slate-200 px-4 font-medium hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600"
-            @click="regenerateShareLink"
-          >
-            {{ t('generateNewLink') }}
-          </button>
-          <button
-            type="button"
-            :disabled="!shareUrl || shareLinkCopied"
-            class="flex h-10 items-center gap-x-2 rounded bg-green-500 px-4 font-medium text-white hover:bg-green-600 disabled:opacity-50"
-            @click="copyShareLink"
-          >
-            <Icon :name="shareLinkCopied ? 'ph:check-bold' : 'ph:copy'" size="1.1em" />
-            {{ shareLinkCopied ? t('copied') : t('copy') }}
-          </button>
-        </div>
-
-        <button
-          type="button"
-          class="mt-2 h-10 rounded bg-slate-200 px-4 font-medium hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600"
-          @click="closeShareLinkModal"
-        >
-          {{ t('close') }}
-        </button>
-      </div>
-    </AppModal>
   </div>
 </template>
 

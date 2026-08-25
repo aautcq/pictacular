@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import type { PublicAlbum } from '~/composables/useAlbums'
-
 // Public, read-only Album view (issue #53): reachable by anyone with the
 // link, no `auth`/`guest` middleware — a signed-in User browsing their own
 // shared link should see the same thing an anonymous visitor does.
@@ -8,28 +6,19 @@ const route = useRoute()
 const token = computed(() => route.params.token as string)
 
 const { fetchPublicAlbum } = useAlbums()
-const { t } = useI18n()
+const { t } = useI18n({ useScope: 'local', inheritLocale: true })
 
-const status = ref<'loading' | 'ready' | 'error'>('loading')
-const album = ref<PublicAlbum | null>(null)
+const { data: album, status } = await useAsyncData(
+  `album-public-${token.value}`,
+  async () => await fetchPublicAlbum(token.value),
+)
 
-async function loadAlbum() {
-  status.value = 'loading'
-  try {
-    album.value = await fetchPublicAlbum(token.value)
-    status.value = 'ready'
-  }
-  catch {
-    status.value = 'error'
-  }
-}
-
-onMounted(loadAlbum)
+useHead({ title: computed(() => album.value?.title) })
 </script>
 
 <template>
-  <div class="mx-auto flex max-w-5xl flex-col gap-y-8 py-10">
-    <p v-if="status === 'loading'" class="text-center text-sm text-slate-500 dark:text-slate-300">
+  <div class="mx-auto flex max-w-5xl flex-col gap-y-8">
+    <p v-if="status === 'pending'" class="text-center text-sm text-gray-500 dark:text-gray-300">
       {{ t('loading') }}
     </p>
 
@@ -45,23 +34,30 @@ onMounted(loadAlbum)
         <h1 class="text-xl font-semibold">
           {{ album.title }}
         </h1>
-        <p v-if="album.description" class="text-sm text-slate-500 dark:text-slate-300">
+        <p v-if="album.description" class="text-sm text-gray-500 dark:text-gray-300">
           {{ album.description }}
         </p>
-        <i18n-t keypath="sharedBy" tag="p" class="text-xs text-slate-500 dark:text-slate-300">
-          <template #name>
-            {{ album.admin.first_name }} {{ album.admin.last_name }}
-          </template>
-        </i18n-t>
+        <p class="text-xs text-gray-500 dark:text-gray-300">
+          {{ t('sharedBy', { name: `${album.admin.first_name} ${album.admin.last_name}` }) }}
+        </p>
       </div>
 
-      <div v-if="!album.photos.length" class="py-20 text-center text-slate-500 dark:text-slate-300">
+      <div v-if="!album.photos.length" class="py-20 text-center text-gray-500 dark:text-gray-300">
         <p>{{ t('emptyAlbum') }}</p>
       </div>
 
       <div v-else class="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-6">
-        <div v-for="photo in album.photos" :key="photo.id" class="aspect-square overflow-hidden rounded">
-          <img :src="photo.url" :alt="t('photoAlt', { id: photo.id })" class="h-full w-full object-cover" loading="lazy">
+        <div
+          v-for="photo in album.photos"
+          :key="photo.id"
+          class="aspect-square overflow-hidden rounded"
+        >
+          <img
+            :src="photo.url"
+            :alt="t('photoAlt', { id: photo.id })"
+            class="h-full w-full object-cover"
+            loading="lazy"
+          >
         </div>
       </div>
     </template>

@@ -55,8 +55,8 @@ implementers, not enforced by a wrapper component):
 | Current style | Example | `UButton` props |
 |---|---|---|
 | `bg-green-500` solid, white text | submit/primary actions | `color="primary" variant="solid"` |
-| `bg-slate-200` hover fill | secondary actions (cancel, clear selection) | `color="neutral" variant="soft"` |
-| `border border-slate-300` outline | secondary alt (sign in with biometrics) | `color="neutral" variant="outline"` |
+| `bg-gray-200` hover fill | secondary actions (cancel, clear selection) | `color="neutral" variant="soft"` |
+| `border border-gray-300` outline | secondary alt (sign in with biometrics) | `color="neutral" variant="outline"` |
 | `bg-red-500` solid, white text | destructive (delete, confirm-delete) | `color="error" variant="solid"` |
 | icon-only, no bg | header/modal/lightbox icon buttons | `variant="ghost"` (+ `square` where icon-only) |
 | text + underline, colored | inline text links (e.g. "select day") | `variant="link" color="primary"` |

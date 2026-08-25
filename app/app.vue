@@ -7,11 +7,10 @@ await callOnce('fetch-current-user', () => fetchCurrentUser())
 </script>
 
 <template>
-  <div>
+  <UApp>
     <AppHeader />
     <main class="container relative mx-auto mt-20 max-w-5xl px-6">
       <NuxtPage />
     </main>
-    <AppAlerts />
-  </div>
+  </UApp>
 </template>

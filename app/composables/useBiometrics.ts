@@ -35,9 +35,9 @@ export function useBiometrics() {
   }
 
   async function signIn() {
-    const options = await $fetch<PublicKeyCredentialRequestOptionsJSON>('/api/auth/biometrics/assertion-options')
+    const options = await useRequestFetch()<PublicKeyCredentialRequestOptionsJSON>('/api/auth/biometrics/assertion-options')
     const response = await startAuthentication(options)
-    const user = await $fetch<CurrentUser>('/api/auth/biometrics/verify', { method: 'POST', body: response })
+    const user = await useRequestFetch()<CurrentUser>('/api/auth/biometrics/verify', { method: 'POST', body: response })
     storedCredentialId.value = response.id
     return user
   }

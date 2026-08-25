@@ -34,7 +34,6 @@ export function useCurrentUser() {
       // Nitro/Nuxt typed-fetch limitation (see e.g. nitrojs/nitro#470),
       // not a real type error. The explicit `<CurrentUser>` generic below
       // already gives this call its real return type.
-      // @ts-expect-error — see comment above.
       const requestFetch = import.meta.server ? useRequestFetch() : $fetch
       user.value = await requestFetch<CurrentUser>('/api/users/me')
     }
@@ -53,7 +52,8 @@ export function useCurrentUser() {
   }
 
   async function verifyAccount(token: string) {
-    await $fetch(`/api/auth/verify/${token}`)
+    const requestFetch = import.meta.server ? useRequestFetch() : $fetch
+    await await requestFetch(`/api/auth/verify/${token}`)
   }
 
   async function login(email: string, password: string) {
@@ -104,7 +104,7 @@ export function useCurrentUser() {
   }
 
   async function checkBucket() {
-    const { has_photos } = await $fetch<{ has_photos: boolean }>('/api/storage-connections/check-bucket')
+    const { has_photos } = await useRequestFetch()<{ has_photos: boolean }>('/api/storage-connections/check-bucket')
     return has_photos
   }
 

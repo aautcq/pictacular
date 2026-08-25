@@ -13,9 +13,6 @@ node_modules
 # Prisma generated client
 /server/generated
 
-server.crt
-server.key
-
 # Logs
 logs
 *.log

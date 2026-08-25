@@ -1,19 +1,12 @@
 <script setup lang="ts">
 const route = useRoute()
 const { verifyAccount } = useCurrentUser()
-const { t } = useI18n()
+const { t } = useI18n({ useScope: 'local', inheritLocale: true })
 
-const status = ref<'pending' | 'success' | 'error'>('pending')
-
-onMounted(async () => {
-  try {
-    await verifyAccount(route.params.token as string)
-    status.value = 'success'
-  }
-  catch {
-    status.value = 'error'
-  }
-})
+const { status } = await useAsyncData(
+  `verification-${route.params.token as string}`,
+  async () => await verifyAccount(route.params.token as string),
+)
 </script>
 
 <template>

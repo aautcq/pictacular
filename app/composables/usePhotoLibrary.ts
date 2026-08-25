@@ -55,11 +55,13 @@ export function usePhotoLibrary() {
 
     loading.value = true
     try {
-      const query = nextCursor.value ? `?cursor=${nextCursor.value}` : ''
-      const response = await $fetch<{ photos: Photo[], next_cursor: number | null }>(`/api/photos${query}`)
+      const response = await useRequestFetch()<{ photos: Photo[], next_cursor: number | null }>('/api/photos', {
+        query: nextCursor.value === null ? undefined : { cursor: nextCursor.value },
+      })
       photos.value = [...photos.value, ...response.photos]
       nextCursor.value = response.next_cursor
       loaded.value = true
+      return photos.value
     }
     finally {
       loading.value = false
