@@ -39,6 +39,7 @@ const toast = useToast()
 const sentinel = useTemplateRef<HTMLElement | null>('sentinel')
 const deleting = shallowRef(false)
 
+const isAddToAlbumModalOpen = shallowRef(false)
 const isDeleteModalOpen = shallowRef(false)
 
 await useAsyncData('photos', fetchNextPage)
@@ -102,6 +103,13 @@ async function handleFiles(fileList: FileList | null) {
 }
 
 const settingsItems = ref<DropdownMenuItem[][]>([
+  [
+    {
+      label: t('addToAlbumButton'),
+      icon: 'ph:plus',
+      onSelect: () => { isAddToAlbumModalOpen.value = true },
+    },
+  ],
   [
     {
       label: t('download'),
@@ -213,6 +221,12 @@ onUnmounted(() => {
         />
       </Transition>
 
+      <AddToAlbumModal
+        v-model:is-open="isAddToAlbumModalOpen"
+        :photo-ids="[...selectedIds]"
+        @added="clearSelection"
+      />
+
       <UModal
         v-model:open="isDeleteModalOpen"
         :title="t('deleteModalTitle', selectedCount)"
@@ -257,6 +271,7 @@ onUnmounted(() => {
     "like": "Like",
     "photosDeleted": "Photos deleted.",
     "settings": "Settings",
+    "addToAlbumButton": "Add to album",
     "deleteModalTitle": "Delete {count} photo | Delete {count} photos",
     "deleteModalBody": "This action is irreversible. Are you sure?",
     "deleting": "Deleting…",
