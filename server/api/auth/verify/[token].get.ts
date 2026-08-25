@@ -1,4 +1,4 @@
-import { prisma } from '../../../utils/prisma'
+import { prisma } from '#server/utils/prisma'
 
 // Replaces the former AuthController#verify (GET /auth/verify/:token).
 //

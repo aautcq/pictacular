@@ -1,6 +1,6 @@
-import { requireAlbumIdParam, requireAlbumMembership, requireOwnPhoto, requirePhotoIdRouteParam } from '../../../../utils/album-guards'
-import { prisma } from '../../../../utils/prisma'
-import { serializeAlbumFull } from '../../../../utils/serialize-album'
+import { requireAlbumIdParam, requireAlbumMembership, requireOwnPhoto, requirePhotoIdRouteParam } from '#server/utils/album-guards'
+import { prisma } from '#server/utils/prisma'
+import { serializeAlbumFull } from '#server/utils/serialize-album'
 
 // Adds one of the requesting User's own Photos to an Album they're a
 // member of (issue #51). Idempotent (upserting the composite

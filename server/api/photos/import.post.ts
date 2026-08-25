@@ -1,8 +1,8 @@
-import { requirePhotoStorageConnection } from '../../utils/photo-guards'
-import { prisma } from '../../utils/prisma'
-import { serializePhoto } from '../../utils/serialize-photo'
-import { listAllBucketImages, mimeTypeFromKey } from '../../utils/storage'
-import { sendMessageToUser } from '../../utils/websocket'
+import { requirePhotoStorageConnection } from '#server/utils/photo-guards'
+import { prisma } from '#server/utils/prisma'
+import { serializePhoto } from '#server/utils/serialize-photo'
+import { listAllBucketImages, mimeTypeFromKey } from '#server/utils/storage'
+import { sendMessageToUser } from '#server/utils/websocket'
 
 // Imports the authenticated User's pre-existing bucket contents into
 // Pictacular (issue #54): walks every page of the connected bucket,

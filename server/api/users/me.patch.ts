@@ -1,7 +1,7 @@
-import { Prisma } from '../../generated/prisma/client'
-import { comparePassword, hashPassword } from '../../utils/crypto'
-import { prisma } from '../../utils/prisma'
-import { updateUserSchema } from '../../utils/validation/update-user'
+import { Prisma } from '#server/generated/prisma/client'
+import { comparePassword, hashPassword } from '#server/utils/crypto'
+import { prisma } from '#server/utils/prisma'
+import { updateUserSchema } from '#server/utils/validation/update-user'
 
 // Replaces the former UsersController#update (protected PATCH /users/:id):
 // updates the authenticated user's own account details only — the target

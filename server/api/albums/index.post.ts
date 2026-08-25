@@ -1,7 +1,7 @@
-import { memberSelect } from '../../utils/album-guards'
-import { prisma } from '../../utils/prisma'
-import { serializeAlbumSummary } from '../../utils/serialize-album'
-import { albumCreateSchema } from '../../utils/validation/album'
+import { memberSelect } from '#server/utils/album-guards'
+import { prisma } from '#server/utils/prisma'
+import { serializeAlbumSummary } from '#server/utils/serialize-album'
+import { albumCreateSchema } from '#server/utils/validation/album'
 
 // Creates a new Album (issue #51) owned by the authenticated User, who
 // becomes both its admin and its (only, so far) member — connecting them

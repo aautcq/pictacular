@@ -1,12 +1,12 @@
-import type { AccessToken } from '../utils/jwt'
+import type { AccessToken } from '#server/utils/jwt'
 import { parse } from 'cookie-es'
 import { defineWebSocketHandler } from 'h3'
-import { accessTokenCookieName } from '../utils/cookies'
-import { verifyToken } from '../utils/jwt'
-import { prisma } from '../utils/prisma'
-import { pushMessageSchema } from '../utils/validation/websocket'
-import { sendPushNotification } from '../utils/web-push'
-import { registerPeer, unregisterPeer } from '../utils/websocket'
+import { accessTokenCookieName } from '#server/utils/cookies'
+import { verifyToken } from '#server/utils/jwt'
+import { prisma } from '#server/utils/prisma'
+import { pushMessageSchema } from '#server/utils/validation/websocket'
+import { sendPushNotification } from '#server/utils/web-push'
+import { registerPeer, unregisterPeer } from '#server/utils/websocket'
 
 // Native-WebSocket rewrite of the former Socket.IO GatewayService, using
 // Nitro's `defineWebSocketHandler` (h3/crossws) — a wire-protocol rewrite,

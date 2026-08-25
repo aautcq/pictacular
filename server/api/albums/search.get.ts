@@ -1,7 +1,7 @@
-import { memberSelect } from '../../utils/album-guards'
-import { prisma } from '../../utils/prisma'
-import { loadAlbumCovers, serializeAlbumSummary } from '../../utils/serialize-album'
-import { albumSearchQuerySchema } from '../../utils/validation/album'
+import { memberSelect } from '#server/utils/album-guards'
+import { prisma } from '#server/utils/prisma'
+import { loadAlbumCovers, serializeAlbumSummary } from '#server/utils/serialize-album'
+import { albumSearchQuerySchema } from '#server/utils/validation/album'
 
 // Searches the authenticated User's own Albums by keyword (issue #51),
 // matching the title or description case-insensitively. Same lightweight

@@ -1,6 +1,6 @@
-import { webauthnChallengeCookieName, webauthnChallengeCookieOptions } from '../../../utils/cookies'
-import { prisma } from '../../../utils/prisma'
-import { getRegistrationOptions } from '../../../utils/webauthn'
+import { webauthnChallengeCookieName, webauthnChallengeCookieOptions } from '#server/utils/cookies'
+import { prisma } from '#server/utils/prisma'
+import { getRegistrationOptions } from '#server/utils/webauthn'
 
 // Protected GET /api/auth/biometrics/registration-options: returns WebAuthn
 // registration options for the authenticated user's account, replacing the

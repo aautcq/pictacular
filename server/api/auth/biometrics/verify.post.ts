@@ -5,13 +5,13 @@ import {
   refreshTokenCookieOptions,
   webauthnChallengeCookieName,
   webauthnChallengeCookieOptions,
-} from '../../../utils/cookies'
-import { hashToken } from '../../../utils/crypto'
-import { createTokens } from '../../../utils/jwt'
-import { prisma } from '../../../utils/prisma'
-import { serializeUser } from '../../../utils/serialize-user'
-import { verifyAssertionSchema } from '../../../utils/validation/biometrics'
-import { verifyAssertion } from '../../../utils/webauthn'
+} from '#server/utils/cookies'
+import { hashToken } from '#server/utils/crypto'
+import { createTokens } from '#server/utils/jwt'
+import { prisma } from '#server/utils/prisma'
+import { serializeUser } from '#server/utils/serialize-user'
+import { verifyAssertionSchema } from '#server/utils/validation/biometrics'
+import { verifyAssertion } from '#server/utils/webauthn'
 
 // Unauthenticated POST /api/auth/biometrics/verify: on a successful
 // assertion, produces the exact same side effects as password login

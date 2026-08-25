@@ -1,10 +1,10 @@
-import { Prisma } from '../../generated/prisma/client'
-import { hashPassword } from '../../utils/crypto'
-import { issueEmailViaOutbox } from '../../utils/email-outbox'
-import { getPreferredLang } from '../../utils/i18n/lang'
-import { prisma } from '../../utils/prisma'
-import { registerSchema } from '../../utils/validation/register'
-import { generateUniqueVerificationToken } from '../../utils/verification-token'
+import { Prisma } from '#server/generated/prisma/client'
+import { hashPassword } from '#server/utils/crypto'
+import { issueEmailViaOutbox } from '#server/utils/email-outbox'
+import { getPreferredLang } from '#server/utils/i18n/lang'
+import { prisma } from '#server/utils/prisma'
+import { registerSchema } from '#server/utils/validation/register'
+import { generateUniqueVerificationToken } from '#server/utils/verification-token'
 
 // Replaces the former AuthController#register (POST /auth/users): creates
 // an unverified user with a hashed password and a verification token, then
@@ -17,6 +17,10 @@ export default defineEventHandler(async (event) => {
     throw createError({
       statusCode: 400,
       statusMessage: 'auth.invalid_payload',
+      data: result.error.issues.map(issue => ({
+        name: issue.path[0],
+        message: issue.message,
+      })),
     })
   }
 

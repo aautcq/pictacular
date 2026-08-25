@@ -1,5 +1,5 @@
-import { webauthnChallengeCookieName, webauthnChallengeCookieOptions } from '../../../utils/cookies'
-import { getAssertionOptions } from '../../../utils/webauthn'
+import { webauthnChallengeCookieName, webauthnChallengeCookieOptions } from '#server/utils/cookies'
+import { getAssertionOptions } from '#server/utils/webauthn'
 
 // Unauthenticated GET /api/auth/biometrics/assertion-options: returns
 // WebAuthn assertion options to start a biometric login from a logged-out

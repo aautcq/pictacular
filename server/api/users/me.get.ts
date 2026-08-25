@@ -1,5 +1,5 @@
-import { prisma } from '../../utils/prisma'
-import { serializeUser } from '../../utils/serialize-user'
+import { prisma } from '#server/utils/prisma'
+import { serializeUser } from '#server/utils/serialize-user'
 
 // Replaces the former UsersController#findOne (protected GET /users/me):
 // returns the authenticated user's own profile fields, plus a signed

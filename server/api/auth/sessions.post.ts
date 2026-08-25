@@ -3,13 +3,13 @@ import {
   accessTokenCookieOptions,
   refreshTokenCookieName,
   refreshTokenCookieOptions,
-} from '../../utils/cookies'
-import { comparePassword, hashToken } from '../../utils/crypto'
-import { issuePasswordResetEmail } from '../../utils/issue-password-reset-email'
-import { createTokens } from '../../utils/jwt'
-import { prisma } from '../../utils/prisma'
-import { serializeUser } from '../../utils/serialize-user'
-import { loginSchema } from '../../utils/validation/login'
+} from '#server/utils/cookies'
+import { comparePassword, hashToken } from '#server/utils/crypto'
+import { issuePasswordResetEmail } from '#server/utils/issue-password-reset-email'
+import { createTokens } from '#server/utils/jwt'
+import { prisma } from '#server/utils/prisma'
+import { serializeUser } from '#server/utils/serialize-user'
+import { loginSchema } from '#server/utils/validation/login'
 
 // Replaces the former AuthController#login (POST /auth/sessions): rejects
 // invalid credentials or unverified accounts identically (no enumeration),

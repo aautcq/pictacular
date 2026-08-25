@@ -1,7 +1,7 @@
-import { webauthnChallengeCookieName, webauthnChallengeCookieOptions } from '../../../utils/cookies'
-import { prisma } from '../../../utils/prisma'
-import { registerCredentialSchema } from '../../../utils/validation/biometrics'
-import { verifyRegistration } from '../../../utils/webauthn'
+import { webauthnChallengeCookieName, webauthnChallengeCookieOptions } from '#server/utils/cookies'
+import { prisma } from '#server/utils/prisma'
+import { registerCredentialSchema } from '#server/utils/validation/biometrics'
+import { verifyRegistration } from '#server/utils/webauthn'
 
 // Protected POST /api/auth/biometrics: stores a new biometric credential for
 // the authenticated user, replacing the former BiometricsController#create.

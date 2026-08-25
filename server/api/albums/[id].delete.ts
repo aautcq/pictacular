@@ -1,5 +1,5 @@
-import { requireAlbumAdmin, requireAlbumIdParam, requireAlbumMembership } from '../../utils/album-guards'
-import { prisma } from '../../utils/prisma'
+import { requireAlbumAdmin, requireAlbumIdParam, requireAlbumMembership } from '#server/utils/album-guards'
+import { prisma } from '#server/utils/prisma'
 
 // Deletes an Album (issue #51), restricted to its admin — a Collaborator
 // who's a member but not the admin gets a 403, enforced server-side (not

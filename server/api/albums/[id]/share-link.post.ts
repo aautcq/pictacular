@@ -1,6 +1,6 @@
-import { requireAlbumAdmin, requireAlbumIdParam, requireAlbumMembership } from '../../../utils/album-guards'
-import { prisma } from '../../../utils/prisma'
-import { generateUniqueShareToken } from '../../../utils/share-link-token'
+import { requireAlbumAdmin, requireAlbumIdParam, requireAlbumMembership } from '#server/utils/album-guards'
+import { prisma } from '#server/utils/prisma'
+import { generateUniqueShareToken } from '#server/utils/share-link-token'
 
 // Generates (or rotates) an Album's Public Share Link token (issue #53),
 // admin-only: any prior token is simply overwritten, so an already

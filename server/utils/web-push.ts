@@ -1,4 +1,3 @@
-import process from 'node:process'
 import webpush from 'web-push'
 
 export interface WebPushSubscription {
@@ -22,11 +21,12 @@ export async function sendPushNotification(
   title: string,
   body: string,
 ) {
+  const config = useRuntimeConfig()
   const options = {
     vapidDetails: {
       subject: 'mailto:pictacular@aautcq.com',
-      publicKey: process.env.WEB_PUSH_PUBLIC_KEY as string,
-      privateKey: process.env.WEB_PUSH_PRIVATE_KEY as string,
+      publicKey: config.webPush.publicKey,
+      privateKey: config.webPush.privateKey,
     },
     TTL: 60,
   }

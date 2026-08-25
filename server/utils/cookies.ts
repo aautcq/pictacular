@@ -16,7 +16,7 @@ const genericCookieOptions: CookieSerializeOptions = {
   sameSite: import.meta.dev ? 'lax' : 'none',
   secure: !import.meta.dev,
   path: '/',
-  domain: process.env.COOKIE_DOMAIN,
+  domain: process.env.NUXT_COOKIE_DOMAIN,
 }
 
 export const accessTokenCookieOptions: CookieSerializeOptions = {

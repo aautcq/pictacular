@@ -1,6 +1,6 @@
-import { requireAlbumAdmin, requireAlbumIdParam, requireAlbumMembership } from '../../../../utils/album-guards'
-import { prisma } from '../../../../utils/prisma'
-import { serializeAlbumFull } from '../../../../utils/serialize-album'
+import { requireAlbumAdmin, requireAlbumIdParam, requireAlbumMembership } from '#server/utils/album-guards'
+import { prisma } from '#server/utils/prisma'
+import { serializeAlbumFull } from '#server/utils/serialize-album'
 
 // Removes a Collaborator from an Album (issue #52), admin-only. Removing
 // the admin themselves isn't "removing a Collaborator" — there's a
