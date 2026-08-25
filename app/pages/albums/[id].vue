@@ -106,8 +106,12 @@ async function onToggleLike(photo: Photo) {
     return
   try {
     const updated = await toggleLike(photo)
-    await nextTick() // wait for the UI to update before logging the new liked state
-    album.value.photos = album.value.photos.map(existing => existing.id === updated.id ? updated : existing)
+    // `album` is a shallow ref (useAsyncData defaults to `deep: false`), so mutating
+    // `album.value.photos` in place would not trigger reactivity: reassign `album.value`.
+    album.value = {
+      ...album.value,
+      photos: album.value.photos.map(existing => existing.id === updated.id ? updated : existing),
+    }
   }
   catch (error) {
     toast.add({ title: translateError(error), color: 'error' })
@@ -141,7 +145,7 @@ async function handleFiles(fileList: FileList | null) {
       if (photo) {
         if (album.value.photos.some(existing => existing.id === photo.id))
           return
-        album.value.photos = [photo, ...album.value.photos]
+        album.value = { ...album.value, photos: [photo, ...album.value.photos] }
       }
     }
   }
@@ -373,7 +377,7 @@ const settingsItems = computed<DropdownMenuItem[][]>(() => [
     "collaboratorsButton": "Collaborators",
     "shareButton": "Share",
     "settings": "Settings",
-    "addPhotosButton": "Add photos",
+    "addPhotosButton": "Add photos from gallery",
     "deleteButton": "Delete",
     "emptyAlbum": "This album is empty — add some photos to get started.",
     "photoAlt": "Photo {id}",
