@@ -33,8 +33,12 @@ async function resolveCoverUrl(cover: AlbumCoverRow | null): Promise<string | nu
 // (list + lightweight show, issue #51): title/description + a signed
 // cover-photo URL derived from the Album's most recently added Photo, +
 // admin only — no full photo list/Collaborators, keeping list/summary
-// views fast per docs/legacy-features.md.
-export async function serializeAlbumSummary(album: AlbumSummarySource, cover: AlbumCoverRow | null) {
+// views fast per docs/legacy-features.md. `photoCount` (issue #136) is the
+// raw count of AlbumsOnPhotos rows for the Album, regardless of whether
+// each Photo's owner currently has a working Storage Connection — it must
+// not silently shrink just because a Photo would otherwise be filtered out
+// of a full photo list.
+export async function serializeAlbumSummary(album: AlbumSummarySource, cover: AlbumCoverRow | null, photoCount: number) {
   return {
     id: album.id,
     title: album.title,
@@ -42,6 +46,7 @@ export async function serializeAlbumSummary(album: AlbumSummarySource, cover: Al
     created_at: album.created_at,
     admin: album.admin,
     cover: await resolveCoverUrl(cover),
+    photo_count: photoCount,
   }
 }
 
@@ -73,13 +78,29 @@ export async function loadAlbumCover(albumId: number): Promise<AlbumCoverRow | n
   })
 }
 
+// Counts the raw number of AlbumsOnPhotos rows for a single Album (issue
+// #136), deliberately not filtering out Photos whose owner has no Storage
+// Connection — pairs with loadAlbumCover for the single-Album call sites
+// that don't already have every row in memory (unlike loadAlbumCovers/
+// serializeAlbumFull/serializeAlbumPublic below).
+export async function countAlbumPhotos(albumId: number): Promise<number> {
+  return prisma.albumsOnPhotos.count({ where: { album_id: albumId } })
+}
+
+export interface AlbumCoversAndCounts {
+  covers: Map<number, AlbumCoverRow>
+  photoCounts: Map<number, number>
+}
+
 // Batch version of loadAlbumCover for list/search endpoints (issue #51):
 // one query for every candidate row across all given Albums, then picks
 // each Album's most recent row in memory, instead of one round-trip per
-// Album (which doesn't scale with page size).
-export async function loadAlbumCovers(albumIds: number[]): Promise<Map<number, AlbumCoverRow>> {
+// Album (which doesn't scale with page size). Also derives each Album's
+// photo_count (issue #136) from the same in-memory row set, instead of a
+// separate COUNT query per page.
+export async function loadAlbumCovers(albumIds: number[]): Promise<AlbumCoversAndCounts> {
   if (albumIds.length === 0)
-    return new Map()
+    return { covers: new Map(), photoCounts: new Map() }
 
   const rows = await prisma.albumsOnPhotos.findMany({
     where: { album_id: { in: albumIds } },
@@ -88,12 +109,14 @@ export async function loadAlbumCovers(albumIds: number[]): Promise<Map<number, A
   })
 
   const covers = new Map<number, AlbumCoverRow>()
+  const photoCounts = new Map<number, number>()
   for (const row of rows) {
     if (!covers.has(row.album_id))
       covers.set(row.album_id, row)
+    photoCounts.set(row.album_id, (photoCounts.get(row.album_id) ?? 0) + 1)
   }
 
-  return covers
+  return { covers, photoCounts }
 }
 
 // Public Share Link response shape (issue #53): title/description/cover/
@@ -111,7 +134,7 @@ export async function serializeAlbumPublic(album: AlbumSummarySource & { id: num
     include: { photo: { include: { user: { include: { aws_credentials: true } } } } },
   })
 
-  const summary = await serializeAlbumSummary(album, rows[0] ?? null)
+  const summary = await serializeAlbumSummary(album, rows[0] ?? null, rows.length)
 
   const photos = (await Promise.all(rows.map(async (row) => {
     const { aws_credentials } = row.photo.user
@@ -147,7 +170,7 @@ export async function serializeAlbumFull(album: AlbumFullSource, currentUserId: 
     include: { photo: { include: { user: { include: { aws_credentials: true } }, likes: { select: { id: true } } } } },
   })
 
-  const summary = await serializeAlbumSummary(album, rows[0] ?? null)
+  const summary = await serializeAlbumSummary(album, rows[0] ?? null, rows.length)
 
   const photos = (await Promise.all(rows.map(async (row) => {
     const { aws_credentials } = row.photo.user

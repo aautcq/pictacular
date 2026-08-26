@@ -13,6 +13,7 @@ export interface AlbumSummary {
   created_at: string
   admin: AlbumMember
   cover: string | null
+  photo_count: number
 }
 
 export interface AlbumFull extends AlbumSummary {

@@ -34,9 +34,9 @@ export default defineEventHandler(async (event) => {
     include: { admin: { select: memberSelect } },
   })
 
-  const covers = await loadAlbumCovers(albums.map(album => album.id))
+  const { covers, photoCounts } = await loadAlbumCovers(albums.map(album => album.id))
 
   return {
-    albums: await Promise.all(albums.map(album => serializeAlbumSummary(album, covers.get(album.id) ?? null))),
+    albums: await Promise.all(albums.map(album => serializeAlbumSummary(album, covers.get(album.id) ?? null, photoCounts.get(album.id) ?? 0))),
   }
 })

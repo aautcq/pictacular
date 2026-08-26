@@ -1,6 +1,6 @@
 import { memberSelect, requireAlbumIdParam, requireAlbumMembership } from '#server/utils/album-guards'
 import { prisma } from '#server/utils/prisma'
-import { loadAlbumCover, serializeAlbumSummary } from '#server/utils/serialize-album'
+import { countAlbumPhotos, loadAlbumCover, serializeAlbumSummary } from '#server/utils/serialize-album'
 
 // Updates an Album's title/description (issue #51). Any member (not just
 // the admin) can rename/edit it — only delete is admin-restricted, per
@@ -34,5 +34,5 @@ export default defineEventHandler(async (event) => {
     include: { admin: { select: memberSelect } },
   })
 
-  return serializeAlbumSummary(album, await loadAlbumCover(id))
+  return serializeAlbumSummary(album, await loadAlbumCover(id), await countAlbumPhotos(id))
 })

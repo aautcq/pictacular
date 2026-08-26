@@ -110,7 +110,7 @@ useIntersectionObserver(sentinel, ([entry]) => {
         </div>
         <div class="flex flex-col">
           <span class="truncate font-medium">{{ album.title }}</span>
-          <span class="text-xs text-gray-500 dark:text-gray-300">{{ formatDate(album.created_at) }}</span>
+          <span class="text-xs text-gray-500 dark:text-gray-300">{{ t('photoCount', album.photo_count) }} · {{ formatDate(album.created_at) }}</span>
         </div>
       </NuxtLink>
     </div>
@@ -131,7 +131,8 @@ useIntersectionObserver(sentinel, ([entry]) => {
     "noResults": "No albums match your search.",
     "empty": "You don't have any albums yet — create your first one to get started.",
     "albumCoverAlt": "Album cover",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "photoCount": "{count} photo | {count} photos"
   }
 }
 </i18n>

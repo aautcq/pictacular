@@ -34,10 +34,10 @@ export default defineEventHandler(async (event) => {
   const has_more = albums.length > limit
   const page = albums.slice(0, limit)
 
-  const covers = await loadAlbumCovers(page.map(album => album.id))
+  const { covers, photoCounts } = await loadAlbumCovers(page.map(album => album.id))
 
   return {
-    albums: await Promise.all(page.map(album => serializeAlbumSummary(album, covers.get(album.id) ?? null))),
+    albums: await Promise.all(page.map(album => serializeAlbumSummary(album, covers.get(album.id) ?? null, photoCounts.get(album.id) ?? 0))),
     next_cursor: has_more ? page[page.length - 1]?.id : null,
   }
 })
