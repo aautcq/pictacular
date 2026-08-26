@@ -1,5 +1,4 @@
 import { prisma } from '#server/utils/prisma'
-import { createPushSubscriptionSchema } from '#server/utils/validation/push-subscription'
 
 // Replaces the former PushSubscriptionsController#create (protected POST
 // /push-subscriptions): stores an endpoint + keys pair for the
@@ -14,7 +13,13 @@ export default defineEventHandler(async (event) => {
   if (!result.success) {
     throw createError({
       statusCode: 400,
-      statusMessage: 'push_subscriptions.invalid_payload',
+      statusMessage: 'validation.invalid_payload',
+      data: {
+        errors: result.error.issues.map(issue => ({
+          name: issue.path[0],
+          message: issue.message,
+        })),
+      },
     })
   }
 

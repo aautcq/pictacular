@@ -204,7 +204,7 @@ describe('password reset flow', async () => {
         method: 'POST',
         body: { password: newPassword, password_confirmation: 'does-not-match' },
       }),
-    ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'auth.invalid_payload' })
+    ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'validation.invalid_payload' })
   })
 
   it('rejects an insufficiently complex new password with 400', async () => {
@@ -219,6 +219,6 @@ describe('password reset flow', async () => {
         method: 'POST',
         body: { password: 'weakpassword', password_confirmation: 'weakpassword' },
       }),
-    ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'auth.invalid_payload' })
+    ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'validation.invalid_payload' })
   })
 })

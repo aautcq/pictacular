@@ -2,7 +2,6 @@ import { memberSelect, requireAlbumAdmin, requireAlbumIdParam, requireAlbumMembe
 import { issueInvitationEmail } from '#server/utils/issue-invitation-email'
 import { prisma } from '#server/utils/prisma'
 import { serializeAlbumFull } from '#server/utils/serialize-album'
-import { albumCollaboratorsSchema } from '#server/utils/validation/album'
 
 // Adds Collaborators to an Album by email (issue #52), admin-only: an
 // email matching an existing User connects them to the Album immediately;
@@ -22,7 +21,13 @@ export default defineEventHandler(async (event) => {
   if (!result.success) {
     throw createError({
       statusCode: 400,
-      statusMessage: 'albums.invalid_payload',
+      statusMessage: 'validation.invalid_payload',
+      data: {
+        errors: result.error.issues.map(issue => ({
+          name: issue.path[0],
+          message: issue.message,
+        })),
+      },
     })
   }
 

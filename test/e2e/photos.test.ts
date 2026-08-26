@@ -113,7 +113,7 @@ describe('personal photo library', async () => {
           headers: { cookie: cookieHeader },
           body: { filename: 'notes.txt', mime_type: 'text/plain', base64: tinyPngBase64 },
         }),
-      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'photos.invalid_payload' })
+      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'validation.invalid_payload' })
     })
 
     it('rejects a User without a Storage Connection', async () => {

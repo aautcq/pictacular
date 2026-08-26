@@ -1,6 +1,5 @@
 import { webauthnChallengeCookieName, webauthnChallengeCookieOptions } from '#server/utils/cookies'
 import { prisma } from '#server/utils/prisma'
-import { registerCredentialSchema } from '#server/utils/validation/biometrics'
 import { verifyRegistration } from '#server/utils/webauthn'
 
 // Protected POST /api/auth/biometrics: stores a new biometric credential for
@@ -14,7 +13,13 @@ export default defineEventHandler(async (event) => {
   if (!result.success) {
     throw createError({
       statusCode: 400,
-      statusMessage: 'biometrics.invalid_payload',
+      statusMessage: 'validation.invalid_payload',
+      data: {
+        errors: result.error.issues.map(issue => ({
+          name: issue.path[0],
+          message: issue.message,
+        })),
+      },
     })
   }
 

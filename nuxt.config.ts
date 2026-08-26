@@ -7,6 +7,16 @@ const description = 'Pictacular is an image gallery app'
 export default defineNuxtConfig({
   devtools: { enabled: true },
 
+  // shared/utils/validation nests the zod schemas one level below
+  // shared/utils/ (grouped by domain, mirroring the former
+  // server/utils/validation/ layout — see ADR 0004), so it needs an
+  // explicit opt-in: Nuxt's shared/ auto-import only covers shared/utils/
+  // and shared/types/ themselves, not their subdirectories. `imports.dirs`
+  // entries resolve relative to `srcDir` (`app/`), hence the `../`.
+  imports: {
+    dirs: ['../shared/utils/validation'],
+  },
+
   modules: [
     '@nuxt/icon',
     '@nuxt/image',
@@ -152,6 +162,13 @@ export default defineNuxtConfig({
     },
   },
   nitro: {
+    imports: {
+      // shared/utils/validation nests the zod schemas one level below
+      // shared/utils/ (see the `imports` config above for why that needs
+      // an explicit opt-in on the server side too — Nitro's own
+      // shared/utils/ auto-import is likewise non-recursive).
+      dirs: ['shared/utils/validation'],
+    },
     experimental: {
       websocket: true,
       // Enables auto-scanning of server/tasks/**, required for the

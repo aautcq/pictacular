@@ -162,7 +162,7 @@ describe('user profile self-service', async () => {
           headers: { cookie: cookieHeader },
           body: { password: 'N3wStr0ng!Pass', password_confirmation: 'N3wStr0ng!Pass' },
         }),
-      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'users.invalid_payload' })
+      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'validation.invalid_payload' })
     })
 
     it('rejects a payload where password and password_confirmation do not match', async () => {
@@ -175,7 +175,7 @@ describe('user profile self-service', async () => {
           headers: { cookie: cookieHeader },
           body: { current_password: password, password: 'Str0ng!Pass2', password_confirmation: 'Different!Pass2' },
         }),
-      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'users.invalid_payload' })
+      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'validation.invalid_payload' })
     })
 
     it('rejects an email already taken by another account', async () => {
@@ -225,7 +225,7 @@ describe('user profile self-service', async () => {
           headers: { cookie: cookieHeader },
           body: { filename: 'avatar.txt', mime_type: 'text/plain', base64: tinyPngBase64 },
         }),
-      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'users.invalid_payload' })
+      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'validation.invalid_payload' })
     })
 
     it('rejects an unauthenticated request with 401', async () => {

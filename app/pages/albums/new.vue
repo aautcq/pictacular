@@ -3,10 +3,11 @@ definePageMeta({ middleware: ['auth'] })
 
 const { createAlbum } = useAlbums()
 const toast = useToast()
-const { translateError } = useErrorMessage()
+const { translateError, getFieldErrors } = useErrorMessage()
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
 useHead({ title: computed(() => t('title')) })
 
+const form = useTemplateRef('form')
 const state = reactive({
   title: '',
   description: '',
@@ -24,6 +25,7 @@ async function submit() {
     await navigateTo(`/albums/${album.id}`)
   }
   catch (error) {
+    form.value?.setErrors(getFieldErrors(error))
     toast.add({ title: translateError(error), color: 'error' })
   }
   finally {
@@ -39,9 +41,10 @@ async function submit() {
     </h1>
 
     <UForm
+      ref="form"
       class="space-y-4"
+      :schema="albumCreateSchema"
       :state="state"
-      novalidate
       @submit.prevent="submit"
     >
       <UFormField :label="t('titleLabel')" name="title">

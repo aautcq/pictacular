@@ -2,21 +2,23 @@
 const route = useRoute()
 const { setNewPassword } = useCurrentUser()
 const toast = useToast()
-const { translateError } = useErrorMessage()
+const { translateError, getFieldErrors } = useErrorMessage()
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
 
+const form = useTemplateRef('form')
 const password = shallowRef('')
-const passwordConfirmation = shallowRef('')
+const password_confirmation = shallowRef('')
 const loading = shallowRef(false)
 const done = shallowRef(false)
 
 async function submit() {
   loading.value = true
   try {
-    await setNewPassword(route.params.token as string, password.value, passwordConfirmation.value)
+    await setNewPassword(route.params.token as string, password.value, password_confirmation.value)
     done.value = true
   }
   catch (error) {
+    form.value?.setErrors(getFieldErrors(error))
     toast.add({ title: translateError(error), color: 'error' })
   }
   finally {
@@ -40,9 +42,10 @@ async function submit() {
 
     <UForm
       v-else
+      ref="form"
       class="space-y-4"
-      :state="{ password, passwordConfirmation }"
-      novalidate
+      :schema="setPasswordSchema"
+      :state="{ password, password_confirmation }"
       @submit.prevent="submit"
     >
       <UFormField :label="t('newPasswordLabel')" name="password">
@@ -57,9 +60,9 @@ async function submit() {
         />
       </UFormField>
 
-      <UFormField :label="t('confirmNewPasswordLabel')" name="passwordConfirmation">
+      <UFormField :label="t('confirmNewPasswordLabel')" name="password_confirmation">
         <UInput
-          v-model="passwordConfirmation"
+          v-model="password_confirmation"
           type="password"
           required
           autocomplete="new-password"

@@ -1,6 +1,5 @@
 import { issuePasswordResetEmail } from '#server/utils/issue-password-reset-email'
 import { prisma } from '#server/utils/prisma'
-import { resetPasswordSchema } from '#server/utils/validation/reset-password'
 
 // Replaces the former AuthController#resetPassword
 // (POST /auth/send_password_reset_email): always responds 204 whether or
@@ -13,7 +12,13 @@ export default defineEventHandler(async (event) => {
   if (!result.success) {
     throw createError({
       statusCode: 400,
-      statusMessage: 'auth.invalid_payload',
+      statusMessage: 'validation.invalid_payload',
+      data: {
+        errors: result.error.issues.map(issue => ({
+          name: issue.path[0],
+          message: issue.message,
+        })),
+      },
     })
   }
 

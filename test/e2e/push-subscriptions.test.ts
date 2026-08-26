@@ -93,6 +93,6 @@ describe('push subscription registration', async () => {
         headers: { cookie: cookieHeader },
         body: { endpoint: 'not-a-url', keys: { auth: 'a' } },
       }),
-    ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'push_subscriptions.invalid_payload' })
+    ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'validation.invalid_payload' })
   })
 })

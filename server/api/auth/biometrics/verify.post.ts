@@ -10,7 +10,6 @@ import { hashToken } from '#server/utils/crypto'
 import { createTokens } from '#server/utils/jwt'
 import { prisma } from '#server/utils/prisma'
 import { serializeUser } from '#server/utils/serialize-user'
-import { verifyAssertionSchema } from '#server/utils/validation/biometrics'
 import { verifyAssertion } from '#server/utils/webauthn'
 
 // Unauthenticated POST /api/auth/biometrics/verify: on a successful
@@ -26,7 +25,13 @@ export default defineEventHandler(async (event) => {
   if (!result.success) {
     throw createError({
       statusCode: 400,
-      statusMessage: 'biometrics.invalid_payload',
+      statusMessage: 'validation.invalid_payload',
+      data: {
+        errors: result.error.issues.map(issue => ({
+          name: issue.path[0],
+          message: issue.message,
+        })),
+      },
     })
   }
 

@@ -1,7 +1,6 @@
 import { issueEmailViaOutbox } from '#server/utils/email-outbox'
 import { getPreferredLang } from '#server/utils/i18n/lang'
 import { prisma } from '#server/utils/prisma'
-import { resendVerificationSchema } from '#server/utils/validation/resend-verification'
 
 // Replaces the former AuthController#sendVerificationEmail
 // (POST /auth/send_verification_email): always responds 204 whether or
@@ -15,7 +14,13 @@ export default defineEventHandler(async (event) => {
   if (!result.success) {
     throw createError({
       statusCode: 400,
-      statusMessage: 'auth.invalid_payload',
+      statusMessage: 'validation.invalid_payload',
+      data: {
+        errors: result.error.issues.map(issue => ({
+          name: issue.path[0],
+          message: issue.message,
+        })),
+      },
     })
   }
 

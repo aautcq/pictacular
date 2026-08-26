@@ -9,7 +9,6 @@ import { issuePasswordResetEmail } from '#server/utils/issue-password-reset-emai
 import { createTokens } from '#server/utils/jwt'
 import { prisma } from '#server/utils/prisma'
 import { serializeUser } from '#server/utils/serialize-user'
-import { loginSchema } from '#server/utils/validation/login'
 
 // Replaces the former AuthController#login (POST /auth/sessions): rejects
 // invalid credentials or unverified accounts identically (no enumeration),
@@ -25,7 +24,13 @@ export default defineEventHandler(async (event) => {
   if (!result.success) {
     throw createError({
       statusCode: 400,
-      statusMessage: 'auth.invalid_payload',
+      statusMessage: 'validation.invalid_payload',
+      data: {
+        errors: result.error.issues.map(issue => ({
+          name: issue.path[0],
+          message: issue.message,
+        })),
+      },
     })
   }
 

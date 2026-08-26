@@ -33,3 +33,8 @@ drift (e.g. a mid-deploy race between two tabs).
 - A few existing forms need their local `state` reshaped to match the shared schema
   field-for-field (e.g. `password_confirmation` instead of camelCase, `emails: string[]`
   instead of a delimited string) before `:schema` can bind directly.
+- `login.vue` disables `UForm`'s default blur/input schema validation
+  (`:validate-on="[]"`, submit-time validation still runs) because its "sign in with
+  biometrics" button blurs the autofocused email field on click, and that blur-triggered
+  async validation was observed to consume the click's WebAuthn user-activation gesture,
+  silently breaking `navigator.credentials.get()`.

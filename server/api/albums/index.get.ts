@@ -1,7 +1,6 @@
 import { memberSelect } from '#server/utils/album-guards'
 import { prisma } from '#server/utils/prisma'
 import { loadAlbumCovers, serializeAlbumSummary } from '#server/utils/serialize-album'
-import { albumListQuerySchema } from '#server/utils/validation/album'
 
 // Lists the authenticated User's own Albums (issue #51) — every Album
 // they're a member of (admin, or a Collaborator once issue #52 ships),

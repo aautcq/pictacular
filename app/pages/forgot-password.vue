@@ -3,9 +3,10 @@ definePageMeta({ middleware: 'guest' })
 
 const { requestPasswordReset } = useCurrentUser()
 const toast = useToast()
-const { translateError } = useErrorMessage()
+const { translateError, getFieldErrors } = useErrorMessage()
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
 
+const form = useTemplateRef('form')
 const email = shallowRef('')
 const loading = shallowRef(false)
 const sent = shallowRef(false)
@@ -17,6 +18,7 @@ async function submit() {
     sent.value = true
   }
   catch (error) {
+    form.value?.setErrors(getFieldErrors(error))
     toast.add({ title: translateError(error), color: 'error' })
   }
   finally {
@@ -44,9 +46,10 @@ async function submit() {
 
     <UForm
       v-else
+      ref="form"
+      :schema="resetPasswordSchema"
       :state="{ email }"
       class="space-y-4"
-      novalidate
       @submit.prevent="submit"
     >
       <UFormField :label="t('emailLabel')" name="email">

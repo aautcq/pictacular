@@ -4,11 +4,12 @@ definePageMeta({ middleware: 'guest' })
 const { login, loginWithBiometrics } = useCurrentUser()
 const { hasStoredCredential, isSupported } = useBiometrics()
 const toast = useToast()
-const { translateError } = useErrorMessage()
+const { translateError, getFieldErrors } = useErrorMessage()
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
 const { t: tg } = useI18n({ useScope: 'global' })
 const route = useRoute()
 
+const form = useTemplateRef('form')
 const email = shallowRef('')
 const password = shallowRef('')
 const loading = shallowRef(false)
@@ -36,6 +37,7 @@ async function submit() {
     await redirectAfterSignIn()
   }
   catch (error) {
+    form.value?.setErrors(getFieldErrors(error))
     toast.add({ title: translateError(error), color: 'error' })
   }
   finally {
@@ -77,10 +79,18 @@ if (isSupported && hasStoredCredential.value)
       {{ t('title') }}
     </template>
 
+    <!-- validate-on disabled for blur/input/change (default also validates
+    on those): this page also has a "sign in with biometrics" button whose
+    click blurs the autofocused email input, and that blur-triggered async
+    schema validation was observed to consume the click's WebAuthn
+    user-activation gesture, silently breaking navigator.credentials.get().
+    Submit-time validation is unaffected by this prop and still runs. -->
     <UForm
+      ref="form"
       class="space-y-4"
+      :schema="loginSchema"
       :state="{ email, password }"
-      novalidate
+      :validate-on="[]"
       @submit.prevent="submit"
     >
       <UFormField :label="t('emailLabel')" name="email">

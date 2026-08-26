@@ -24,5 +24,14 @@ export function useErrorMessage() {
     return translateErrorCode(getErrorCode(error))
   }
 
-  return { getErrorCode, translateErrorCode, translateError }
+  // Extracts the structured per-field errors carried by the generic
+  // `validation.invalid_payload` code's `data.errors` (see ADR 0004), for
+  // use as a `UForm#setErrors` fallback: defense-in-depth against a form's
+  // client-side `:schema` validation drifting from the server's.
+  function getFieldErrors(error: unknown): { name: string, message: string }[] {
+    const withData = error as { data?: { data?: { errors?: { name: string, message: string }[] } } }
+    return withData.data?.data?.errors ?? []
+  }
+
+  return { getErrorCode, translateErrorCode, translateError, getFieldErrors }
 }

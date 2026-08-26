@@ -160,7 +160,7 @@ describe('storage connection onboarding', async () => {
           headers: { cookie: cookieHeader },
           body: { mode: 'connect', access_key_id: 'AKIATEST', secret_access_key: 'test-secret' },
         }),
-      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'storage.invalid_payload' })
+      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'validation.invalid_payload' })
     })
 
     it('rejects a second connection attempt for a User who already has one', async () => {

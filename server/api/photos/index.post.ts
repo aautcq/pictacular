@@ -2,7 +2,6 @@ import { requirePhotoStorageConnection } from '#server/utils/photo-guards'
 import { prisma } from '#server/utils/prisma'
 import { serializePhoto } from '#server/utils/serialize-photo'
 import { uploadPhotoObject } from '#server/utils/storage'
-import { photoUploadSchema } from '#server/utils/validation/photo'
 import { sendMessageToUser } from '#server/utils/websocket'
 
 // Uploads a new Photo into the authenticated User's own Storage
@@ -19,7 +18,13 @@ export default defineEventHandler(async (event) => {
   if (!result.success) {
     throw createError({
       statusCode: 400,
-      statusMessage: 'photos.invalid_payload',
+      statusMessage: 'validation.invalid_payload',
+      data: {
+        errors: result.error.issues.map(issue => ({
+          name: issue.path[0],
+          message: issue.message,
+        })),
+      },
     })
   }
 

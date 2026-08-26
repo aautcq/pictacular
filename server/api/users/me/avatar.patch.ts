@@ -1,7 +1,6 @@
 import { prisma } from '#server/utils/prisma'
 import { serializeUser } from '#server/utils/serialize-user'
 import { uploadAvatarObject } from '#server/utils/storage'
-import { avatarUploadSchema } from '#server/utils/validation/avatar'
 
 // Replaces the former UsersController#updateAvatar (protected PATCH
 // /me/avatar): uploads/replaces the authenticated user's avatar image in
@@ -19,7 +18,13 @@ export default defineEventHandler(async (event) => {
   if (!result.success) {
     throw createError({
       statusCode: 400,
-      statusMessage: 'users.invalid_payload',
+      statusMessage: 'validation.invalid_payload',
+      data: {
+        errors: result.error.issues.map(issue => ({
+          name: issue.path[0],
+          message: issue.message,
+        })),
+      },
     })
   }
 

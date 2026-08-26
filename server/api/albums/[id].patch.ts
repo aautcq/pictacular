@@ -1,7 +1,6 @@
 import { memberSelect, requireAlbumIdParam, requireAlbumMembership } from '#server/utils/album-guards'
 import { prisma } from '#server/utils/prisma'
 import { loadAlbumCover, serializeAlbumSummary } from '#server/utils/serialize-album'
-import { albumUpdateSchema } from '#server/utils/validation/album'
 
 // Updates an Album's title/description (issue #51). Any member (not just
 // the admin) can rename/edit it — only delete is admin-restricted, per
@@ -19,7 +18,13 @@ export default defineEventHandler(async (event) => {
   if (!result.success) {
     throw createError({
       statusCode: 400,
-      statusMessage: 'albums.invalid_payload',
+      statusMessage: 'validation.invalid_payload',
+      data: {
+        errors: result.error.issues.map(issue => ({
+          name: issue.path[0],
+          message: issue.message,
+        })),
+      },
     })
   }
 
