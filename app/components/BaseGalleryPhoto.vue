@@ -13,6 +13,7 @@ const emit = defineEmits<{
   toggleLike: [photo: Photo]
   toggleSelection: [photo: Photo, event: MouseEvent]
   click: [photo: Photo, event: MouseEvent]
+  restore: [photo: Photo]
 }>()
 
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
@@ -27,6 +28,10 @@ function onPhotoClick(photo: Photo, event: MouseEvent) {
   else
     emit('click', photo, event)
 }
+
+function formatExpiry(date: string) {
+  return new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
 </script>
 
 <template>
@@ -36,8 +41,39 @@ function onPhotoClick(photo: Photo, event: MouseEvent) {
       class="absolute inset-0"
       @click="onPhotoClick(photo, $event)"
     >
-      <BaseImg :src="photo.url" :alt="getPhotoFileName(photo)" />
+      <!-- An Archived/restoring Photo's bytes aren't available from S3
+           (issue #145), so a clear placeholder replaces the (otherwise
+           broken-image) thumbnail instead of relying on BaseImg's generic
+           load-error fallback, which gives no explanation. -->
+      <div
+        v-if="photo.archived_state === 'archived' || photo.archived_state === 'restoring'"
+        class="flex h-full w-full flex-col items-center justify-center gap-y-2 bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-300"
+      >
+        <Icon :name="photo.archived_state === 'restoring' ? 'ph:cloud-arrow-down' : 'ph:archive'" size="2em" />
+        <p class="text-xs font-light">
+          {{ photo.archived_state === 'restoring' ? t('restoring') : t('archived') }}
+        </p>
+      </div>
+      <BaseImg v-else :src="photo.url" :alt="getPhotoFileName(photo)" />
     </button>
+
+    <button
+      v-if="photo.archived_state === 'archived'"
+      type="button"
+      class="absolute bottom-2 left-1/2 -translate-x-1/2 rounded bg-black/60 px-2 py-1 text-xs text-white"
+      @click.stop="emit('restore', photo)"
+    >
+      {{ t('restore') }}
+    </button>
+
+    <UBadge
+      v-if="photo.archived_state === 'restored' && photo.restore_expires_at"
+      color="warning"
+      variant="subtle"
+      size="sm"
+      class="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2"
+      :label="t('availableUntil', { date: formatExpiry(photo.restore_expires_at) })"
+    />
 
     <button
       type="button"
@@ -60,7 +96,11 @@ function onPhotoClick(photo: Photo, event: MouseEvent) {
 <i18n lang="json">
 {
   "en": {
-    "select": "Select"
+    "select": "Select",
+    "archived": "Archived",
+    "restoring": "Restoring…",
+    "restore": "Restore",
+    "availableUntil": "Available until {date}"
   }
 }
 </i18n>

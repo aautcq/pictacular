@@ -12,6 +12,7 @@ const emit = defineEmits<{
   showPrevious: []
   showNext: []
   toggleLike: [photo: Photo]
+  restore: [photo: Photo]
   close: []
 }>()
 
@@ -30,6 +31,10 @@ function onDetailsKeydown(event: KeyboardEvent) {
 
 async function downloadPhoto(photo: Photo) {
   await downloadFile(photo.url, getPhotoFileName(photo))
+}
+
+function formatExpiry(date: string) {
+  return new Date(date).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
 </script>
 
@@ -61,17 +66,41 @@ async function downloadPhoto(photo: Photo) {
     </button>
 
     <div class="flex max-h-[85vh] max-w-[85vw] flex-col items-center gap-y-4">
+      <div
+        v-if="photo.archived_state === 'archived' || photo.archived_state === 'restoring'"
+        class="flex h-[50vh] w-[50vw] max-w-md flex-col items-center justify-center gap-y-4 rounded bg-white/10 text-white"
+      >
+        <Icon :name="photo.archived_state === 'restoring' ? 'ph:cloud-arrow-down' : 'ph:archive'" size="3em" />
+        <p>{{ photo.archived_state === 'restoring' ? t('restoring') : t('archived') }}</p>
+        <UButton
+          v-if="photo.archived_state === 'archived'"
+          type="button"
+          :label="t('restore')"
+          color="neutral"
+          variant="soft"
+          @click="emit('restore', photo)"
+        />
+      </div>
       <BaseImg
+        v-else
         :src="photo.url"
         :alt="t('photoAlt', { id: photo.id })"
         class="max-h-[75vh] max-w-full rounded object-contain"
       />
+      <p v-if="photo.archived_state === 'restored' && photo.restore_expires_at" class="text-xs text-gray-300">
+        {{ t('availableUntil', { date: formatExpiry(photo.restore_expires_at) }) }}
+      </p>
       <div class="flex items-center gap-x-4">
         <button type="button" class="flex items-center gap-x-1 text-white" @click="emit('toggleLike', photo)">
           <Icon :name="photo.liked ? 'ph:heart-fill' : 'ph:heart'" :class="photo.liked && 'text-red-500'" />
           {{ photo.liked ? t('liked') : t('like') }}
         </button>
-        <button type="button" class="flex items-center gap-x-1 text-white" @click="downloadPhoto(photo)">
+        <button
+          v-if="photo.archived_state !== 'archived' && photo.archived_state !== 'restoring'"
+          type="button"
+          class="flex items-center gap-x-1 text-white"
+          @click="downloadPhoto(photo)"
+        >
           <Icon name="ph:download-simple" />
           {{ t('download') }}
         </button>
@@ -98,7 +127,11 @@ async function downloadPhoto(photo: Photo) {
     "nextPhoto": "Next photo",
     "liked": "Liked",
     "like": "Like",
-    "download": "Download"
+    "download": "Download",
+    "archived": "This photo is archived and currently unavailable.",
+    "restoring": "This photo is being restored. This can take a few hours.",
+    "restore": "Restore",
+    "availableUntil": "Available until {date}"
   }
 }
 </i18n>

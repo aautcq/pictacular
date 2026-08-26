@@ -6,6 +6,8 @@ export interface Photo {
   last_modified: string
   created_at: string
   liked: boolean
+  archived_state: 'archived' | 'restoring' | 'restored' | null
+  restore_expires_at: string | null
 }
 
 // Personal photo library state (issue #50), ported from the legacy
@@ -91,6 +93,26 @@ export function usePhotoLibrary() {
     return updated
   }
 
+  // Merges a single, server-updated Photo back into the list in place —
+  // shared by both the "restored one Photo" HTTP response and the
+  // `photo:restored` WS notification (issue #145), which carry the exact
+  // same serialized shape.
+  function updatePhoto(updated: Photo) {
+    photos.value = photos.value.map(existing => existing.id === updated.id ? updated : existing)
+  }
+
+  async function restorePhoto(id: number) {
+    const updated = await $fetch<Photo>(`/api/photos/${id}/restore`, { method: 'POST' })
+    updatePhoto(updated)
+    return updated
+  }
+
+  async function restoreArchivedPhotos() {
+    const response = await $fetch<{ restored: number, failed: number, photos: Photo[] }>('/api/photos/restore', { method: 'POST' })
+    response.photos.forEach(updatePhoto)
+    return response
+  }
+
   return {
     photos,
     groupedByDate,
@@ -102,5 +124,8 @@ export function usePhotoLibrary() {
     deletePhoto,
     deletePhotos,
     toggleLike,
+    updatePhoto,
+    restorePhoto,
+    restoreArchivedPhotos,
   }
 }

@@ -17,6 +17,9 @@ const {
   addUploadedPhoto,
   deletePhotos,
   toggleLike,
+  updatePhoto,
+  restorePhoto,
+  restoreArchivedPhotos,
 } = usePhotoLibrary()
 const {
   selectedIds,
@@ -38,9 +41,12 @@ const toast = useToast()
 
 const sentinel = useTemplateRef<HTMLElement | null>('sentinel')
 const deleting = shallowRef(false)
+const restoringAll = shallowRef(false)
 
 const isAddToAlbumModalOpen = shallowRef(false)
 const isDeleteModalOpen = shallowRef(false)
+
+const hasArchivedPhotos = computed(() => photos.value.some(photo => photo.archived_state === 'archived'))
 
 await useAsyncData('photos', fetchNextPage)
 
@@ -71,6 +77,29 @@ async function onToggleLike(photo: Photo) {
   }
   catch (error) {
     toast.add({ title: translateError(error), color: 'error' })
+  }
+}
+
+async function onRestorePhoto(photo: Photo) {
+  try {
+    await restorePhoto(photo.id)
+  }
+  catch (error) {
+    toast.add({ title: translateError(error), color: 'error' })
+  }
+}
+
+async function onRestoreArchivedPhotos() {
+  restoringAll.value = true
+  try {
+    const { restored, failed } = await restoreArchivedPhotos()
+    toast.add({ title: failed ? t('restoreAllPartial', failed) : t('restoreAllStarted', restored) })
+  }
+  catch (error) {
+    toast.add({ title: translateError(error), color: 'error' })
+  }
+  finally {
+    restoringAll.value = false
   }
 }
 
@@ -127,7 +156,8 @@ const settingsItems = ref<DropdownMenuItem[][]>([
   ],
 ])
 
-let offRealtime: (() => void) | null = null
+let offRealtimeUploaded: (() => void) | null = null
+let offRealtimeRestored: (() => void) | null = null
 
 useIntersectionObserver(sentinel, ([entry]) => {
   if (entry?.isIntersecting && hasMore.value && !loading.value)
@@ -135,11 +165,13 @@ useIntersectionObserver(sentinel, ([entry]) => {
 })
 
 onMounted(async () => {
-  offRealtime = on('photo:uploaded', (photo: Photo) => addUploadedPhoto(photo))
+  offRealtimeUploaded = on('photo:uploaded', (photo: Photo) => addUploadedPhoto(photo))
+  offRealtimeRestored = on('photo:restored', (photo: Photo) => updatePhoto(photo))
 })
 
 onUnmounted(() => {
-  offRealtime?.()
+  offRealtimeUploaded?.()
+  offRealtimeRestored?.()
 })
 </script>
 
@@ -163,6 +195,17 @@ onUnmounted(() => {
             />
           </UTooltip>
         </UDropdownMenu>
+
+        <UTooltip v-if="hasArchivedPhotos && !selectionMode" :text="t('restoreAll')">
+          <UButton
+            icon="ph:cloud-arrow-down"
+            color="neutral"
+            variant="soft"
+            :loading="restoringAll"
+            :aria-label="t('restoreAll')"
+            @click="onRestoreArchivedPhotos"
+          />
+        </UTooltip>
 
         <BaseFilesUpload @files-uploaded="handleFiles" />
       </template>
@@ -197,6 +240,7 @@ onUnmounted(() => {
               :selection-mode="selectionMode"
               @toggle-selection="toggleSelection"
               @toggle-like="onToggleLike"
+              @restore="onRestorePhoto"
               @click="detailsPhotoId = photo.id"
             />
           </div>
@@ -217,6 +261,7 @@ onUnmounted(() => {
           @show-previous="showPrevious"
           @show-next="showNext"
           @toggle-like="onToggleLike"
+          @restore="onRestorePhoto"
           @close="closeDetails"
         />
       </Transition>
@@ -276,7 +321,10 @@ onUnmounted(() => {
     "deleteModalBody": "This action is irreversible. Are you sure?",
     "deleting": "Deleting…",
     "delete": "Delete",
-    "download": "Download"
+    "download": "Download",
+    "restoreAll": "Restore all archived photos",
+    "restoreAllStarted": "No archived photos to restore. | Restoring {count} archived photo — you'll be notified once it's ready. | Restoring {count} archived photos — you'll be notified once they're ready.",
+    "restoreAllPartial": "Restore requested, but {count} photo couldn't be restored. Check your storage connection. | Restore requested, but {count} photos couldn't be restored. Check your storage connection."
   }
 }
 </i18n>
