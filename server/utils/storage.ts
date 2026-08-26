@@ -205,7 +205,7 @@ export async function listAllBucketImages(awsCredentials: AwsCredentials): Promi
   do {
     const { Contents, IsTruncated, NextContinuationToken } = await client.send(new ListObjectsV2Command({
       Bucket: awsCredentials.bucket,
-      MaxKeys: 100,
+      MaxKeys: 1000,
       ContinuationToken: continuationToken,
     }))
 

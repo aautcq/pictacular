@@ -37,6 +37,25 @@ async function notifyPhotoRestored(userId: number, photo: Parameters<typeof seri
   ))
 }
 
+// Runs `fn` over `items` with at most `concurrency` in flight at once. An
+// earlier version of this task made its per-photo `HeadObject` calls
+// (this loop's only per-object AWS round trip) fully sequentially, which
+// took untenably long against a bucket with thousands of Archived Photos
+// — bounded concurrency keeps the scan fast without opening an unbounded
+// number of simultaneous AWS connections for a very large bucket.
+async function mapWithConcurrency<T>(items: T[], concurrency: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let index = 0
+
+  async function worker() {
+    while (index < items.length) {
+      const item = items[index++]!
+      await fn(item)
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker))
+}
+
 const archivedPhotosScanTask: Task = {
   meta: {
     name: 'archived-photos:scan',
@@ -74,13 +93,11 @@ const archivedPhotosScanTask: Task = {
           if (!photo)
             continue
 
-          const previousState = photoArchiveState(photo)
-
           // `ListObjectsV2`'s `StorageClass` field is free (no per-object
-          // AWS call); `HeadObject` (the only per-object call this task
-          // makes) is only issued for Photos already known to be archived
-          // from that free field, never for every Photo (issue #145's
-          // story 15).
+          // AWS call) — Photos not archived by that field are updated
+          // inline here, one connected user's bucket at a time, since
+          // this branch never makes an AWS call and so has no latency
+          // worth parallelizing.
           if (!isArchivedStorageClass(image.storage_class)) {
             if (photo.storage_class !== image.storage_class || photo.restore_ongoing || photo.restore_expires_at) {
               await prisma.photo.update({
@@ -88,9 +105,20 @@ const archivedPhotosScanTask: Task = {
                 data: { storage_class: image.storage_class, restore_ongoing: false, restore_expires_at: null },
               })
             }
-            continue
           }
+        }
 
+        // `HeadObject` (issue #145's story 15) is only issued for Photos
+        // already known to be archived from the free `StorageClass`
+        // field above, never for every Photo — but run with bounded
+        // concurrency rather than one at a time, since a bucket can have
+        // thousands of Archived Photos and this is the only per-object
+        // AWS call in the whole scan.
+        const archivedImages = images.filter(image => photoByKey.has(image.key) && isArchivedStorageClass(image.storage_class))
+
+        await mapWithConcurrency(archivedImages, 20, async (image) => {
+          const photo = photoByKey.get(image.key)!
+          const previousState = photoArchiveState(photo)
           const status = await headObjectRestoreStatus(awsCredentials, image.key)
 
           const updated = await prisma.photo.update({
@@ -109,7 +137,7 @@ const archivedPhotosScanTask: Task = {
           // #145's story 14).
           if (previousState === 'restoring' && photoArchiveState(updated) === 'restored')
             await notifyPhotoRestored(account.id, updated, awsCredentials)
-        }
+        })
       }
       catch (error) {
         console.error(`archived-photos:scan failed for user ${account.id}`, error)
