@@ -74,7 +74,7 @@ describe('register + email verification', async () => {
       link: expect.stringContaining('/verification/'),
     })
 
-    // SENDGRID_API_KEY isn't a real key in this environment, so the inline
+    // BREVO_API_KEY isn't a real key in this environment, so the inline
     // send attempt is expected to fail rather than succeed.
     expect(outboxRow.status).toBe('failed')
     expect(outboxRow.attempts).toBe(1)
@@ -267,7 +267,7 @@ describe('register + email verification', async () => {
         link: expect.stringContaining('/verification/'),
       })
 
-      // SENDGRID_API_KEY isn't a real key in this environment, so the
+      // BREVO_API_KEY isn't a real key in this environment, so the
       // inline send attempt is expected to fail rather than succeed.
       expect(outboxRow.status).toBe('failed')
       expect(outboxRow.attempts).toBe(1)
