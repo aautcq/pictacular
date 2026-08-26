@@ -1,3 +1,4 @@
+import process from 'node:process'
 import jwt from 'jsonwebtoken'
 
 export interface AccessToken {
@@ -61,8 +62,13 @@ export function verifyToken<T>(token: string): T | null {
   }
 }
 
+// Unlike createTokens/verifyToken (only ever called inside a live Nitro
+// request, where the useRuntimeConfig() auto-import is available), this is
+// also called directly by e2e specs (outside of Nitro) to sign fixture
+// tokens for direct DB setup — so it reads the env var itself rather than
+// relying on the auto-import.
 export function encodeAwsCredentials(payload: AwsCredentialsTokens) {
-  return jwt.sign(payload, useRuntimeConfig().jwt.privateKey, {
+  return jwt.sign(payload, process.env.NUXT_JWT_PRIVATE_KEY as string, {
     expiresIn: refreshTokenTtl,
     algorithm: 'RS256',
   })

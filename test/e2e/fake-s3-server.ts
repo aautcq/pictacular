@@ -19,7 +19,7 @@ export const badAccessKeyId = 'BAD_ACCESS_KEY_ID'
 interface Bucket {
   cors: string | null
   keys: string[]
-  objects: Map<string, Buffer>
+  objects: Map<string, { body: Buffer, contentType: string }>
 }
 
 export interface FakeS3Server {
@@ -83,7 +83,7 @@ export async function startFakeS3Server(): Promise<FakeS3Server> {
       req.on('data', chunk => chunks.push(chunk))
       req.on('end', () => {
         const target = bucket ?? { cors: null, keys: [], objects: new Map() }
-        target.objects.set(key, Buffer.concat(chunks))
+        target.objects.set(key, { body: Buffer.concat(chunks), contentType: req.headers['content-type'] ?? 'application/octet-stream' })
         if (!target.keys.includes(key))
           target.keys = [...target.keys, key]
         buckets.set(bucketName, target)
@@ -93,16 +93,19 @@ export async function startFakeS3Server(): Promise<FakeS3Server> {
       return
     }
 
-    // Object download (GetObjectCommand), used by the signed-URL flow.
-    if (req.method === 'GET' && bucketName && key && !url.search) {
-      const body = bucket?.objects.get(key)
-      if (!body) {
+    // Object download (GetObjectCommand), used by the signed-URL flow. Real
+    // presigned GetObject URLs always carry SigV4 auth query params (see
+    // accessKeyIdFromAuthHeader's header-based counterpart for PUT/DELETE),
+    // so this must not require an empty query string.
+    if (req.method === 'GET' && bucketName && key) {
+      const object = bucket?.objects.get(key)
+      if (!object) {
         res.writeHead(404, { 'Content-Type': 'application/xml' })
         res.end(xmlError('NoSuchKey', 'The specified key does not exist.'))
         return
       }
-      res.writeHead(200)
-      res.end(body)
+      res.writeHead(200, { 'Content-Type': object.contentType })
+      res.end(object.body)
       return
     }
 

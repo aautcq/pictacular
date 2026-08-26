@@ -55,8 +55,11 @@ describe('add to album journey', async () => {
       },
     })
 
-    await prisma.album.create({ data: { title: 'Summer Trip', admin: { connect: { id: user.id } } } })
-    const winterAlbum = await prisma.album.create({ data: { title: 'Winter Trip', admin: { connect: { id: user.id } } } })
+    // Both `admin` and `users` must be connected — the album membership
+    // relation used by GET /api/albums (see server/api/albums/index.get.ts)
+    // is `users`, separate from `admin_id`.
+    await prisma.album.create({ data: { title: 'Summer Trip', admin: { connect: { id: user.id } }, users: { connect: { id: user.id } } } })
+    const winterAlbum = await prisma.album.create({ data: { title: 'Winter Trip', admin: { connect: { id: user.id } }, users: { connect: { id: user.id } } } })
 
     const page = await createPage('/login')
     await page.getByLabel('Email').fill(email)
@@ -69,7 +72,10 @@ describe('add to album journey', async () => {
       mimeType: 'image/png',
       buffer: Buffer.from(tinyPngBase64, 'base64'),
     })
-    await page.locator('img[alt^="Photo "]').first().waitFor({ timeout: 15_000 })
+    // The gallery grid's alt text is the uploaded object's S3 key filename
+    // (see app/components/BaseGalleryPhoto.vue's getPhotoFileName), which
+    // is prefixed with a UUID by uploadPhotoObject, hence the suffix match.
+    await page.locator('img[alt$="sunset.png"]').first().waitFor({ timeout: 15_000 })
 
     await page.getByRole('button', { name: 'Select' }).first().click()
     await page.getByText('1 selected').waitFor()
@@ -85,7 +91,10 @@ describe('add to album journey', async () => {
     await dialog.getByText('Summer Trip').waitFor({ state: 'hidden' })
     await dialog.getByText('Winter Trip').click()
 
-    await page.getByText('Added to album.').waitFor()
+    // Scoped to the toast's visible title to avoid Playwright strict-mode
+    // matching the aria-live announcer span too (see
+    // i18n-error-messages.browser.test.ts's identical fix).
+    await page.locator('[data-slot="title"]').getByText('Added to album.').waitFor()
     await page.getByText('1 selected').waitFor({ state: 'hidden' })
 
     const photoCount = await prisma.albumsOnPhotos.count({ where: { album_id: winterAlbum.id } })

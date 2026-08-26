@@ -7,15 +7,23 @@ import { defineConfig } from 'vitest/config'
 // importing/mocking server internals directly.
 export default defineConfig({
   test: {
-    testTimeout: 30_000,
-    // Auth cookies are scoped to `COOKIE_DOMAIN` (an operator-set `.env`
+    // Running the full suite spins up ~15 separate booted app instances (each
+    // with its own Nitro server + Playwright browser) in parallel, which can
+    // make individual page actions take longer than they would in isolation
+    // under CPU contention; 30s was occasionally too tight for that (a
+    // different, otherwise-passing test would time out on each full run).
+    testTimeout: 45_000,
+    // Auth cookies are scoped to `NUXT_COOKIE_DOMAIN` (an operator-set `.env`
     // value, e.g. a deployed hostname). `@nuxt/test-utils` boots its server
     // on an ephemeral `127.0.0.1` port instead, so a `.env`-scoped domain
     // cookie would never match the test server's host and get silently
     // dropped by the browser — unset it for the test run so cookies apply to
     // whatever host the test server actually binds to.
     env: {
-      COOKIE_DOMAIN: '',
+      NUXT_COOKIE_DOMAIN: '',
+    },
+    alias: {
+      '#server/': new URL('./server/', import.meta.url).pathname,
     },
   },
 })

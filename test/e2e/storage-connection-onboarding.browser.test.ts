@@ -57,7 +57,9 @@ describe('storage connection onboarding journey', async () => {
     await page.getByRole('button', { name: 'Connect' }).click()
 
     await page.getByText('Your storage connection is ready.').waitFor()
-    await page.getByRole('button', { name: 'Continue' }).click()
+    // UButton with `to="/"` renders as an <a>, not a <button> — so it's an
+    // accessible link, not a button.
+    await page.getByRole('link', { name: 'Continue' }).click()
 
     await page.waitForURL(url('/'))
     await page.getByText(`Welcome, Jane Doe`).waitFor()
@@ -105,7 +107,9 @@ describe('storage connection onboarding journey', async () => {
     await page.getByRole('button', { name: 'Import my existing photos' }).click()
 
     await page.getByText('Imported 2 photos into 1 album.').waitFor()
-    await page.getByRole('button', { name: 'Continue' }).click()
+    // UButton with `to="/"` renders as an <a>, not a <button> — so it's an
+    // accessible link, not a button.
+    await page.getByRole('link', { name: 'Continue' }).click()
 
     await page.waitForURL(url('/'))
     await page.getByText(`Welcome, Import Tester`).waitFor()

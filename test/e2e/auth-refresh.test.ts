@@ -65,7 +65,7 @@ describe('token refresh + protected-route enforcement', async () => {
   }
 
   function signExpiredAccessToken(payload: AccessToken) {
-    return jwt.sign(payload, process.env.JWT_PRIVATE_KEY as string, {
+    return jwt.sign(payload, process.env.NUXT_JWT_PRIVATE_KEY as string, {
       expiresIn: -10,
       algorithm: 'RS256',
     })

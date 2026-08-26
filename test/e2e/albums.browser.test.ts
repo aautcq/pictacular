@@ -86,19 +86,29 @@ describe('albums journey', async () => {
     await page.waitForURL(/\/albums\/\d+$/)
     await page.getByText('This album is empty').waitFor()
 
-    await page.getByRole('button', { name: 'Add photos' }).click()
-    await page.getByRole('dialog').locator('img[alt^="Photo "]').first().click()
+    // Toolbar actions live behind the "Settings" dropdown menu (see
+    // app/pages/albums/[id].vue's settingsItems), not standalone buttons.
+    await page.getByRole('button', { name: 'Settings' }).click()
+    await page.getByRole('menuitem', { name: 'Add photos' }).click()
+    // The gallery grid's alt text is the uploaded object's S3 key filename
+    // (see app/components/BaseGalleryPhoto.vue's getPhotoFileName), which
+    // is prefixed with a UUID by uploadPhotoObject, hence the suffix match.
+    await page.getByRole('dialog').locator('img[alt$="sunset.png"]').first().click()
     await page.getByRole('dialog').getByRole('button', { name: 'Done' }).click()
 
-    await page.locator('img[alt^="Photo "]').first().waitFor()
+    await page.locator('img[alt$="sunset.png"]').first().waitFor()
     await page.getByText('This album is empty').waitFor({ state: 'hidden' })
 
     await page.getByRole('button', { name: 'Summer Trip' }).click()
-    await page.locator('input').first().fill('Renamed Trip')
-    await page.locator('input').first().blur()
+    // Scoped to the title UInput by name — `.first()` on a bare `input`
+    // locator would otherwise resolve to the hidden file-upload input
+    // rendered earlier in the header actions.
+    await page.locator('input[name="title"]').fill('Renamed Trip')
+    await page.locator('input[name="title"]').blur()
     await page.getByRole('button', { name: 'Renamed Trip' }).waitFor()
 
-    await page.getByRole('button', { name: 'Delete', exact: true }).click()
+    await page.getByRole('button', { name: 'Settings' }).click()
+    await page.getByRole('menuitem', { name: 'Delete' }).click()
     await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click()
 
     await page.waitForURL(url('/albums'))

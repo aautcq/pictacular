@@ -63,7 +63,10 @@ describe('biometric sign-in UI journey', async () => {
     await page.getByText(email).waitFor()
 
     await page.getByRole('button', { name: 'Register a biometric credential' }).click()
-    await page.getByText('Biometric credential registered.').waitFor()
+    // Scoped to the toast's visible title to avoid Playwright strict-mode
+    // matching the aria-live announcer span too (see
+    // i18n-error-messages.browser.test.ts's identical fix).
+    await page.locator('[data-slot="title"]').getByText('Biometric credential registered.').waitFor()
 
     const credentialCookie = (await page.context().cookies()).find(cookie => cookie.name === 'pictacularBiometricCredential')
     expect(credentialCookie?.value).toBeTruthy()
@@ -76,6 +79,10 @@ describe('biometric sign-in UI journey', async () => {
     // no password/manual click needed — and land back past the guard.
     await page.waitForURL('**/storage-connection')
 
+    // storage-connection.vue (the guard's redirect target for a User
+    // without a Storage Connection) has no "Log out" button of its own —
+    // that only lives on /profile (see app/pages/profile.vue).
+    await page.goto(localhostUrl('/profile'))
     await page.getByRole('button', { name: 'Log out' }).click()
     await page.waitForURL('**/login')
 

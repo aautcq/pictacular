@@ -50,10 +50,16 @@ describe('album collaborators + invitations journey', async () => {
     await adminPage.getByRole('button', { name: 'Create album' }).click()
     await adminPage.waitForURL(/\/albums\/\d+$/)
 
-    await adminPage.getByRole('button', { name: 'Collaborators' }).click()
+    // "Collaborators" lives behind the "Settings" dropdown menu (see
+    // app/pages/albums/[id].vue's settingsItems), not a standalone button.
+    await adminPage.getByRole('button', { name: 'Settings' }).click()
+    await adminPage.getByRole('menuitem', { name: 'Collaborators' }).click()
     await adminPage.getByRole('dialog').getByLabel('Invite by email').fill(inviteeEmail)
     await adminPage.getByRole('dialog').getByRole('button', { name: 'Invite' }).click()
-    await adminPage.getByRole('status').getByText('1 invitation sent.').waitFor()
+    // Scoped to the toast's visible title to avoid Playwright strict-mode
+    // matching the aria-live announcer span too (see
+    // i18n-error-messages.browser.test.ts's identical fix).
+    await adminPage.locator('[data-slot="title"]').getByText('1 invitation sent.').waitFor()
 
     const album = await prisma.album.findFirstOrThrow({ where: { admin_id: admin.id, title: 'Team Trip' } })
     const invitation = await prisma.invitation.findUniqueOrThrow({
@@ -67,10 +73,16 @@ describe('album collaborators + invitations journey', async () => {
     const inviteePage = await createPage(`/invitations/${invitation.token}`)
     await inviteePage.getByText('Team Trip').waitFor()
 
-    await inviteePage.getByLabel('First name').fill('Ivy')
-    await inviteePage.getByLabel('Last name').fill('Invitee')
-    await inviteePage.getByLabel('Password', { exact: true }).fill(password)
-    await inviteePage.getByLabel('Confirm password').fill(password)
+    // getByLabel doesn't work on this page: Nuxt UI's FormField provides the
+    // same `id` ref to both its label `for` and the nested UInput's `id`, yet
+    // on this page they still render with different values post-hydration
+    // (confirmed independent of this page's async data-fetching pattern —
+    // likely an upstream Nuxt UI/Vue useId() quirk). Target inputs by `name`
+    // instead until that's root-caused upstream.
+    await inviteePage.locator('input[name="first_name"]').fill('Ivy')
+    await inviteePage.locator('input[name="last_name"]').fill('Invitee')
+    await inviteePage.locator('input[name="password"]').fill(password)
+    await inviteePage.locator('input[name="password_confirmation"]').fill(password)
     await inviteePage.getByRole('button', { name: 'Sign up and join album' }).click()
     await inviteePage.getByText('Check your inbox').waitFor()
 

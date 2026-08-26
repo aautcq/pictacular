@@ -10,6 +10,6 @@ describe('app boot smoke test', async () => {
   it('serves the home page over HTTP', async () => {
     const html = await $fetch('/')
 
-    expect(html).toContain('<div id="__nuxt">')
+    expect(html).toContain('id="__nuxt"')
   })
 })

@@ -1,3 +1,4 @@
+import process from 'node:process'
 import tailwindcss from '@tailwindcss/vite'
 
 const appName = 'Pictacular'
@@ -136,8 +137,11 @@ export default defineNuxtConfig({
         // Every User's Photos/avatar are served from their own Storage
         // Connection bucket (any bucket name/region, per ADR 0001), not a
         // single fixed host — a wildcard is required so signed image URLs
-        // from any User's bucket can load.
-        'img-src': ['\'self\'', 'data:', 'https://*.s3.amazonaws.com', 'https://*.s3.eu-west-3.amazonaws.com'],
+        // from any User's bucket can load. AWS_S3_ENDPOINT is only ever set
+        // to point the S3 client at the in-process fake S3 double used by
+        // browser tests (see server/utils/storage.ts), so it's additionally
+        // allow-listed here to let those tests load real photo bytes.
+        'img-src': ['\'self\'', 'data:', 'https://*.s3.amazonaws.com', 'https://*.s3.eu-west-3.amazonaws.com', ...(process.env.AWS_S3_ENDPOINT ? [process.env.AWS_S3_ENDPOINT] : [])],
       },
     },
   },
