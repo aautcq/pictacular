@@ -46,7 +46,7 @@ describe('email outbox scheduled retry + purge task', async () => {
     await prisma.emailOutbox.deleteMany({ where: { recipient_email: { startsWith: emailPrefix } } })
   })
 
-  // SENDGRID_API_KEY isn't a real key in this environment, so every send
+  // BREVO_API_KEY isn't a real key in this environment, so every send
   // attempt the task makes is expected to fail rather than succeed —
   // matching the existing outbox coverage in auth-register.test.ts.
 

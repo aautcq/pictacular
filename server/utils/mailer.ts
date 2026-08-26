@@ -1,6 +1,6 @@
 import type { EmailLang } from './i18n/emails'
 
-import sgMail from '@sendgrid/mail'
+import { BrevoClient } from '@getbrevo/brevo'
 // ejs 6's ESM build only exposes a default export (no named `render`
 // export), unlike the CJS build's exports object — so we import the
 // default and pull `render` off it instead of a named import.
@@ -32,11 +32,13 @@ function loadTemplate() {
 }
 
 // Plain mailer utility (no DI container), ported from the former
-// NestJS MailerService: same @sendgrid/mail SDK call and ejs HTML template,
-// with nestjs-i18n replaced by the minimal t(key, lang) dictionary util.
+// NestJS MailerService: same ejs HTML template rendering, with
+// nestjs-i18n replaced by the minimal t(key, lang) dictionary util.
+// The @sendgrid/mail SDK call was swapped for the @getbrevo/brevo SDK
+// (issue #134).
 export async function sendEmail(data: EmailData, type: EmailType, lang: EmailLang = 'en') {
   const config = useRuntimeConfig()
-  sgMail.setApiKey(config.sendgridApiKey)
+  const brevo = new BrevoClient({ apiKey: config.brevoApiKey })
 
   const template = await loadTemplate()
 
@@ -48,10 +50,10 @@ export async function sendEmail(data: EmailData, type: EmailType, lang: EmailLan
     alternative: t(`${type}.alternative`, lang),
   })
 
-  await sgMail.send({
-    from: 'Pictacular <pictacular@aautcq.com>',
-    to: data.email,
+  await brevo.transactionalEmails.sendTransacEmail({
+    sender: { name: 'Pictacular', email: 'pictacular@aautcq.com' },
+    to: [{ email: data.email }],
     subject: t(`${type}.subject`, lang),
-    html,
+    htmlContent: html,
   })
 }

@@ -32,6 +32,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "~3.1113.0",
     "@aws-sdk/s3-request-presigner": "~3.1113.0",
+    "@getbrevo/brevo": "~6.0.3",
     "@nuxt/fonts": "~0.14.0",
     "@nuxt/icon": "~2.5.0",
     "@nuxt/image": "~2.1.0",
@@ -40,7 +41,6 @@
     "@nuxtjs/seo": "~5.3.14",
     "@prisma/adapter-pg": "~7.9.1",
     "@prisma/client": "~7.9.1",
-    "@sendgrid/mail": "~8.1.6",
     "@simplewebauthn/browser": "~9.0.1",
     "@simplewebauthn/server": "~9.0.3",
     "@vite-pwa/nuxt": "~1.1.1",

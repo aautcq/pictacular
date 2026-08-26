@@ -187,7 +187,7 @@ export default defineNuxtConfig({
   runtimeConfig: {
     cookieDomain: '',
     databaseUrl: '',
-    sendgridApiKey: '',
+    brevoApiKey: '',
     jwt: {
       publicKey: '',
       privateKey: '',
