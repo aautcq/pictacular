@@ -4,19 +4,21 @@ import {
   refreshTokenCookieName,
   refreshTokenCookieOptions,
 } from '#server/utils/cookies'
-import { comparePassword, hashToken } from '#server/utils/crypto'
+import { burnPasswordCompareTime, comparePassword, hashToken } from '#server/utils/crypto'
 import { issuePasswordResetEmail } from '#server/utils/issue-password-reset-email'
 import { createTokens } from '#server/utils/jwt'
 import { prisma } from '#server/utils/prisma'
 import { serializeUser } from '#server/utils/serialize-user'
 
 // Replaces the former AuthController#login (POST /auth/sessions): rejects
-// invalid credentials or unverified accounts identically (no enumeration),
-// locks out password attempts after 5 failures (auto-sending a
-// password-reset email), and on success creates a session, revokes the
-// user's other active sessions, updates last_sign_in_at, issues signed
-// access/refresh JWT cookies, and returns a signed avatar URL when the user
-// has AWS credentials and an avatar set.
+// invalid credentials or unverified accounts identically (no enumeration
+// in the response itself, and no enumeration by timing either — see
+// burnPasswordCompareTime), locks out password attempts after 5 failures
+// (auto-sending a password-reset email), and on success creates a
+// session, revokes the user's other active sessions, updates
+// last_sign_in_at, issues signed access/refresh JWT cookies, and returns
+// a signed avatar URL when the user has AWS credentials and an avatar
+// set.
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const result = loginSchema.safeParse(body)
@@ -46,17 +48,30 @@ export default defineEventHandler(async (event) => {
     statusMessage: 'auth.invalid_credentials',
   })
 
-  if (!user || !user.is_verified)
+  if (!user || !user.is_verified) {
+    // No real password hash to compare against on this branch — burn a
+    // comparable amount of time anyway so this rejection isn't
+    // distinguishable (by latency) from a wrong-password rejection below,
+    // which would otherwise leak whether the email is registered.
+    burnPasswordCompareTime()
     throw invalidCredentialsError
+  }
 
   // Already locked out from a previous attempt: keep rejecting, but don't
   // resend the reset email — that's a one-time side effect of the failure
   // that trips the lock (below), not of every subsequent locked attempt,
   // otherwise an attacker who knows the victim's email could repeatedly
   // trigger reset emails (and invalidate the victim's own reset token) by
-  // just re-submitting the login request.
-  if (user.nb_incorrect_passwords >= 5)
+  // just re-submitting the login request. Still burn the same dummy
+  // compare time as the unknown-email branch above, though: without it,
+  // this rejection would return measurably faster than a live
+  // comparePassword call below, reopening the exact timing oracle this
+  // file otherwise closes (a locked-out account is necessarily a real,
+  // verified one).
+  if (user.nb_incorrect_passwords >= 5) {
+    burnPasswordCompareTime()
     throw invalidCredentialsError
+  }
 
   const isPasswordValid = comparePassword(password, user.password)
   if (!isPasswordValid) {

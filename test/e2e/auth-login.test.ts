@@ -46,6 +46,20 @@ describe('login + logout + session lifecycle + lockout', async () => {
     return response.headers.getSetCookie()
   }
 
+  async function averageDurationMs(body: Record<string, string>, attempts = 8) {
+    let total = 0
+    for (let i = 0; i < attempts; i++) {
+      const start = performance.now()
+      await fetch('/api/auth/sessions', {
+        method: 'POST',
+        body: JSON.stringify(body),
+        headers: { 'content-type': 'application/json' },
+      })
+      total += performance.now() - start
+    }
+    return total / attempts
+  }
+
   afterAll(async () => {
     await prisma.emailOutbox.deleteMany({ where: { recipient_email: { startsWith: emailPrefix } } })
     await prisma.user.deleteMany({ where: { email: { startsWith: emailPrefix } } })
@@ -131,6 +145,50 @@ describe('login + logout + session lifecycle + lockout', async () => {
     await expect(
       $fetch('/api/auth/sessions', { method: 'POST', body: { email, password } }),
     ).rejects.toMatchObject({ statusCode: 401, statusMessage: 'auth.invalid_credentials' })
+  })
+
+  // Beyond an identical response, an unknown email must also not be
+  // distinguishable from a wrong password by response latency: rejecting
+  // an unknown email skips the real bcrypt comparePassword call a wrong
+  // password takes, so burnPasswordCompareTime (server/utils/crypto.ts)
+  // burns an equivalent amount of time on that branch instead. Averaged
+  // over several attempts (bcrypt/scheduling jitter is real) and asserted
+  // with a generous tolerance to avoid CI flakiness — this is a coarse
+  // "same order of magnitude" check, not a precise timing proof.
+  it('takes comparable time to reject an unknown email as a wrong password for a known one', async () => {
+    const email = await createVerifiedUser()
+
+    const wrongPasswordDurationMs = await averageDurationMs({ email, password: 'wrong-password' })
+    const unknownEmailDurationMs = await averageDurationMs({ email: uniqueEmail(), password: 'wrong-password' })
+
+    expect(unknownEmailDurationMs).toBeGreaterThan(wrongPasswordDurationMs * 0.5)
+  })
+
+  // A locked-out account's rejection takes the same early-return shape as
+  // the unknown-email branch above (no live comparePassword call), so it
+  // needs the same burnPasswordCompareTime call — otherwise it would be
+  // the one branch responding faster than a real comparePassword,
+  // betraying that the email belongs to a real (locked-out, hence
+  // verified) account.
+  it('takes comparable time to reject a locked-out account as a wrong password for a non-locked-out one', async () => {
+    const lockedOutEmail = await createVerifiedUser()
+    for (let i = 0; i < 5; i++) {
+      await fetch('/api/auth/sessions', {
+        method: 'POST',
+        body: JSON.stringify({ email: lockedOutEmail, password: 'wrong-password' }),
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+
+    const otherEmail = await createVerifiedUser()
+
+    const lockedOutDurationMs = await averageDurationMs({ email: lockedOutEmail, password: 'wrong-password' })
+    // Capped at 4 attempts (below the 5-failure lockout threshold) so this
+    // baseline measurement stays on the real-comparePassword branch the
+    // whole time, rather than tipping into lockout partway through.
+    const wrongPasswordDurationMs = await averageDurationMs({ email: otherEmail, password: 'wrong-password' }, 4)
+
+    expect(lockedOutDurationMs).toBeGreaterThan(wrongPasswordDurationMs * 0.5)
   })
 
   it('creates a session, revokes other active sessions, updates last_sign_in_at, and sets both auth cookies on success', async () => {
