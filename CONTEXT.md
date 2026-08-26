@@ -51,3 +51,18 @@ token sent by email. A User is "verified" once confirmed.
 **Invitation**:
 The flow by which a person without an existing account is added as an Album Collaborator: they
 receive an email prompting them to sign up, after which they gain access to that Album.
+
+**Archived Photo**:
+A Photo whose underlying S3 object currently has the `GLACIER` or `DEEP_ARCHIVE` storage class,
+and so cannot be read (displayed, downloaded) until a Restore Request completes. A bucket's
+objects can transition to these classes at any time via a lifecycle rule the User configured
+outside Pictacular, independent of how the Photo was originally added (upload vs. import).
+_Avoid_: glacier photo, cold photo
+
+**Restore Request**:
+A User-initiated action asking AWS to make an Archived Photo's bytes temporarily readable again
+for a fixed number of days, after which it automatically becomes an Archived Photo again unless
+a new Restore Request is made. At most one Restore Request can be in flight per Photo at a time
+(AWS itself rejects a second one); a Restore Request may also be started directly in AWS,
+outside Pictacular.
+_Avoid_: unarchiving, thawing
