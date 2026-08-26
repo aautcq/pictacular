@@ -17,6 +17,20 @@ export function comparePassword(password: string, hash: string): boolean {
   return bcrypt.compareSync(password, hash)
 }
 
+// Fixed hash (bcrypt.hashSync('dummy-password-for-timing-parity', 10),
+// precomputed rather than generated at import time to avoid paying its
+// cost on every cold start) used solely to burn the same ~bcrypt-compare
+// wall-clock time on paths that skip a real comparePassword call (e.g.
+// login/registration for an email that doesn't match the branch it would
+// otherwise take) — without this, an attacker could distinguish those
+// branches by response latency alone, even though the response body/
+// status is already identical (account-enumeration via timing).
+const DUMMY_PASSWORD_HASH = '$2b$10$sZowi7M1AAQrtcIOV9vN3O0l0bGaHnBI9kqgZluqkTY9fzDROKcQu'
+
+export function burnPasswordCompareTime(): void {
+  bcrypt.compareSync('irrelevant', DUMMY_PASSWORD_HASH)
+}
+
 // bcrypt silently truncates its input at 72 bytes, which is fine for
 // user-chosen passwords but unsafe for long opaque secrets such as RS256
 // refresh JWTs: two distinct tokens for the same session share the same

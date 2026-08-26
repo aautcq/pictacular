@@ -4,9 +4,13 @@ import { prisma } from '../../server/utils/prisma'
 
 // Black-box HTTP tests for register + email verification (issue #29):
 // register creates an unverified user and sends a verification email,
-// verify marks the account verified given a valid token. Assertions on
-// side effects (created user row, is_verified flag) go through Prisma
-// directly, since there's no HTTP endpoint yet to read a user back.
+// verify marks the account verified given a valid token. Registering
+// again with an already-taken email always responds identically (204),
+// whether verified (silent no-op) or unverified (silently resends the
+// existing verification email) — matching the anti-enumeration contract
+// login and password-reset already use. Assertions on side effects
+// (created user row, is_verified flag) go through Prisma directly, since
+// there's no HTTP endpoint yet to read a user back.
 describe('register + email verification', async () => {
   await setup()
 
@@ -79,32 +83,70 @@ describe('register + email verification', async () => {
     expect(outboxRow.last_error).toBeTruthy()
   })
 
-  it('rejects registering with a taken email with auth.email_taken', async () => {
+  it('responds identically (204) when registering with an already-verified email, without creating a second account (no enumeration)', async () => {
+    const payload = validPayload()
+    await $fetch('/api/auth/users', { method: 'POST', body: payload })
+    const user = await prisma.user.findUniqueOrThrow({ where: { email: payload.email } })
+    await $fetch(`/api/auth/verify/${user.verification_token}`)
+
+    const response = await fetch('/api/auth/users', {
+      method: 'POST',
+      body: JSON.stringify(validPayload({ email: payload.email })),
+      headers: { 'content-type': 'application/json' },
+    })
+
+    expect(response.status).toBe(204)
+    expect(await prisma.user.count({ where: { email: payload.email } })).toBe(1)
+  })
+
+  it('responds identically (204) and silently resends the verification email when registering with an already-taken, unverified email (no enumeration)', async () => {
     const payload = validPayload()
     await $fetch('/api/auth/users', { method: 'POST', body: payload })
 
-    await expect(
-      $fetch('/api/auth/users', { method: 'POST', body: validPayload({ email: payload.email }) }),
-    ).rejects.toMatchObject({
-      statusCode: 409,
-      statusMessage: 'auth.email_taken',
+    // Wait for registration's own outbox row to settle first, so the
+    // assertions below unambiguously target the resend's row.
+    await vi.waitFor(async () => {
+      const row = await prisma.emailOutbox.findFirstOrThrow({
+        where: { recipient_email: payload.email, type: 'verification' },
+      })
+      expect(row.status).not.toBe('pending')
+    })
+
+    const response = await fetch('/api/auth/users', {
+      method: 'POST',
+      body: JSON.stringify(validPayload({ email: payload.email })),
+      headers: { 'content-type': 'application/json' },
+    })
+
+    expect(response.status).toBe(204)
+    expect(await prisma.user.count({ where: { email: payload.email } })).toBe(1)
+
+    await vi.waitFor(async () => {
+      const rows = await prisma.emailOutbox.findMany({
+        where: { recipient_email: payload.email, type: 'verification' },
+      })
+      expect(rows).toHaveLength(2)
     })
   })
 
-  it('rejects two concurrent registrations for the same email with auth.email_taken', async () => {
+  it('responds identically (204) for two concurrent registrations of the same brand-new email (no enumeration via a race)', async () => {
     const payload = validPayload()
 
-    const results = await Promise.allSettled([
-      $fetch('/api/auth/users', { method: 'POST', body: payload }),
-      $fetch('/api/auth/users', { method: 'POST', body: payload }),
+    const responses = await Promise.all([
+      fetch('/api/auth/users', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        headers: { 'content-type': 'application/json' },
+      }),
+      fetch('/api/auth/users', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        headers: { 'content-type': 'application/json' },
+      }),
     ])
 
-    const rejected = results.filter(result => result.status === 'rejected')
-    expect(rejected).toHaveLength(1)
-    expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({
-      statusCode: 409,
-      statusMessage: 'auth.email_taken',
-    })
+    expect(responses.map(response => response.status)).toEqual([204, 204])
+    expect(await prisma.user.count({ where: { email: payload.email } })).toBe(1)
   })
 
   it('rejects a payload with insufficient password complexity', async () => {
