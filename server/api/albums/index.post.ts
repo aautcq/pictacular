@@ -39,5 +39,5 @@ export default defineEventHandler(async (event) => {
   })
 
   setResponseStatus(event, 201)
-  return serializeAlbumSummary(album, null)
+  return serializeAlbumSummary(album, null, 0)
 })

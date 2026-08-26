@@ -86,7 +86,7 @@ describe('albums core', async () => {
   }
 
   async function createAlbum(cookieHeader: string, overrides: Record<string, unknown> = {}) {
-    return $fetch<{ id: number, title: string, description: string | null, cover: string | null }>('/api/albums', {
+    return $fetch<{ id: number, title: string, description: string | null, cover: string | null, photo_count: number }>('/api/albums', {
       method: 'POST',
       headers: { cookie: cookieHeader },
       body: { title: 'My Album', description: 'A description', ...overrides },
@@ -130,6 +130,11 @@ describe('albums core', async () => {
       expect(row.admin_id).toBe(owner.id)
     })
 
+    it('starts with a photo_count of 0', async () => {
+      const album = await createAlbum(owner.cookieHeader)
+      expect(album.photo_count).toBe(0)
+    })
+
     it('rejects a missing title', async () => {
       await expect(
         $fetch('/api/albums', {
@@ -159,7 +164,7 @@ describe('albums core', async () => {
         headers: { cookie: owner.cookieHeader },
       })
 
-      const response = await $fetch<{ albums: { id: number, cover: string | null }[], next_cursor: number | null }>('/api/albums', {
+      const response = await $fetch<{ albums: { id: number, cover: string | null, photo_count: number }[], next_cursor: number | null }>('/api/albums', {
         headers: { cookie: owner.cookieHeader },
       })
 
@@ -168,6 +173,35 @@ describe('albums core', async () => {
       expect(ids).not.toContain(othersAlbum.id)
       expect(response.albums[0]!.id).toBe(secondAlbum.id)
       expect(response.albums[0]!.cover).toContain('photo.png')
+      expect(response.albums[0]!.photo_count).toBe(1)
+      expect(response.albums.find(album => album.id === firstAlbum.id)!.photo_count).toBe(0)
+    })
+
+    it('counts every assigned Photo even when its owner has no Storage Connection', async () => {
+      const album = await createAlbum(owner.cookieHeader, { title: 'Count Without Storage' })
+      const photo = await uploadPhoto(owner.cookieHeader)
+      await $fetch(`/api/albums/${album.id}/photos/${photo.id}`, { method: 'POST', headers: { cookie: owner.cookieHeader } })
+
+      await prisma.awsCredentials.delete({ where: { user_id: owner.id } })
+
+      try {
+        const response = await $fetch<{ albums: { id: number, photo_count: number }[] }>('/api/albums', {
+          headers: { cookie: owner.cookieHeader },
+        })
+
+        expect(response.albums.find(a => a.id === album.id)!.photo_count).toBe(1)
+      }
+      finally {
+        // Restore the Storage Connection so afterAll/other tests relying
+        // on `owner` still having one aren't affected.
+        const restoredBucket = uniqueBucketName('owner-restored')
+        fakeS3.seedBucket(restoredBucket)
+        await $fetch('/api/storage-connections', {
+          method: 'POST',
+          headers: { cookie: owner.cookieHeader },
+          body: { mode: 'connect', access_key_id: 'AKIATEST', secret_access_key: 'test-secret', bucket: restoredBucket },
+        })
+      }
     })
 
     it('paginates with a keyset cursor', async () => {

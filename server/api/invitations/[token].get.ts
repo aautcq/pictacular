@@ -1,6 +1,6 @@
 import { memberSelect } from '#server/utils/album-guards'
 import { prisma } from '#server/utils/prisma'
-import { loadAlbumCover, serializeAlbumSummary } from '#server/utils/serialize-album'
+import { countAlbumPhotos, loadAlbumCover, serializeAlbumSummary } from '#server/utils/serialize-album'
 
 // Public endpoint (no auth) backing the Invitation screen (issue #52):
 // resolves an Invitation token to its Album's summary (title/description/
@@ -33,7 +33,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const cover = await loadAlbumCover(invitation.album_id)
-  const summary = await serializeAlbumSummary(invitation.album, cover)
+  const summary = await serializeAlbumSummary(invitation.album, cover, await countAlbumPhotos(invitation.album_id))
   const existingUser = await prisma.user.findUnique({ where: { email: invitation.email } })
 
   return { ...summary, email: invitation.email, has_pending_account: !!existingUser }
