@@ -88,7 +88,9 @@ async function submit() {
     "doneMessage": "Your password has been updated. You can now sign in.",
     "goToSignIn": "Go to sign in",
     "newPasswordLabel": "New password",
+    "passwordPlaceholder": "Enter your new password",
     "confirmNewPasswordLabel": "Confirm new password",
+    "confirmPasswordPlaceholder": "Re-enter your new password",
     "submit": "Set new password",
     "submitting": "Saving…"
   }
