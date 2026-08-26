@@ -1,3 +1,4 @@
+import process from 'node:process'
 import webpush from 'web-push'
 
 export interface WebPushSubscription {
@@ -15,18 +16,28 @@ export interface WebPushSubscription {
 // to be the dropped CLIENT_URL env var (see ADR 0001); a mailto: subject
 // (the standard alternative for the VAPID JWT `sub` claim) replaces it since
 // there's no longer a client origin to point at.
+//
+// This used to only ever be called inside a live Nitro request (the `push`
+// WS message, always handled inside a live connection); issue #145's scan
+// task changes that by calling it with no HTTP entry point at all, so
+// `useRuntimeConfig` (an auto-import unavailable outside a live Nitro
+// request/build) needs the same `typeof` guard + env var fallback
+// server/utils/jwt.ts#verifyToken already uses for the same reason.
 export async function sendPushNotification(
   subscription: WebPushSubscription,
   name: string,
   title: string,
   body: string,
 ) {
-  const config = useRuntimeConfig()
+  const { publicKey, privateKey } = typeof useRuntimeConfig === 'function'
+    ? useRuntimeConfig().webPush
+    : { publicKey: process.env.NUXT_WEB_PUSH_PUBLIC_KEY as string, privateKey: process.env.NUXT_WEB_PUSH_PRIVATE_KEY as string }
+
   const options = {
     vapidDetails: {
       subject: 'mailto:pictacular@aautcq.com',
-      publicKey: config.webPush.publicKey,
-      privateKey: config.webPush.privateKey,
+      publicKey,
+      privateKey,
     },
     TTL: 60,
   }

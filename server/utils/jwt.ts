@@ -51,9 +51,23 @@ export function createTokens(
   return { accessToken, refreshToken }
 }
 
+// `verifyToken` used to only ever be called inside a live Nitro request,
+// where the useRuntimeConfig() auto-import is available — issue #145's
+// scan task changes that: it decodes a Storage Connection's AWS
+// credentials (via decodeAwsCredentials below) with no HTTP entry point
+// at all, following the exact "invoke run() directly, no request context"
+// precedent server/tasks/email-outbox/process.ts's own test already
+// established. `typeof useRuntimeConfig` (rather than calling it
+// unconditionally) is what safely detects that missing auto-import
+// without throwing, mirroring encodeAwsCredentials' own
+// call-it-directly-from-a-standalone-spec accommodation just below.
 export function verifyToken<T>(token: string): T | null {
   try {
-    return jwt.verify(token, useRuntimeConfig().jwt.publicKey, {
+    const publicKey = typeof useRuntimeConfig === 'function'
+      ? useRuntimeConfig().jwt.publicKey
+      : process.env.NUXT_JWT_PUBLIC_KEY as string
+
+    return jwt.verify(token, publicKey, {
       algorithms: ['RS256'],
     }) as T
   }
