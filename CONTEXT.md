@@ -14,10 +14,11 @@ An authenticated login instance for a User, backed by a JWT access/refresh token
 may hold several active sessions (e.g. one per device).
 
 **Storage Connection**:
-A User's own S3 bucket plus the credentials (access key, secret key, region) needed to read and
-write to it. Every Photo a user owns is stored in their Storage Connection's bucket, addressed
-by a storage key. A User has at most one Storage Connection.
-_Avoid_: AWS credentials, bucket setup
+A User's own S3 bucket plus the access Pictacular needs to read and write to it (region, and
+whatever AWS grants that access). Every Photo a user owns is stored in their Storage
+Connection's bucket, addressed by a storage key. A User has at most one Storage Connection.
+_Avoid_: AWS credentials, bucket setup, access key/secret key (see ADR-0006 — no longer how
+access is granted)
 
 **Photo**:
 A single image file owned by a User, stored in that User's Storage Connection. Tracks its
