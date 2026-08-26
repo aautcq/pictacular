@@ -7,7 +7,17 @@ organizes, and shares photos via albums.
 
 **User**:
 An account holder, identified by email, who owns photos, albums, and (optionally) a Storage
-Connection. May sign in with a password or with biometrics.
+Connection. May sign in with a password, with biometrics, or via an OAuth Account — a User
+need not have a password at all if every OAuth Account it holds proves its identity instead.
+
+**OAuth Account**:
+A link between a User and an identity the User has proven ownership of at an external
+provider (e.g. Google), used as an alternative to a password for signing in. Identified by
+provider + the provider's own user id for that identity. Signing in with an OAuth Account
+whose email matches an existing User auto-links to that User (and marks it verified) rather
+than creating a duplicate.
+_Avoid_: social login, social connect, connected account (these describe the feature/flow, not
+the persisted concept)
 
 **Session**:
 An authenticated login instance for a User, backed by a JWT access/refresh token pair. A user
