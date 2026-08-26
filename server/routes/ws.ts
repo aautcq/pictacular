@@ -4,7 +4,6 @@ import { defineWebSocketHandler } from 'h3'
 import { accessTokenCookieName } from '#server/utils/cookies'
 import { verifyToken } from '#server/utils/jwt'
 import { prisma } from '#server/utils/prisma'
-import { pushMessageSchema } from '#server/utils/validation/websocket'
 import { sendPushNotification } from '#server/utils/web-push'
 import { registerPeer, unregisterPeer } from '#server/utils/websocket'
 

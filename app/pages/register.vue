@@ -3,7 +3,7 @@ definePageMeta({ middleware: 'guest' })
 
 const { register } = useCurrentUser()
 const toast = useToast()
-const { translateError } = useErrorMessage()
+const { translateError, getFieldErrors } = useErrorMessage()
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
 
 const form = useTemplateRef('form')
@@ -24,10 +24,7 @@ async function submit() {
     submitted.value = true
   }
   catch (error) {
-    const withData = error as { data?: { data?: { name: string, message: string }[] } }
-    if (withData?.data?.data?.length) {
-      form.value?.setErrors(withData.data.data)
-    }
+    form.value?.setErrors(getFieldErrors(error))
     toast.add({ title: translateError(error), color: 'error' })
   }
   finally {
@@ -56,9 +53,9 @@ async function submit() {
     <UForm
       v-else
       ref="form"
+      :schema="registerSchema"
       :state="state"
       class="space-y-4"
-      novalidate
       @submit.prevent="submit"
     >
       <UFormField :label="t('firstNameLabel')" name="first_name">

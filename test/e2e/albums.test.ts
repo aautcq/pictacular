@@ -137,7 +137,7 @@ describe('albums core', async () => {
           headers: { cookie: owner.cookieHeader },
           body: { description: 'no title' },
         }),
-      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'albums.invalid_payload' })
+      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'validation.invalid_payload' })
     })
 
     it('rejects an unauthenticated request with 401', async () => {

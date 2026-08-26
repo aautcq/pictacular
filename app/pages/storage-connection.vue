@@ -4,13 +4,16 @@ definePageMeta({ middleware: 'auth' })
 const { connectStorage, checkBucket, user } = useCurrentUser()
 const { importing, progress, result, importPhotos } = useBucketImport()
 const toast = useToast()
-const { translateError } = useErrorMessage()
+const { translateError, getFieldErrors } = useErrorMessage()
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
 
+const form = useTemplateRef('form')
 const mode = shallowRef<'create' | 'connect' | null>(null)
-const bucket = shallowRef('')
-const access_key_id = shallowRef('')
-const secret_access_key = shallowRef('')
+const state = reactive({
+  bucket: '',
+  access_key_id: '',
+  secret_access_key: '',
+})
 const loading = shallowRef(false)
 const connected = shallowRef(user.value?.has_aws_credentials ?? false)
 const importSkipped = shallowRef(false)
@@ -47,14 +50,15 @@ async function submit() {
   try {
     await connectStorage(
       mode.value === 'create'
-        ? { mode: 'create', access_key_id: access_key_id.value, secret_access_key: secret_access_key.value }
-        : { mode: 'connect', access_key_id: access_key_id.value, secret_access_key: secret_access_key.value, bucket: bucket.value },
+        ? { mode: 'create', access_key_id: state.access_key_id, secret_access_key: state.secret_access_key }
+        : { mode: 'connect', access_key_id: state.access_key_id, secret_access_key: state.secret_access_key, bucket: state.bucket },
     )
 
     connected.value = true
     hasPhotos.value = mode.value === 'connect' ? await checkBucket() : false
   }
   catch (error) {
+    form.value?.setErrors(getFieldErrors(error))
     toast.add({ title: translateError(error), color: 'error' })
   }
   finally {
@@ -160,14 +164,15 @@ const importResultText = computed(() => {
 
       <UForm
         v-if="mode"
+        ref="form"
         class="space-y-4"
-        :state="{ bucket, access_key_id, secret_access_key }"
-        novalidate
+        :schema="storageConnectionSchema"
+        :state="{ mode, ...state }"
         @submit.prevent="submit"
       >
         <UFormField v-if="mode === 'connect'" :label="t('bucketNameLabel')" name="bucket">
           <UInput
-            v-model="bucket"
+            v-model="state.bucket"
             type="text"
             autocomplete="off"
             autofocus
@@ -179,7 +184,7 @@ const importResultText = computed(() => {
 
         <UFormField :label="t('accessKeyLabel')" name="access_key_id">
           <UInput
-            v-model="access_key_id"
+            v-model="state.access_key_id"
             type="password"
             autocomplete="off"
             required
@@ -190,7 +195,7 @@ const importResultText = computed(() => {
 
         <UFormField :label="t('secretKeyLabel')" name="secret_access_key">
           <UInput
-            v-model="secret_access_key"
+            v-model="state.secret_access_key"
             type="password"
             autocomplete="off"
             required

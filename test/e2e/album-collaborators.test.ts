@@ -207,7 +207,7 @@ describe('album collaborators + invitations', async () => {
           headers: { cookie: admin.cookieHeader },
           body: { emails: [] },
         }),
-      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'albums.invalid_payload' })
+      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'validation.invalid_payload' })
     })
 
     it('rejects an unauthenticated request with 401', async () => {

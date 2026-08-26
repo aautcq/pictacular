@@ -1,7 +1,6 @@
 import { memberSelect } from '#server/utils/album-guards'
 import { prisma } from '#server/utils/prisma'
 import { serializeAlbumSummary } from '#server/utils/serialize-album'
-import { albumCreateSchema } from '#server/utils/validation/album'
 
 // Creates a new Album (issue #51) owned by the authenticated User, who
 // becomes both its admin and its (only, so far) member — connecting them
@@ -17,7 +16,13 @@ export default defineEventHandler(async (event) => {
   if (!result.success) {
     throw createError({
       statusCode: 400,
-      statusMessage: 'albums.invalid_payload',
+      statusMessage: 'validation.invalid_payload',
+      data: {
+        errors: result.error.issues.map(issue => ({
+          name: issue.path[0],
+          message: issue.message,
+        })),
+      },
     })
   }
 

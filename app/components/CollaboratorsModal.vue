@@ -7,12 +7,30 @@ const isOpen = defineModel<boolean>('isOpen', { required: true })
 const { user } = useCurrentUser()
 const { addCollaborators, removeCollaborator } = useAlbums()
 const toast = useToast()
-const { translateError } = useErrorMessage()
+const { translateError, getFieldErrors } = useErrorMessage()
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
 
-const inviteEmails = shallowRef('')
+const form = useTemplateRef('form')
+const inviteEmailsText = shallowRef('')
 const inviting = shallowRef(false)
 const removingCollaboratorId = shallowRef<number | null>(null)
+
+function parseEmails(text: string): string[] {
+  return text
+    .split(/[\n,]/)
+    .map(email => email.trim())
+    .filter(email => email.length > 0)
+}
+
+// Bound to `<UForm :state>`'s `emails` field so it validates against
+// `albumCollaboratorsSchema` ({ emails: string[] }) while the textarea
+// itself keeps editing/displaying the comma/newline-separated raw text.
+const emails = computed<string[]>({
+  get: () => parseEmails(inviteEmailsText.value),
+  set: (value) => {
+    inviteEmailsText.value = value.join(', ')
+  },
+})
 
 const isAdmin = computed(() => !!album.value && !!user.value && album.value.admin.id === user.value.id)
 
@@ -32,22 +50,18 @@ function describeInviteResult({ linked, invited }: { linked: string[], invited: 
 }
 
 async function submitInvite() {
-  const emails = inviteEmails.value
-    .split(/[\n,]/)
-    .map(email => email.trim())
-    .filter(email => email.length > 0)
-
-  if (!emails.length)
+  if (!emails.value.length)
     return
 
   inviting.value = true
   try {
-    const result = await addCollaborators(album.value.id, emails)
+    const result = await addCollaborators(album.value.id, emails.value)
     album.value = result
-    inviteEmails.value = ''
+    inviteEmailsText.value = ''
     toast.add({ title: describeInviteResult(result) })
   }
   catch (error) {
+    form.value?.setErrors(getFieldErrors(error))
     toast.add({ title: translateError(error), color: 'error' })
   }
   finally {
@@ -96,14 +110,15 @@ async function removeCollaboratorFromAlbum(userId: number) {
 
       <UForm
         v-if="isAdmin"
+        ref="form"
         class="space-y-2"
-        :state="{ inviteEmails }"
-        novalidate
+        :schema="albumCollaboratorsSchema"
+        :state="{ emails }"
         @submit.prevent="submitInvite"
       >
-        <UFormField :label="t('inviteByEmailLabel')" name="inviteEmails">
+        <UFormField :label="t('inviteByEmailLabel')" name="emails">
           <UInput
-            v-model="inviteEmails"
+            v-model="inviteEmailsText"
             type="text"
             autofocus
             :placeholder="t('inviteByEmailPlaceholder')"
@@ -113,7 +128,7 @@ async function removeCollaboratorFromAlbum(userId: number) {
         </UFormField>
         <UButton
           type="submit"
-          :disabled="!inviteEmails.trim()"
+          :disabled="!inviteEmailsText.trim()"
           :loading="inviting"
           block
           :label="inviting ? t('inviting') : t('inviteButton')"

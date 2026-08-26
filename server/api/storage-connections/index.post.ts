@@ -2,7 +2,6 @@ import { Prisma } from '#server/generated/prisma/client'
 import { encodeAwsCredentials } from '#server/utils/jwt'
 import { prisma } from '#server/utils/prisma'
 import { connectExistingBucket, createBucket } from '#server/utils/storage'
-import { storageConnectionSchema } from '#server/utils/validation/storage-connection'
 
 // Storage Connection onboarding endpoint (issue #49): a signed-in, verified
 // User submits their own AWS key pair and either has Pictacular create a
@@ -18,7 +17,13 @@ export default defineEventHandler(async (event) => {
   if (!result.success) {
     throw createError({
       statusCode: 400,
-      statusMessage: 'storage.invalid_payload',
+      statusMessage: 'validation.invalid_payload',
+      data: {
+        errors: result.error.issues.map(issue => ({
+          name: issue.path[0],
+          message: issue.message,
+        })),
+      },
     })
   }
 

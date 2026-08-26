@@ -182,7 +182,7 @@ describe('register + email verification', async () => {
     it('rejects an invalid payload', async () => {
       await expect(
         $fetch('/api/auth/verify', { method: 'POST', body: { email: 'not-an-email' } }),
-      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'auth.invalid_payload' })
+      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'validation.invalid_payload' })
     })
 
     // Issue #95: resend-verification is routed through the same durable

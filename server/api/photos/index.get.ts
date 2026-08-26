@@ -1,7 +1,6 @@
 import { requirePhotoStorageConnection } from '#server/utils/photo-guards'
 import { prisma } from '#server/utils/prisma'
 import { serializePhoto } from '#server/utils/serialize-photo'
-import { photoListQuerySchema } from '#server/utils/validation/photo'
 
 // Lists the authenticated User's own Photos (issue #50), newest first,
 // paginated via a keyset cursor (the last-seen Photo id) rather than
