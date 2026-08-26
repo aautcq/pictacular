@@ -51,7 +51,7 @@ export function usePhotoLibrary() {
 
   async function fetchNextPage() {
     if (loading.value || (loaded.value && nextCursor.value === null))
-      return
+      return null
 
     loading.value = true
     try {

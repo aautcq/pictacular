@@ -9,6 +9,7 @@ const isLoaded = shallowRef(false)
   <div class="relative w-full h-full flex items-center justify-center">
     <NuxtImg
       v-if="!hasError"
+      v-bind="$attrs"
       :src
       :alt
       format="webp"

@@ -97,7 +97,7 @@ async function addToAlbum(albumId: number) {
           variant="soft"
           :placeholder="t('searchPlaceholder')"
           icon="ph:magnifying-glass"
-          class="w-full"
+          class="w-full mb-3"
         />
       </label>
 
