@@ -11,7 +11,7 @@ describe('auth context', async () => {
   await setup()
 
   function signAccessToken(payload: AccessToken) {
-    return jwt.sign(payload, process.env.JWT_PRIVATE_KEY as string, {
+    return jwt.sign(payload, process.env.NUXT_JWT_PRIVATE_KEY as string, {
       expiresIn: '15m',
       algorithm: 'RS256',
     })

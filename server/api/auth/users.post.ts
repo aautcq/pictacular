@@ -54,10 +54,15 @@ export default defineEventHandler(async (event) => {
     // findUnique/generateUniqueVerificationToken checks above are
     // TOCTOU-vulnerable to a concurrent registration for the same address
     // or a colliding token, so fall back to the DB's own unique-constraint
-    // error (P2002) to keep the right contract under a race. Prisma reports
-    // which column collided via error.meta.target.
+    // error (P2002) to keep the right contract under a race. Under the
+    // `@prisma/adapter-pg` driver adapter (Prisma 7), the conflicting
+    // column isn't reported via the classic `error.meta.target` — it's
+    // nested in the underlying pg driver error instead — so read both
+    // shapes, preferring the driver adapter's since that's what's actually
+    // populated here.
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      const target = error.meta?.target
+      const driverAdapterError = error.meta?.driverAdapterError as { cause?: { constraint?: { fields?: string[] } } } | undefined
+      const target = driverAdapterError?.cause?.constraint?.fields ?? error.meta?.target
       const conflictsOnEmail = Array.isArray(target) ? target.includes('email') : target === 'email'
 
       throw createError({

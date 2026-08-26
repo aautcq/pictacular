@@ -87,7 +87,10 @@ describe('album public share link journey', async () => {
     await adminPage.goto(url(`/albums/${album.id}`))
     await adminPage.getByText('Beach Trip').waitFor()
 
-    await adminPage.getByRole('button', { name: 'Share' }).click()
+    // "Share" lives behind the "Settings" dropdown menu (see
+    // app/pages/albums/[id].vue's settingsItems), not a standalone button.
+    await adminPage.getByRole('button', { name: 'Settings' }).click()
+    await adminPage.getByRole('menuitem', { name: 'Share' }).click()
     await adminPage.getByRole('dialog').getByRole('button', { name: 'Copy' }).waitFor({ state: 'visible' })
     await adminPage.getByRole('dialog').getByRole('button', { name: 'Copy' }).click()
     await adminPage.getByRole('dialog').getByRole('button', { name: 'Copied!' }).waitFor()

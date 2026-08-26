@@ -70,9 +70,12 @@ describe('personal photo library journey', async () => {
       buffer: Buffer.from(tinyPngBase64, 'base64'),
     })
 
-    await page.locator('img[alt^="Photo "]').first().waitFor({ timeout: 15_000 })
+    // The gallery grid's alt text is the uploaded object's S3 key filename
+    // (see app/components/BaseGalleryPhoto.vue's getPhotoFileName), which
+    // is prefixed with a UUID by uploadPhotoObject, hence the suffix match.
+    await page.locator('img[alt$="sunset.png"]').first().waitFor({ timeout: 15_000 })
 
-    await page.locator('img[alt^="Photo "]').first().click()
+    await page.locator('img[alt$="sunset.png"]').first().click()
     await page.getByRole('button', { name: 'Like' }).click()
     await page.getByRole('button', { name: 'Liked' }).waitFor()
     await page.keyboard.press('Escape')
@@ -81,7 +84,10 @@ describe('personal photo library journey', async () => {
     await page.getByRole('button', { name: 'Select' }).first().click()
     await page.getByText('1 selected').waitFor()
 
-    await page.getByRole('button', { name: 'Delete', exact: true }).click()
+    // Delete lives in the selection toolbar's "Settings" dropdown menu
+    // (see app/pages/index.vue's settingsItems), not a standalone button.
+    await page.getByRole('button', { name: 'Settings' }).click()
+    await page.getByRole('menuitem', { name: 'Delete' }).click()
     await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click()
 
     await page.getByText('Your photo library is empty').waitFor()

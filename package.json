@@ -14,6 +14,9 @@
   "bugs": {
     "url": "https://github.com/aautcq/pictacular/issues"
   },
+  "imports": {
+    "#server/*": "./server/*"
+  },
   "engines": {
     "node": "~24.19.0",
     "npm": "~11.17.0"
@@ -73,6 +76,7 @@
     "nuxt": "~4.5.2",
     "nuxt-security": "~2.6.0",
     "prisma": "~7.9.1",
+    "selfsigned": "~5.5.0",
     "tailwindcss": "~4.3.3",
     "typescript": "~6.0.3",
     "vitest": "~4.1.11",

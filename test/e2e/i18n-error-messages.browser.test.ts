@@ -15,7 +15,7 @@ describe('i18n-backed API error messages', async () => {
     await page.getByLabel('Password').fill('WrongPassword1!')
     await page.getByRole('button', { name: 'Sign in', exact: true }).click()
 
-    await page.getByText('Incorrect email or password.').waitFor()
+    await page.locator('[data-slot="title"]').getByText('Incorrect email or password.').waitFor()
 
     await page.close()
   })

@@ -1,10 +1,10 @@
 import type { AddressInfo } from 'node:net'
 import { Buffer } from 'node:buffer'
 import { createECDH, randomBytes } from 'node:crypto'
-import { readFileSync } from 'node:fs'
 import { createServer as createHttpsServer } from 'node:https'
 import process from 'node:process'
 import { fetch, setup, url } from '@nuxt/test-utils/e2e'
+import selfsigned from 'selfsigned'
 import { afterAll, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import { prisma } from '../../server/utils/prisma'
@@ -159,11 +159,13 @@ describe('websocket real-time layer', async () => {
     const p256dh = ecdh.getPublicKey().toString('base64url')
     const auth = randomBytes(16).toString('base64url')
 
+    // Self-signed cert generated on the fly (rather than committed key/cert
+    // files) so the local fake push endpoint below can terminate TLS, since
+    // `web-push` always sends over `https`.
+    const { private: key, cert } = await selfsigned.generate([{ name: 'commonName', value: '127.0.0.1' }])
+
     const receivedRequest = new Promise<{ headers: Record<string, string | string[] | undefined>, body: Buffer }>((resolve) => {
-      const httpsServer = createHttpsServer({
-        key: readFileSync('server.key'),
-        cert: readFileSync('server.crt'),
-      }, (request, response) => {
+      const httpsServer = createHttpsServer({ key, cert }, (request, response) => {
         const chunks: Buffer[] = []
         request.on('data', chunk => chunks.push(chunk))
         request.on('end', () => {

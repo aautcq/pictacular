@@ -40,10 +40,14 @@ describe('register -> verify -> sign in -> profile -> logout journey', async () 
     await page.getByText('Your account is verified.').waitFor()
 
     await page.goto(url('/login'))
+    // The email field has `autofocus` (see app/pages/login.vue): filling it
+    // before hydration finishes attaching Vue's reactivity can race with
+    // hydration re-adopting the input and silently wipe the typed value back
+    // to empty, so wait for the page to settle first.
+    await page.waitForLoadState('networkidle')
     await page.getByLabel('Email').fill(email)
     await page.getByLabel('Password').fill(password)
     await page.getByRole('button', { name: 'Sign in', exact: true }).click()
-
     await page.waitForURL('**/storage-connection')
 
     await page.goto(url('/profile'))
