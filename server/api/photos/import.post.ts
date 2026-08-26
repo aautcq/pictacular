@@ -59,6 +59,11 @@ export default defineEventHandler(async (event) => {
         mime_type: mimeTypeFromKey(image.key),
         size: image.size,
         last_modified: image.last_modified,
+        // Free from the same `ListObjectsV2` page as the rest of `image`
+        // (issue #145) — an imported Photo that's already Archived is
+        // reflected immediately, without waiting for the next
+        // `archived-photos:scan` pass.
+        storage_class: image.storage_class,
         user: { connect: { id: account.id } },
       },
       include: { likes: { select: { id: true } } },

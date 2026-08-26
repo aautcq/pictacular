@@ -120,6 +120,18 @@ model Photo {
   size          Int
   last_modified DateTime
 
+  // Issue #145: persisted mirror of the underlying S3 object's current
+  // storage class + Restore Request status, refreshed by the
+  // `archived-photos:scan` task (and by a User-triggered restore) from
+  // `ListObjectsV2`'s free `StorageClass` field / a `HeadObject` restore
+  // header — never derived live on a gallery read. `storage_class` is
+  // null until the first scan/restore touches this Photo; only `GLACIER`
+  // and `DEEP_ARCHIVE` values make it an Archived Photo (see
+  // server/utils/archived-photo.ts).
+  storage_class      String?
+  restore_ongoing    Boolean   @default(false)
+  restore_expires_at DateTime?
+
   user_id Int
   user    User @relation("Photos", fields: [user_id], references: [id], onDelete: Cascade)
 

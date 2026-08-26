@@ -16,16 +16,34 @@ import { createServer } from 'node:http'
 // implementing real request signing verification.
 export const badAccessKeyId = 'BAD_ACCESS_KEY_ID'
 
+// Per-object storage-class + Restore Request status (issue #145),
+// separate from the actual uploaded bytes in `objects` below: a seeded
+// object (photo-import/archived-photo tests) may have metadata without
+// ever having gone through the PUT-object handler.
+interface ObjectMetadata {
+  storageClass: string
+  restoreOngoing: boolean
+  restoreExpiresAt: Date | null
+}
+
 interface Bucket {
   cors: string | null
   keys: string[]
   objects: Map<string, { body: Buffer, contentType: string }>
+  metadata: Map<string, ObjectMetadata>
+}
+
+export interface SeedObject {
+  key: string
+  storageClass?: string
+  restoreOngoing?: boolean
+  restoreExpiresAt?: Date | null
 }
 
 export interface FakeS3Server {
   url: string
   reset: () => void
-  seedBucket: (bucket: string, keys?: string[]) => void
+  seedBucket: (bucket: string, objects?: (string | SeedObject)[]) => void
   close: () => Promise<void>
 }
 
@@ -35,6 +53,28 @@ function xmlError(code: string, message: string) {
 
 function accessKeyIdFromAuthHeader(authHeader: string | undefined) {
   return authHeader?.match(/Credential=([^/]+)\//)?.[1]
+}
+
+function defaultMetadata(): ObjectMetadata {
+  return { storageClass: 'STANDARD', restoreOngoing: false, restoreExpiresAt: null }
+}
+
+function isArchivedStorageClass(storageClass: string) {
+  return storageClass === 'GLACIER' || storageClass === 'DEEP_ARCHIVE'
+}
+
+// Builds the `Restore` header HeadObject reports once a Restore Request
+// has ever been made for an Archived object — absent entirely otherwise,
+// matching real AWS (see server/utils/storage.ts#parseRestoreHeader,
+// which parses this same shape back out).
+function restoreHeader(metadata: ObjectMetadata): string | undefined {
+  if (!isArchivedStorageClass(metadata.storageClass) || (!metadata.restoreOngoing && !metadata.restoreExpiresAt))
+    return undefined
+
+  if (metadata.restoreOngoing)
+    return 'ongoing-request="true"'
+
+  return `ongoing-request="false", expiry-date="${metadata.restoreExpiresAt!.toUTCString()}"`
 }
 
 export async function startFakeS3Server(): Promise<FakeS3Server> {
@@ -58,8 +98,29 @@ export async function startFakeS3Server(): Promise<FakeS3Server> {
       return
     }
 
+    // HeadObject (issue #145): reports the object's current storage class
+    // + Restore Request status, used both by the archived-photos scan
+    // task and the restore endpoints' pre-flight check.
+    if (req.method === 'HEAD' && bucketName && key) {
+      const metadata = bucket?.metadata.get(key)
+      if (!metadata) {
+        res.writeHead(404)
+        res.end()
+        return
+      }
+
+      const headers: Record<string, string> = { 'x-amz-storage-class': metadata.storageClass }
+      const restore = restoreHeader(metadata)
+      if (restore)
+        headers['x-amz-restore'] = restore
+
+      res.writeHead(200, headers)
+      res.end()
+      return
+    }
+
     if (req.method === 'PUT' && bucketName && !key && !url.search) {
-      buckets.set(bucketName, bucket ?? { cors: null, keys: [], objects: new Map() })
+      buckets.set(bucketName, bucket ?? { cors: null, keys: [], objects: new Map(), metadata: new Map() })
       res.writeHead(200, { Location: `/${bucketName}` })
       res.end()
       return
@@ -69,10 +130,33 @@ export async function startFakeS3Server(): Promise<FakeS3Server> {
       let body = ''
       req.on('data', chunk => (body += chunk))
       req.on('end', () => {
-        buckets.set(bucketName, { cors: body, keys: bucket?.keys ?? [], objects: bucket?.objects ?? new Map() })
+        buckets.set(bucketName, { cors: body, keys: bucket?.keys ?? [], objects: bucket?.objects ?? new Map(), metadata: bucket?.metadata ?? new Map() })
         res.writeHead(200)
         res.end()
       })
+      return
+    }
+
+    // RestoreObject (issue #145): starts (or, per a 409, rejects a second
+    // concurrent) Restore Request for an Archived object.
+    if (req.method === 'POST' && bucketName && key && url.searchParams.has('restore')) {
+      const metadata = bucket?.metadata.get(key)
+      if (!metadata) {
+        res.writeHead(404, { 'Content-Type': 'application/xml' })
+        res.end(xmlError('NoSuchKey', 'The specified key does not exist.'))
+        return
+      }
+
+      if (metadata.restoreOngoing) {
+        res.writeHead(409, { 'Content-Type': 'application/xml' })
+        res.end(xmlError('RestoreAlreadyInProgress', 'Object restore is already in progress.'))
+        return
+      }
+
+      metadata.restoreOngoing = true
+      metadata.restoreExpiresAt = null
+      res.writeHead(202)
+      res.end()
       return
     }
 
@@ -82,8 +166,10 @@ export async function startFakeS3Server(): Promise<FakeS3Server> {
       const chunks: Buffer[] = []
       req.on('data', chunk => chunks.push(chunk))
       req.on('end', () => {
-        const target = bucket ?? { cors: null, keys: [], objects: new Map() }
+        const target = bucket ?? { cors: null, keys: [], objects: new Map(), metadata: new Map() }
         target.objects.set(key, { body: Buffer.concat(chunks), contentType: req.headers['content-type'] ?? 'application/octet-stream' })
+        if (!target.metadata.has(key))
+          target.metadata.set(key, defaultMetadata())
         if (!target.keys.includes(key))
           target.keys = [...target.keys, key]
         buckets.set(bucketName, target)
@@ -98,6 +184,17 @@ export async function startFakeS3Server(): Promise<FakeS3Server> {
     // accessKeyIdFromAuthHeader's header-based counterpart for PUT/DELETE),
     // so this must not require an empty query string.
     if (req.method === 'GET' && bucketName && key) {
+      const metadata = bucket?.metadata.get(key)
+      // An Archived object with no unexpired restore fails exactly like
+      // real S3 does (issue #145): `GetObject` rejects with a 403
+      // `InvalidObjectState` until a Restore Request completes.
+      if (metadata && isArchivedStorageClass(metadata.storageClass) && !metadata.restoreOngoing
+        && !(metadata.restoreExpiresAt && metadata.restoreExpiresAt.getTime() > Date.now())) {
+        res.writeHead(403, { 'Content-Type': 'application/xml' })
+        res.end(xmlError('InvalidObjectState', 'The operation is not valid for the object\'s storage class.'))
+        return
+      }
+
       const object = bucket?.objects.get(key)
       if (!object) {
         res.writeHead(404, { 'Content-Type': 'application/xml' })
@@ -112,6 +209,7 @@ export async function startFakeS3Server(): Promise<FakeS3Server> {
     // Object delete (DeleteObjectCommand), used when a Photo is deleted.
     if (req.method === 'DELETE' && bucketName && key) {
       bucket?.objects.delete(key)
+      bucket?.metadata.delete(key)
       if (bucket)
         bucket.keys = bucket.keys.filter(existingKey => existingKey !== key)
       res.writeHead(204)
@@ -138,7 +236,10 @@ export async function startFakeS3Server(): Promise<FakeS3Server> {
 
     if (req.method === 'GET' && bucketName && url.searchParams.get('list-type') === '2') {
       const contents = (bucket?.keys ?? [])
-        .map(objectKey => `<Contents><Key>${objectKey}</Key><LastModified>2024-01-01T00:00:00.000Z</LastModified><Size>1</Size></Contents>`)
+        .map((objectKey) => {
+          const storageClass = bucket?.metadata.get(objectKey)?.storageClass ?? 'STANDARD'
+          return `<Contents><Key>${objectKey}</Key><LastModified>2024-01-01T00:00:00.000Z</LastModified><Size>1</Size><StorageClass>${storageClass}</StorageClass></Contents>`
+        })
         .join('')
       res.writeHead(200, { 'Content-Type': 'application/xml' })
       res.end(`<?xml version="1.0" encoding="UTF-8"?><ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>${bucketName}</Name><IsTruncated>false</IsTruncated>${contents}</ListBucketResult>`)
@@ -158,7 +259,22 @@ export async function startFakeS3Server(): Promise<FakeS3Server> {
   return {
     url: `http://127.0.0.1:${port}`,
     reset: () => buckets.clear(),
-    seedBucket: (bucket, keys = []) => buckets.set(bucket, { cors: null, keys, objects: new Map() }),
+    seedBucket: (bucket, objects = []) => {
+      const keys: string[] = []
+      const metadata = new Map<string, ObjectMetadata>()
+
+      for (const entry of objects) {
+        const spec = typeof entry === 'string' ? { key: entry } : entry
+        keys.push(spec.key)
+        metadata.set(spec.key, {
+          storageClass: spec.storageClass ?? 'STANDARD',
+          restoreOngoing: spec.restoreOngoing ?? false,
+          restoreExpiresAt: spec.restoreExpiresAt ?? null,
+        })
+      }
+
+      buckets.set(bucket, { cors: null, keys, objects: new Map(), metadata })
+    },
     close: () => new Promise((resolve, reject) => {
       server.close(error => (error ? reject(error) : resolve()))
     }),

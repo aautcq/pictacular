@@ -73,7 +73,7 @@ describe('personal photo library', async () => {
       body: { mode: 'connect', access_key_id: 'AKIATEST', secret_access_key: 'test-secret', bucket },
     })
 
-    return { ...user, cookieHeader }
+    return { ...user, cookieHeader, bucket }
   }
 
   async function uploadPhoto(cookieHeader: string, overrides: Record<string, unknown> = {}) {
@@ -196,6 +196,50 @@ describe('personal photo library', async () => {
       expect(secondPage.photos).toHaveLength(1)
       expect(secondPage.next_cursor).toBeNull()
       expect(secondPage.photos[0]!.id).not.toBe(firstPage.photos[0]!.id)
+    })
+
+    it('reports each Photo\'s archived/restoring/restored state (issue #145), non-archived Photos rendering unaffected', async () => {
+      const { id: userId, cookieHeader, bucket } = await createConnectedUser()
+      const normalPhoto = await uploadPhoto(cookieHeader)
+
+      const archivedPhoto = await prisma.photo.create({
+        data: {
+          key: 'archived.jpg',
+          mime_type: 'image/jpeg',
+          size: 1,
+          last_modified: new Date(),
+          storage_class: 'GLACIER',
+          user: { connect: { id: userId } },
+        },
+      })
+      const restoringPhoto = await prisma.photo.create({
+        data: {
+          key: 'restoring.jpg',
+          mime_type: 'image/jpeg',
+          size: 1,
+          last_modified: new Date(),
+          storage_class: 'DEEP_ARCHIVE',
+          restore_ongoing: true,
+          user: { connect: { id: userId } },
+        },
+      })
+      fakeS3.seedBucket(bucket, [
+        { key: 'archived.jpg', storageClass: 'GLACIER' },
+        { key: 'restoring.jpg', storageClass: 'DEEP_ARCHIVE', restoreOngoing: true },
+      ])
+
+      const response = await $fetch<{ photos: { id: number, url: string, archived_state: string | null }[] }>('/api/photos', {
+        headers: { cookie: cookieHeader },
+      })
+
+      const stateById = new Map(response.photos.map(photo => [photo.id, photo.archived_state]))
+      expect(stateById.get(normalPhoto.id)).toBeNull()
+      expect(stateById.get(archivedPhoto.id)).toBe('archived')
+      expect(stateById.get(restoringPhoto.id)).toBe('restoring')
+
+      // A non-archived Photo's own response shape (its signed `url` above
+      // all) must stay exactly as it was before this feature.
+      expect(response.photos.find(photo => photo.id === normalPhoto.id)?.url).toContain('photo.png')
     })
 
     it('rejects a User without a Storage Connection', async () => {

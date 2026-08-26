@@ -182,6 +182,10 @@ export default defineNuxtConfig({
     // requirement (issue #97).
     scheduledTasks: {
       '* * * * *': ['email-outbox:process'],
+      // 15-30 min cadence is more than adequate: a Restore Request itself
+      // takes hours, so there's no benefit to polling more aggressively
+      // (issue #145 / ADR 0005).
+      '*/15 * * * *': ['archived-photos:scan'],
     },
   },
   runtimeConfig: {

@@ -24,6 +24,8 @@
     "photos.storage_connection_required": "Connect a storage bucket before uploading a photo.",
     "photos.not_found": "That photo could not be found.",
     "photos.upload_failed": "That photo could not be uploaded. Please try again.",
+    "photos.not_archived": "That photo is not archived, so it doesn't need to be restored.",
+    "photos.restore_failed": "That photo could not be restored. Please check your storage connection credentials.",
     "albums.invalid_payload": "Please check the information you entered.",
     "albums.invalid_query": "Something went wrong loading your albums.",
     "albums.not_found": "That album could not be found.",

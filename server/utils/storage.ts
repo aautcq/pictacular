@@ -10,12 +10,23 @@ import {
   GetBucketLocationCommand,
   GetObjectCommand,
   HeadBucketCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   PutBucketCorsCommand,
   PutObjectCommand,
+  RestoreObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+// Imported directly (rather than relying on Nitro's auto-import) since
+// this module's headObjectRestoreStatus/restoreObject (issue #145) are
+// also reached from the archived-photos scan task, which has no HTTP
+// entry point and so runs with no live Nitro request to auto-import
+// createError from (see server/tasks/archived-photos/scan.ts and its
+// test's "invoke run() directly" precedent) — every other call site
+// still behaves identically, since h3's own `createError` is exactly what
+// the auto-import itself resolves to.
+import { createError } from 'h3'
 import { decodeAwsCredentials } from './jwt'
 
 export interface AwsCredentials {
@@ -177,6 +188,7 @@ export interface BucketImageObject {
   key: string
   size: number
   last_modified: Date
+  storage_class: string
 }
 
 // Walks every page of a connected bucket's contents (issue #54's Photo
@@ -193,13 +205,13 @@ export async function listAllBucketImages(awsCredentials: AwsCredentials): Promi
   do {
     const { Contents, IsTruncated, NextContinuationToken } = await client.send(new ListObjectsV2Command({
       Bucket: awsCredentials.bucket,
-      MaxKeys: 100,
+      MaxKeys: 1000,
       ContinuationToken: continuationToken,
     }))
 
-    for (const { Key, Size, LastModified } of Contents ?? []) {
+    for (const { Key, Size, LastModified, StorageClass } of Contents ?? []) {
       if (Key && imageExtensionPattern.test(Key))
-        images.push({ key: Key, size: Size ?? 0, last_modified: LastModified ?? new Date() })
+        images.push({ key: Key, size: Size ?? 0, last_modified: LastModified ?? new Date(), storage_class: StorageClass ?? 'STANDARD' })
     }
 
     continuationToken = IsTruncated ? NextContinuationToken : undefined
@@ -285,4 +297,95 @@ export async function deletePhotoObject(awsCredentials: AwsCredentials, key: str
   const client = createClient(awsCredentials)
 
   await client.send(new DeleteObjectCommand({ Bucket: awsCredentials.bucket, Key: key }))
+}
+
+export interface RestoreStatus {
+  storage_class: string
+  ongoing: boolean
+  expires_at: Date | null
+}
+
+// AWS reports a Restore Request's status as a single `Restore` header
+// string on the HeadObject response, e.g. `ongoing-request="true"` while
+// in flight, or `ongoing-request="false", expiry-date="<RFC 7231 date>"`
+// once completed (absent entirely when no restore has ever been
+// requested) — there's no structured field for this on the SDK response,
+// so it has to be parsed out here.
+function parseRestoreHeader(header: string | undefined): { ongoing: boolean, expires_at: Date | null } {
+  if (!header)
+    return { ongoing: false, expires_at: null }
+
+  const expiryMatch = header.match(/expiry-date="([^"]+)"/)
+
+  return {
+    ongoing: /ongoing-request="true"/.test(header),
+    expires_at: expiryMatch ? new Date(expiryMatch[1]!) : null,
+  }
+}
+
+// Reads a single object's current storage class + Restore Request status
+// (issue #145) via `HeadObject` — only ever called for a Photo already
+// known to be archived from the free `ListObjectsV2` `StorageClass` field
+// (see listAllBucketImages above), never per-Photo on every scan/request.
+// Any AWS-level failure (bad/revoked credentials, permission error, ...)
+// is surfaced as the same namespaced error code `restoreObject` below
+// uses, rather than bubbling up as an unhandled 500 — this is the only
+// AWS call the restore endpoints make before deciding whether to issue a
+// `RestoreObjectCommand` at all.
+export async function headObjectRestoreStatus(awsCredentials: AwsCredentials, key: string): Promise<RestoreStatus> {
+  const client = createClient(awsCredentials)
+
+  try {
+    const response = await client.send(new HeadObjectCommand({ Bucket: awsCredentials.bucket, Key: key }))
+    const { ongoing, expires_at } = parseRestoreHeader(response.Restore)
+
+    return { storage_class: response.StorageClass ?? 'STANDARD', ongoing, expires_at }
+  }
+  catch (error) {
+    throw createError({
+      statusCode: 502,
+      statusMessage: 'photos.restore_failed',
+      cause: error,
+    })
+  }
+}
+
+// A Restore Request's temporary availability window (issue #145): fixed
+// and not user-selectable in this iteration, mirroring the fixed Standard
+// retrieval tier decision — Pictacular never makes an Archived Photo
+// permanently readable (that would require copying it to `STANDARD`,
+// silently changing the User's storage costs, which is explicitly out of
+// scope).
+const RESTORE_REQUEST_DAYS = 7
+
+// Issues a Restore Request for a single object at the Standard retrieval
+// tier (issue #145) — always called only after a `headObjectRestoreStatus`
+// check confirms no restore is already in flight or unexpired, but AWS can
+// still reject a genuinely concurrent second request (e.g. a restore
+// started directly in the AWS console between that check and this call)
+// with a 409 `RestoreAlreadyInProgress`; that's treated as a no-op success
+// rather than surfaced as a failure, since the end state — a restore is in
+// progress — is exactly what was being asked for.
+export async function restoreObject(awsCredentials: AwsCredentials, key: string): Promise<void> {
+  const client = createClient(awsCredentials)
+
+  try {
+    await client.send(new RestoreObjectCommand({
+      Bucket: awsCredentials.bucket,
+      Key: key,
+      RestoreRequest: {
+        Days: RESTORE_REQUEST_DAYS,
+        GlacierJobParameters: { Tier: 'Standard' },
+      },
+    }))
+  }
+  catch (error) {
+    if ((error as { name?: string } | null)?.name === 'RestoreAlreadyInProgress')
+      return
+
+    throw createError({
+      statusCode: 502,
+      statusMessage: 'photos.restore_failed',
+    })
+  }
 }

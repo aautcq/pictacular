@@ -1,8 +1,7 @@
 # Pictacular
 
 Single Nuxt 4 / Nitro app at the repo root (no more `client`/`api` split) for a PWA image
-gallery backed by an AWS S3 bucket. Node ~24.19.0, PWA via `@vite-pwa/nuxt` (client side is
-still bootstrap-stage — no `pages`/`components` yet, just `app/app.vue`).
+gallery backed by an AWS S3 bucket. Node ~24.19.0, PWA via `@vite-pwa/nuxt`.
 
 ## Setup & commands
 
@@ -54,13 +53,30 @@ Key conventions:
 
 ## Client architecture
 
-Nuxt 4 app is still bootstrap-stage: `app/app.vue` only renders `<NuxtPage />`; no
-`app/pages/`, `app/components/`, `app/composables/` directories exist yet — add them
-following standard Nuxt auto-import conventions when building features (Nuxt 4's default
-`srcDir` is `app/`; `server/`, `public/`, and config files stay at the project root).
-`nuxt.config.ts` configures PWA manifest/workbox and `nuxt-security` CSP (must include the S3
-image host in `img-src` when adding image sources); the dev server runs on Nuxt's default
-`http://localhost:3000`, with no custom host/HTTPS setup needed.
+Nuxt 4's default `srcDir` is `app/` (`server/`, `public/`, and config files stay at the
+project root); `app/app.vue` wraps `<NuxtLayout><NuxtPage /></NuxtLayout>` in `@nuxt/ui`'s
+`<UApp>`. Standard Nuxt auto-import conventions apply for `app/pages/`, `app/components/`,
+`app/composables/`, `app/middleware/`, `app/layouts/`.
+
+Key conventions:
+
+- No global state library (no Pinia/Vuex) — cross-component state lives in plain
+  composables backed by `useState` (e.g. `app/composables/usePhotoLibrary.ts`'s
+  `photo-library` state), shared across whichever pages/components call that composable.
+- UI components come from `@nuxt/ui` (`<UApp>`, etc.); icons via `<Icon name="ph:...">`
+  (Phosphor, `@nuxt/icon`).
+- Route guards are named middleware under `app/middleware/` (`auth`, `guest`,
+  `storage-connection`), applied per-page via `definePageMeta({ middleware: [...] })` rather
+  than global middleware, so each page opts into exactly the guards it needs.
+- i18n via `@nuxtjs/i18n`; components use a local `useI18n({ useScope: 'local',
+  inheritLocale: true })` scope for their own strings plus the `global` scope
+  (`useI18n({ useScope: 'global' })`) for shared strings like `common.close` —
+  `app/i18n/locales/en.json` holds all translations. The frontend owns translating the
+  namespaced error codes the API returns (see Server architecture above) via
+  `app/composables/useErrorMessage.ts`.
+- `nuxt.config.ts` configures PWA manifest/workbox and `nuxt-security` CSP (must include the
+  S3 image host in `img-src` when adding image sources); the dev server runs on Nuxt's
+  default `http://localhost:3000`, with no custom host/HTTPS setup needed.
 
 Source of truth for the architectural decisions above:
 `docs/adr/0001-nuxt-server-replaces-nestjs-api.md`.
