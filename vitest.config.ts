@@ -22,5 +22,8 @@ export default defineConfig({
     env: {
       NUXT_COOKIE_DOMAIN: '',
     },
+    alias: {
+      '#server/': new URL('./server/', import.meta.url).pathname,
+    },
   },
 })
