@@ -4,6 +4,7 @@ export interface Photo {
   mime_type: string
   size: number
   last_modified: string
+  taken_at: string | null
   created_at: string
   liked: boolean
   archived_state: 'archived' | 'restoring' | 'restored' | null
@@ -24,6 +25,16 @@ export function usePhotoLibrary() {
 
   const hasMore = computed(() => !loaded.value || nextCursor.value !== null)
 
+  // The single sortable instant that backs both `groupedByDate`'s grouping
+  // key and the list's own ordering — must mirror the backend's
+  // `ORDER BY COALESCE(taken_at, last_modified) DESC, id DESC`
+  // (see server/api/photos/index.get.ts) so a freshly-uploaded photo with
+  // an old EXIF `taken_at` (e.g. importing old photos) lands in its
+  // correct chronological position instead of always at the front.
+  function sortInstant(photo: Photo) {
+    return photo.taken_at ?? photo.last_modified
+  }
+
   // Turns an ISO timestamp into a `YYYY-MM-DD` key in the User's local
   // timezone (never the UTC date embedded in the ISO string), so a photo
   // taken late at night still lands in the day the User experienced it.
@@ -37,11 +48,13 @@ export function usePhotoLibrary() {
 
   // Groups the flat, newest-first list into date-keyed sections (`YYYY-MM-DD`,
   // in the User's local timezone) while preserving overall order, for the
-  // date-grouped timeline.
+  // date-grouped timeline. Prefers the EXIF-derived `taken_at` (issue #162)
+  // over `last_modified` so re-imported/re-uploaded photos still group by
+  // the day they were actually taken rather than the day they landed in S3.
   const groupedByDate = computed(() => {
     const groups: { date: string, photos: Photo[] }[] = []
     for (const photo of photos.value) {
-      const date = localDateKey(photo.last_modified)
+      const date = localDateKey(sortInstant(photo))
       const lastGroup = groups[groups.length - 1]
       if (lastGroup?.date === date)
         lastGroup.photos.push(photo)
@@ -73,7 +86,21 @@ export function usePhotoLibrary() {
   function addUploadedPhoto(photo: Photo) {
     if (photos.value.some(existing => existing.id === photo.id))
       return
-    photos.value = [photo, ...photos.value]
+    // Insert at the correct chronological position rather than always
+    // unshifting: an upload's own `taken_at` can be older than photos
+    // already in the list (e.g. importing old photos, or a slower
+    // real-time WS notification racing a newer upload), and always
+    // prepending would break the newest-first order `groupedByDate`
+    // relies on for its adjacency-based grouping.
+    const newInstant = sortInstant(photo)
+    const insertAt = photos.value.findIndex(existing => sortInstant(existing) < newInstant
+      || (sortInstant(existing) === newInstant && existing.id < photo.id))
+    const photosCopy = [...photos.value]
+    if (insertAt === -1)
+      photosCopy.push(photo)
+    else
+      photosCopy.splice(insertAt, 0, photo)
+    photos.value = photosCopy
   }
 
   async function deletePhoto(id: number) {
