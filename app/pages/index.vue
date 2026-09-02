@@ -39,7 +39,6 @@ const {
 const { queueUpload, uploads } = usePhotoUpload()
 const toast = useToast()
 
-const sentinel = useTemplateRef<HTMLElement | null>('sentinel')
 const deleting = shallowRef(false)
 const restoringAll = shallowRef(false)
 
@@ -159,11 +158,6 @@ const settingsItems = ref<DropdownMenuItem[][]>([
 let offRealtimeUploaded: (() => void) | null = null
 let offRealtimeRestored: (() => void) | null = null
 
-useIntersectionObserver(sentinel, ([entry]) => {
-  if (entry?.isIntersecting && hasMore.value && !loading.value)
-    fetchNextPage()
-})
-
 onMounted(async () => {
   offRealtimeUploaded = on('photo:uploaded', (photo: Photo) => addUploadedPhoto(photo))
   offRealtimeRestored = on('photo:restored', (photo: Photo) => updatePhoto(photo))
@@ -246,10 +240,13 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div ref="sentinel" class="h-4" />
-        <p v-if="loading" class="text-center text-sm text-gray-500 dark:text-gray-300">
-          {{ t('loading') }}
-        </p>
+        <BaseInfiniteScroll :has-more="hasMore" :loading="loading" @load-more="fetchNextPage">
+          <template #loading>
+            <p class="text-center text-sm text-gray-500 dark:text-gray-300">
+              {{ t('loading') }}
+            </p>
+          </template>
+        </BaseInfiniteScroll>
       </BaseDropzone>
 
       <Transition name="modal-fade">

@@ -264,19 +264,19 @@ describe('albums core', async () => {
   })
 
   describe('full show', () => {
-    it('returns the Album with its admin, Collaborators, and Photos', async () => {
+    it('returns the Album with its admin, Collaborators, and photo_count, but no Photos (issue #170)', async () => {
       const album = await createAlbum(owner.cookieHeader)
       const photo = await uploadPhoto(owner.cookieHeader)
       await $fetch(`/api/albums/${album.id}/photos/${photo.id}`, { method: 'POST', headers: { cookie: owner.cookieHeader } })
 
-      const full = await $fetch<{ id: number, photos: { id: number }[], collaborators: unknown[], admin: { id: number } }>(`/api/albums/${album.id}`, {
+      const full = await $fetch<{ id: number, collaborators: unknown[], admin: { id: number }, photo_count: number }>(`/api/albums/${album.id}`, {
         headers: { cookie: owner.cookieHeader },
       })
 
-      expect(full.photos).toHaveLength(1)
-      expect(full.photos[0]!.id).toBe(photo.id)
       expect(full.collaborators).toEqual([])
       expect(full.admin.id).toBe(owner.id)
+      expect(full.photo_count).toBe(1)
+      expect(full).not.toHaveProperty('photos')
     })
 
     it('rejects a non-member with 404', async () => {
@@ -387,21 +387,27 @@ describe('albums core', async () => {
   })
 
   describe('add / remove photo', () => {
-    it('adds then removes a Photo from an Album', async () => {
+    it('adds then removes a Photo from an Album, returning just the affected Photo (add) / no body (remove) — issue #170', async () => {
       const album = await createAlbum(owner.cookieHeader)
       const photo = await uploadPhoto(owner.cookieHeader)
 
-      const afterAdd = await $fetch<{ photos: { id: number }[] }>(`/api/albums/${album.id}/photos/${photo.id}`, {
+      const afterAdd = await $fetch<{ id: number, url: string }>(`/api/albums/${album.id}/photos/${photo.id}`, {
         method: 'POST',
         headers: { cookie: owner.cookieHeader },
       })
-      expect(afterAdd.photos.map(p => p.id)).toEqual([photo.id])
+      expect(afterAdd.id).toBe(photo.id)
 
-      const afterRemove = await $fetch<{ photos: { id: number }[] }>(`/api/albums/${album.id}/photos/${photo.id}`, {
+      const idsAfterAdd = await prisma.albumsOnPhotos.findMany({ where: { album_id: album.id } })
+      expect(idsAfterAdd.map(row => row.photo_id)).toEqual([photo.id])
+
+      const removeResponse = await fetch(`/api/albums/${album.id}/photos/${photo.id}`, {
         method: 'DELETE',
         headers: { cookie: owner.cookieHeader },
       })
-      expect(afterRemove.photos).toHaveLength(0)
+      expect(removeResponse.status).toBe(204)
+
+      const idsAfterRemove = await prisma.albumsOnPhotos.findMany({ where: { album_id: album.id } })
+      expect(idsAfterRemove).toHaveLength(0)
     })
 
     it('is idempotent when adding the same Photo twice', async () => {
@@ -409,12 +415,10 @@ describe('albums core', async () => {
       const photo = await uploadPhoto(owner.cookieHeader)
 
       await $fetch(`/api/albums/${album.id}/photos/${photo.id}`, { method: 'POST', headers: { cookie: owner.cookieHeader } })
-      const second = await $fetch<{ photos: { id: number }[] }>(`/api/albums/${album.id}/photos/${photo.id}`, {
-        method: 'POST',
-        headers: { cookie: owner.cookieHeader },
-      })
+      await $fetch(`/api/albums/${album.id}/photos/${photo.id}`, { method: 'POST', headers: { cookie: owner.cookieHeader } })
 
-      expect(second.photos).toHaveLength(1)
+      const rows = await prisma.albumsOnPhotos.findMany({ where: { album_id: album.id } })
+      expect(rows).toHaveLength(1)
     })
 
     it('rejects adding another User\'s Photo with 404', async () => {
@@ -439,6 +443,81 @@ describe('albums core', async () => {
       await expect(
         $fetch('/api/albums/1/photos/1', { method: 'POST' }),
       ).rejects.toMatchObject({ statusCode: 401 })
+    })
+  })
+
+  describe('paginated photos (issue #170)', () => {
+    it('lists an Album\'s Photos newest-assigned-first, paginated with a keyset cursor', async () => {
+      const album = await createAlbum(owner.cookieHeader, { title: 'Paginated Photos Album' })
+      const photos = []
+      for (let i = 0; i < 3; i++) {
+        const photo = await uploadPhoto(owner.cookieHeader)
+        await $fetch(`/api/albums/${album.id}/photos/${photo.id}`, { method: 'POST', headers: { cookie: owner.cookieHeader } })
+        photos.push(photo)
+      }
+
+      const firstPage = await $fetch<{ photos: { id: number }[], next_cursor: number | null }>(`/api/albums/${album.id}/photos?limit=2`, {
+        headers: { cookie: owner.cookieHeader },
+      })
+
+      expect(firstPage.photos).toHaveLength(2)
+      expect(firstPage.photos.map(p => p.id)).toEqual([photos[2]!.id, photos[1]!.id])
+      expect(firstPage.next_cursor).not.toBeNull()
+
+      const secondPage = await $fetch<{ photos: { id: number }[], next_cursor: number | null }>(`/api/albums/${album.id}/photos?limit=2&cursor=${firstPage.next_cursor}`, {
+        headers: { cookie: owner.cookieHeader },
+      })
+
+      expect(secondPage.photos).toHaveLength(1)
+      expect(secondPage.photos[0]!.id).toBe(photos[0]!.id)
+      expect(secondPage.next_cursor).toBeNull()
+    })
+
+    it('rejects a cursor that isn\'t assigned to this Album', async () => {
+      const album = await createAlbum(owner.cookieHeader, { title: 'Invalid Cursor Album' })
+      const photo = await uploadPhoto(owner.cookieHeader)
+
+      await expect(
+        $fetch(`/api/albums/${album.id}/photos?cursor=${photo.id}`, { headers: { cookie: owner.cookieHeader } }),
+      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'albums.invalid_cursor' })
+    })
+
+    it('rejects a non-member with 404', async () => {
+      const album = await createAlbum(owner.cookieHeader)
+
+      await expect(
+        $fetch(`/api/albums/${album.id}/photos`, { headers: { cookie: other.cookieHeader } }),
+      ).rejects.toMatchObject({ statusCode: 404, statusMessage: 'albums.not_found' })
+    })
+
+    it('rejects an unauthenticated request with 401', async () => {
+      await expect($fetch('/api/albums/1/photos')).rejects.toMatchObject({ statusCode: 401 })
+    })
+  })
+
+  describe('photo ids (issue #170)', () => {
+    it('returns every Photo id assigned to the Album, for membership checks', async () => {
+      const album = await createAlbum(owner.cookieHeader, { title: 'Photo Ids Album' })
+      const photo = await uploadPhoto(owner.cookieHeader)
+      await $fetch(`/api/albums/${album.id}/photos/${photo.id}`, { method: 'POST', headers: { cookie: owner.cookieHeader } })
+
+      const response = await $fetch<{ photo_ids: number[] }>(`/api/albums/${album.id}/photo-ids`, {
+        headers: { cookie: owner.cookieHeader },
+      })
+
+      expect(response.photo_ids).toEqual([photo.id])
+    })
+
+    it('rejects a non-member with 404', async () => {
+      const album = await createAlbum(owner.cookieHeader)
+
+      await expect(
+        $fetch(`/api/albums/${album.id}/photo-ids`, { headers: { cookie: other.cookieHeader } }),
+      ).rejects.toMatchObject({ statusCode: 404, statusMessage: 'albums.not_found' })
+    })
+
+    it('rejects an unauthenticated request with 401', async () => {
+      await expect($fetch('/api/albums/1/photo-ids')).rejects.toMatchObject({ statusCode: 401 })
     })
   })
 })

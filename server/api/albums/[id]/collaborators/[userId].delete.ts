@@ -34,5 +34,5 @@ export default defineEventHandler(async (event) => {
   })
 
   const refreshed = await requireAlbumMembership(id, user.id)
-  return serializeAlbumFull(refreshed, user.id)
+  return serializeAlbumFull(refreshed)
 })

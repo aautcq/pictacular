@@ -26,12 +26,24 @@ const isAddPhotoPickerOpen = shallowRef(false)
 const isCollaboratorsModalOpen = shallowRef(false)
 const isShareModalOpen = shallowRef(false)
 
-const { data: album, pending } = await useAsyncData(
-  'album',
-  async () => await fetchAlbum(albumId.value),
-)
+const {
+  photos,
+  hasMore: photosHaveMore,
+  loading: photosLoading,
+  fetchNextPage: fetchNextPhotosPage,
+  prependPhoto,
+  removePhoto,
+  updatePhoto,
+} = useAlbumPhotos(albumId)
 
-const photos = computed(() => album.value?.photos ?? [])
+// Issue #170: an Album can hold thousands of Photos, so its metadata and
+// its first page of Photos are two separate requests — run together
+// rather than one after the other, so `pending` going false always means
+// both the metadata and at least the first Photo page are ready.
+const [{ data: album, pending }] = await Promise.all([
+  useAsyncData('album', async () => await fetchAlbum(albumId.value), { watch: [albumId] }),
+  useAsyncData('album-photos', fetchNextPhotosPage),
+])
 
 const {
   selectedIds,
@@ -102,16 +114,9 @@ async function saveDescription() {
 }
 
 async function onToggleLike(photo: Photo) {
-  if (!album.value)
-    return
   try {
     const updated = await toggleLike(photo)
-    // `album` is a shallow ref (useAsyncData defaults to `deep: false`), so mutating
-    // `album.value.photos` in place would not trigger reactivity: reassign `album.value`.
-    album.value = {
-      ...album.value,
-      photos: album.value.photos.map(existing => existing.id === updated.id ? updated : existing),
-    }
+    updatePhoto(updated)
   }
   catch (error) {
     toast.add({ title: translateError(error), color: 'error' })
@@ -123,6 +128,7 @@ async function confirmRemoveSelected() {
   try {
     await Promise.all([...selectedIds.value].map(async (id) => {
       await removePhotoFromAlbum(albumId.value, id)
+      removePhoto(id)
     }))
     toast.add({ title: t('photosDeleted') })
     clearSelection()
@@ -142,11 +148,8 @@ async function handleFiles(fileList: FileList | null) {
   for (const file of Array.from(fileList)) {
     if (file.type.startsWith('image/')) {
       const photo = await queueUpload(file)
-      if (photo) {
-        if (album.value.photos.some(existing => existing.id === photo.id))
-          return
-        album.value = { ...album.value, photos: [photo, ...album.value.photos] }
-      }
+      if (photo)
+        prependPhoto(photo)
     }
   }
 }
@@ -287,13 +290,13 @@ const settingsItems = computed<DropdownMenuItem[][]>(() => [
 
         <PhotoUploads v-if="uploads.length" :uploads />
 
-        <div v-if="album && !album.photos.length" class="py-20 text-center text-gray-500 dark:text-gray-300">
+        <div v-if="album && !photos.length && !photosLoading" class="py-20 text-center text-gray-500 dark:text-gray-300">
           <p>{{ t('emptyAlbum') }}</p>
         </div>
 
         <div v-else-if="album" class="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-6">
           <BaseGalleryPhoto
-            v-for="photo in album.photos"
+            v-for="photo in photos"
             :key="photo.id"
             :photo="photo"
             :is-selected="selectedIds.has(photo.id)"
@@ -303,6 +306,14 @@ const settingsItems = computed<DropdownMenuItem[][]>(() => [
             @click="detailsPhotoId = photo.id"
           />
         </div>
+
+        <BaseInfiniteScroll v-if="album" :has-more="photosHaveMore" :loading="photosLoading" @load-more="fetchNextPhotosPage">
+          <template #loading>
+            <p class="text-center text-sm text-gray-500 dark:text-gray-300">
+              {{ t('loading') }}
+            </p>
+          </template>
+        </BaseInfiniteScroll>
       </BaseDropzone>
 
       <Transition name="modal-fade">
@@ -333,7 +344,9 @@ const settingsItems = computed<DropdownMenuItem[][]>(() => [
       <AddPhotoPickerModal
         v-if="album"
         v-model:is-open="isAddPhotoPickerOpen"
-        v-model="album"
+        :album-id="album.id"
+        @photo-added="prependPhoto"
+        @photo-removed="removePhoto"
       />
 
       <DeleteAlbumModal

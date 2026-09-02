@@ -1,7 +1,7 @@
 import type { AlbumMember } from './album-guards'
 import type { AwsCredentials } from './storage'
 import { prisma } from './prisma'
-import { photoImageUrl, publicPhotoImageUrl, serializePhoto } from './serialize-photo'
+import { photoImageUrl, publicPhotoImageUrl } from './serialize-photo'
 
 export interface AlbumCoverRow {
   album_id: number
@@ -122,37 +122,14 @@ export async function loadAlbumCovers(albumIds: number[]): Promise<AlbumCoversAn
 }
 
 // Public Share Link response shape (issue #53): title/description/cover/
-// admin/created_at (the same fields as serializeAlbumSummary) + every
-// assigned Photo, deliberately narrower than serializeAlbumFull — no
-// Collaborators (anonymous visitors have no business seeing who else has
-// access), and each Photo omits `liked`/like-eligibility entirely (there's
-// no signed-in User to like on behalf of), keeping "no like/edit/
-// collaborate actions available" true at the response-shape level, not
-// just in the client UI. Every Photo URL (cover included) is scoped under
-// this Album's own `share_token` (issue #168), not the session-authed
-// endpoint serializePhoto/serializeAlbumFull use, since there's no
-// session at all to authorize against here.
+// admin/created_at (the same fields as serializeAlbumSummary), deliberately
+// narrower than serializeAlbumFull — no Collaborators (anonymous visitors
+// have no business seeing who else has access) and no Photos (an Album
+// can hold thousands — see loadAlbumPhotosPagePublic for the paginated
+// counterpart, GET /api/albums/public/:token/photos).
 export async function serializeAlbumPublic(album: AlbumSummarySource & { id: number }, token: string) {
-  const rows = await prisma.albumsOnPhotos.findMany({
-    where: { album_id: album.id },
-    orderBy: { assigned_at: 'desc' },
-    include: { photo: { include: { user: { include: { aws_credentials: true } } } } },
-  })
-
-  const summary = await serializeAlbumSummary(album, rows[0] ?? null, rows.length, token)
-
-  const photos = rows
-    .filter(row => row.photo.user.aws_credentials)
-    .map(row => ({
-      id: row.photo.id,
-      url: publicPhotoImageUrl(token, row.photo.id),
-      mime_type: row.photo.mime_type,
-      size: row.photo.size,
-      last_modified: row.photo.last_modified,
-      created_at: row.photo.created_at,
-    }))
-
-  return { ...summary, photos }
+  const [cover, photoCount] = await Promise.all([loadAlbumCover(album.id), countAlbumPhotos(album.id)])
+  return serializeAlbumSummary(album, cover, photoCount, token)
 }
 
 export interface AlbumFullSource extends AlbumSummarySource {
@@ -160,29 +137,64 @@ export interface AlbumFullSource extends AlbumSummarySource {
 }
 
 // Full Album response shape (single Album show, issue #51): summary +
-// Collaborators (every member other than the admin) + every assigned
-// Photo, each serialized the same way the personal photo library does
-// (see serializePhoto) so the client's photo grid/details components work
-// unchanged inside an Album.
-export async function serializeAlbumFull(album: AlbumFullSource, currentUserId: number) {
-  const rows = await prisma.albumsOnPhotos.findMany({
-    where: { album_id: album.id },
-    orderBy: { assigned_at: 'desc' },
-    include: { photo: { include: { user: { include: { aws_credentials: true } }, likes: { select: { id: true } } } } },
-  })
-
-  const summary = await serializeAlbumSummary(album, rows[0] ?? null, rows.length)
-
-  const photos = rows
-    .filter(row => row.photo.user.aws_credentials)
-    .map((row) => {
-      const { user: _user, ...photo } = row.photo
-      return serializePhoto(photo, currentUserId)
-    })
+// Collaborators (every member other than the admin) — deliberately no
+// Photos (an Album can hold thousands, so listing them is paginated
+// separately via GET /api/albums/:id/photos, see loadAlbumPhotosPage
+// below), unlike the earlier version of this endpoint which embedded
+// every assigned Photo directly.
+export async function serializeAlbumFull(album: AlbumFullSource) {
+  const [cover, photoCount] = await Promise.all([loadAlbumCover(album.id), countAlbumPhotos(album.id)])
+  const summary = await serializeAlbumSummary(album, cover, photoCount)
 
   return {
     ...summary,
     collaborators: album.users.filter(member => member.id !== album.admin.id),
-    photos,
   }
+}
+
+export interface AlbumPhotoIdPage {
+  ids: number[]
+  hasMore: boolean
+}
+
+// Shared keyset-cursor page of an Album's assigned Photo ids (issue
+// #170), ordered newest-assigned-first (`assigned_at DESC, photo_id DESC`
+// — matching serializeAlbumFull/serializeAlbumPublic's previous
+// `orderBy: { assigned_at: 'desc' }`), mirroring GET /api/photos' own
+// "raw-SQL id selection, then Prisma hydration" split (see
+// server/api/photos/index.get.ts) since Prisma's query builder can't
+// express a single tuple-comparison keyset predicate. `cursorAssignedAt`
+// is the assigned_at of the AlbumsOnPhotos row for `cursorPhotoId` —
+// callers must resolve and validate it first (see
+// findAlbumPhotoAssignment), the same "resolve cursor row, 400 if it
+// doesn't belong to this Album" contract GET /api/photos already uses.
+export async function loadAlbumPhotoIdPage(albumId: number, cursorPhotoId: number | undefined, cursorAssignedAt: Date | undefined, limit: number): Promise<AlbumPhotoIdPage> {
+  const rows = (cursorPhotoId !== undefined && cursorAssignedAt !== undefined)
+    ? await prisma.$queryRaw<{ photo_id: number }[]>`
+        SELECT photo_id FROM "AlbumsOnPhotos"
+        WHERE album_id = ${albumId}
+          AND (assigned_at, photo_id) < (${cursorAssignedAt}::timestamptz, ${cursorPhotoId}::int)
+        ORDER BY assigned_at DESC, photo_id DESC
+        LIMIT ${limit + 1}
+      `
+    : await prisma.$queryRaw<{ photo_id: number }[]>`
+        SELECT photo_id FROM "AlbumsOnPhotos"
+        WHERE album_id = ${albumId}
+        ORDER BY assigned_at DESC, photo_id DESC
+        LIMIT ${limit + 1}
+      `
+
+  const hasMore = rows.length > limit
+  return { ids: rows.slice(0, limit).map(row => row.photo_id), hasMore }
+}
+
+// Resolves a page-boundary Photo id's own AlbumsOnPhotos assignment,
+// anchoring loadAlbumPhotoIdPage's keyset comparison — null when the
+// given Photo was never assigned to this Album (a stale/forged cursor),
+// so the route can 400 rather than silently restart from page 1.
+export async function findAlbumPhotoAssignment(albumId: number, photoId: number): Promise<{ assigned_at: Date } | null> {
+  return prisma.albumsOnPhotos.findUnique({
+    where: { photo_id_album_id: { photo_id: photoId, album_id: albumId } },
+    select: { assigned_at: true },
+  })
 }

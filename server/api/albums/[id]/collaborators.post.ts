@@ -58,7 +58,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const refreshed = await requireAlbumMembership(id, user.id)
-  const full = await serializeAlbumFull(refreshed, user.id)
+  const full = await serializeAlbumFull(refreshed)
 
   return { ...full, linked: [...existingUsersByEmail.keys()], invited: invitedEmails }
 })
