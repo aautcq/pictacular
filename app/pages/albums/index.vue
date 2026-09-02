@@ -9,7 +9,6 @@ const { translateError } = useErrorMessage()
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
 const { t: tg } = useI18n({ useScope: 'global' })
 
-const sentinel = useTemplateRef<HTMLElement | null>('sentinel')
 const query = shallowRef('')
 const debouncedQuery = refDebounced(query, 300)
 const searchResults = ref<AlbumSummary[] | null>(null)
@@ -43,11 +42,6 @@ watch(debouncedQuery, (value) => {
   }
 
   runSearch(value.trim())
-})
-
-useIntersectionObserver(sentinel, ([entry]) => {
-  if (entry?.isIntersecting && !searchResults.value && hasMore.value && !loading.value)
-    fetchNextPage()
 })
 </script>
 
@@ -115,10 +109,13 @@ useIntersectionObserver(sentinel, ([entry]) => {
       </NuxtLink>
     </div>
 
-    <div ref="sentinel" class="h-4" />
-    <p v-if="loading" class="text-center text-sm text-gray-500 dark:text-gray-300">
-      {{ t('loading') }}
-    </p>
+    <BaseInfiniteScroll v-if="!searchResults" :has-more="hasMore" :loading="loading" @load-more="fetchNextPage">
+      <template #loading>
+        <p class="text-center text-sm text-gray-500 dark:text-gray-300">
+          {{ t('loading') }}
+        </p>
+      </template>
+    </BaseInfiniteScroll>
   </div>
 </template>
 
