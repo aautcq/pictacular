@@ -188,8 +188,16 @@ export default defineNuxtConfig({
   // causing 429s on unrelated endpoints (e.g. GET /api/albums/:id).
   // Give the image routes their own, much higher budget instead of
   // disabling rate limiting for them entirely.
+  //
+  // Nitro's routeRules matcher (radix3) only supports "**" as a
+  // trailing catch-all, not mid-path (e.g. '/api/photos/**/image' never
+  // matches anything), so this has to scope to the whole '/api/photos/**'
+  // and '/api/albums/public/**' prefixes rather than the image routes
+  // alone. Every route under those prefixes is already
+  // authenticated/authorized per-Photo or per-share-token, so the wider
+  // budget is safe to share with them too.
   routeRules: {
-    '/api/photos/**/image': {
+    '/api/photos/**': {
       security: {
         rateLimiter: {
           tokensPerInterval: 2000,
@@ -197,7 +205,7 @@ export default defineNuxtConfig({
         },
       },
     },
-    '/api/albums/public/**/image': {
+    '/api/albums/public/**': {
       security: {
         rateLimiter: {
           tokensPerInterval: 2000,
