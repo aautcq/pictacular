@@ -4,6 +4,7 @@ import { $fetch, fetch, setup, url } from '@nuxt/test-utils/e2e'
 import { afterAll, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import { prisma } from '../../server/utils/prisma'
+import { buildJpegWithDateTimeOriginal } from './exif-fixtures'
 import { startFakeS3Server } from './fake-s3-server'
 
 // Black-box HTTP tests for the personal photo library endpoints (issue
@@ -102,6 +103,21 @@ describe('personal photo library', async () => {
       expect(row.user_id).toBe(userId)
       expect(row.mime_type).toBe('image/png')
       expect(row.size).toBeGreaterThan(0)
+      // A tiny synthetic PNG carries no EXIF at all (issue #162) — the
+      // fallback-to-`last_modified` path, not the happy path below.
+      expect(row.taken_at).toBeNull()
+    })
+
+    it('extracts taken_at from an uploaded JPEG\'s own EXIF metadata (issue #162), with no extra S3 request', async () => {
+      const { cookieHeader } = await createConnectedUser()
+      const takenAt = new Date('2018-03-10T09:15:00.000Z')
+      const jpegBase64 = buildJpegWithDateTimeOriginal(takenAt).toString('base64')
+
+      const photo = await uploadPhoto(cookieHeader, { filename: 'holiday.jpg', mime_type: 'image/jpeg', base64: jpegBase64 })
+
+      const row = await prisma.photo.findUniqueOrThrow({ where: { id: photo.id } })
+      expect(row.taken_at).toEqual(takenAt)
+      expect(fakeS3.getRequestsFor(row.key)).toHaveLength(0)
     })
 
     it('rejects a non-image mime type', async () => {
@@ -196,6 +212,47 @@ describe('personal photo library', async () => {
       expect(secondPage.photos).toHaveLength(1)
       expect(secondPage.next_cursor).toBeNull()
       expect(secondPage.photos[0]!.id).not.toBe(firstPage.photos[0]!.id)
+    })
+
+    it('orders by taken_at when present, falling back to last_modified otherwise (issue #162), as a single merged timeline', async () => {
+      const { id: userId, cookieHeader } = await createConnectedUser()
+
+      // An old Photo whose EXIF taken_at long predates every last_modified
+      // below — without the fallback merge, this would wrongly sort above
+      // Photos that only have a last_modified, even though it's the
+      // oldest of the three by any measure.
+      const oldTakenAt = await prisma.photo.create({
+        data: { key: 'old.jpg', mime_type: 'image/jpeg', size: 1, last_modified: new Date('2024-06-01'), taken_at: new Date('2015-01-01'), user: { connect: { id: userId } } },
+      })
+      // No taken_at at all — falls back to last_modified, landing between
+      // the other two.
+      const noExif = await prisma.photo.create({
+        data: { key: 'no-exif.png', mime_type: 'image/png', size: 1, last_modified: new Date('2024-06-15'), user: { connect: { id: userId } } },
+      })
+      // Most recent taken_at of all, despite an older last_modified than
+      // noExif — proves taken_at (not last_modified) drives the order
+      // whenever it's present.
+      const recentTakenAt = await prisma.photo.create({
+        data: { key: 'recent.jpg', mime_type: 'image/jpeg', size: 1, last_modified: new Date('2024-01-01'), taken_at: new Date('2024-12-01'), user: { connect: { id: userId } } },
+      })
+
+      const response = await $fetch<{ photos: { id: number }[] }>('/api/photos', { headers: { cookie: cookieHeader } })
+
+      expect(response.photos.map(photo => photo.id)).toEqual([recentTakenAt.id, noExif.id, oldTakenAt.id])
+    })
+
+    it('rejects a cursor that does not resolve to one of the User\'s own Photos', async () => {
+      const { cookieHeader } = await createConnectedUser()
+      const other = await createConnectedUser()
+      const otherPhoto = await uploadPhoto(other.cookieHeader)
+
+      await expect(
+        $fetch(`/api/photos?cursor=${otherPhoto.id}`, { headers: { cookie: cookieHeader } }),
+      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'photos.invalid_cursor' })
+
+      await expect(
+        $fetch(`/api/photos?cursor=999999999`, { headers: { cookie: cookieHeader } }),
+      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'photos.invalid_cursor' })
     })
 
     it('reports each Photo\'s archived/restoring/restored state (issue #145), non-archived Photos rendering unaffected', async () => {

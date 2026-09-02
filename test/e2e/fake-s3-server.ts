@@ -38,12 +38,20 @@ export interface SeedObject {
   storageClass?: string
   restoreOngoing?: boolean
   restoreExpiresAt?: Date | null
+  body?: Buffer
+  contentType?: string
+}
+
+export interface GetRequestLogEntry {
+  key: string
+  range: string | undefined
 }
 
 export interface FakeS3Server {
   url: string
   reset: () => void
   seedBucket: (bucket: string, objects?: (string | SeedObject)[]) => void
+  getRequestsFor: (key: string) => GetRequestLogEntry[]
   close: () => Promise<void>
 }
 
@@ -79,6 +87,11 @@ function restoreHeader(metadata: ObjectMetadata): string | undefined {
 
 export async function startFakeS3Server(): Promise<FakeS3Server> {
   const buckets = new Map<string, Bucket>()
+  // Every GetObject request received, keyed by object key (issue #162's
+  // ranged-read-then-escalate strategy) — lets tests assert exactly how
+  // many GETs (and with what Range) were made for a given key, e.g. that a
+  // GIF whose ranged read misses never triggers a second, full-object GET.
+  const getRequestLog: GetRequestLogEntry[] = []
 
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost')
@@ -179,11 +192,15 @@ export async function startFakeS3Server(): Promise<FakeS3Server> {
       return
     }
 
-    // Object download (GetObjectCommand), used by the signed-URL flow. Real
-    // presigned GetObject URLs always carry SigV4 auth query params (see
-    // accessKeyIdFromAuthHeader's header-based counterpart for PUT/DELETE),
-    // so this must not require an empty query string.
+    // Object download (GetObjectCommand), used by the signed-URL flow and
+    // by fetchTakenAt's EXIF reads (issue #162, honoring `Range` so the
+    // ranged-read-then-escalate strategy can actually be exercised).
+    // Real presigned GetObject URLs always carry SigV4 auth query params
+    // (see accessKeyIdFromAuthHeader's header-based counterpart for
+    // PUT/DELETE), so this must not require an empty query string.
     if (req.method === 'GET' && bucketName && key) {
+      getRequestLog.push({ key, range: req.headers.range })
+
       const metadata = bucket?.metadata.get(key)
       // An Archived object with no unexpired restore fails exactly like
       // real S3 does (issue #145): `GetObject` rejects with a 403
@@ -201,6 +218,17 @@ export async function startFakeS3Server(): Promise<FakeS3Server> {
         res.end(xmlError('NoSuchKey', 'The specified key does not exist.'))
         return
       }
+
+      const rangeMatch = req.headers.range?.match(/^bytes=(\d+)-(\d+)$/)
+      if (rangeMatch) {
+        const start = Number(rangeMatch[1])
+        const end = Math.min(Number(rangeMatch[2]), object.body.length - 1)
+        const slice = object.body.subarray(start, end + 1)
+        res.writeHead(206, { 'Content-Type': object.contentType, 'Content-Range': `bytes ${start}-${end}/${object.body.length}` })
+        res.end(slice)
+        return
+      }
+
       res.writeHead(200, { 'Content-Type': object.contentType })
       res.end(object.body)
       return
@@ -262,6 +290,7 @@ export async function startFakeS3Server(): Promise<FakeS3Server> {
     seedBucket: (bucket, objects = []) => {
       const keys: string[] = []
       const metadata = new Map<string, ObjectMetadata>()
+      const objectsMap = new Map<string, { body: Buffer, contentType: string }>()
 
       for (const entry of objects) {
         const spec = typeof entry === 'string' ? { key: entry } : entry
@@ -271,10 +300,13 @@ export async function startFakeS3Server(): Promise<FakeS3Server> {
           restoreOngoing: spec.restoreOngoing ?? false,
           restoreExpiresAt: spec.restoreExpiresAt ?? null,
         })
+        if (spec.body)
+          objectsMap.set(spec.key, { body: spec.body, contentType: spec.contentType ?? 'application/octet-stream' })
       }
 
-      buckets.set(bucket, { cors: null, keys, objects: new Map(), metadata })
+      buckets.set(bucket, { cors: null, keys, objects: objectsMap, metadata })
     },
+    getRequestsFor: key => getRequestLog.filter(entry => entry.key === key),
     close: () => new Promise((resolve, reject) => {
       server.close(error => (error ? reject(error) : resolve()))
     }),

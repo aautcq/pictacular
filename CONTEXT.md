@@ -32,8 +32,20 @@ access is granted)
 
 **Photo**:
 A single image file owned by a User, stored in that User's Storage Connection. Tracks its
-storage key, MIME type, size, and last-modified time. May belong to zero or more Albums, and may
-be liked by other Users.
+storage key, MIME type, size, last-modified time, and (when derivable) Taken At. May belong to
+zero or more Albums, and may be liked by other Users.
+
+**Taken At**:
+The moment a Photo's image was actually captured, derived from the image file's own EXIF
+metadata (e.g. `DateTimeOriginal`) rather than any timestamp about the Photo row or its storage
+object — distinct from `last_modified` (the underlying S3 object's own last-modified time,
+which reflects when the file was last written to the bucket, not when it was shot) and
+`created_at` (when Pictacular's own database row was created, i.e. import/upload time). Absent
+when the image carries no such metadata (never guaranteed — many formats don't support it, and
+even EXIF-capable formats may simply lack it), in which case Pictacular falls back to
+`last_modified` for chronological display/ordering.
+_Avoid_: date taken, captured at, exif date (these describe the source/mechanism, not the
+persisted concept)
 
 **Album**:
 A named collection of Photos with one owning User (the admin). Has an optional title and

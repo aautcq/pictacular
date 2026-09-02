@@ -1,4 +1,4 @@
-import type { CORSRule } from '@aws-sdk/client-s3'
+import type { CORSRule, GetObjectCommandOutput } from '@aws-sdk/client-s3'
 import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
 import process from 'node:process'
@@ -27,6 +27,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 // still behaves identically, since h3's own `createError` is exactly what
 // the auto-import itself resolves to.
 import { createError } from 'h3'
+import { extractTakenAt } from './exif'
 import { decodeAwsCredentials } from './jwt'
 
 export interface AwsCredentials {
@@ -233,13 +234,70 @@ const mimeTypesByExtension: Record<string, string> = {
   tiff: 'image/tiff',
 }
 
+function extensionFromKey(key: string): string {
+  return key.split('.').pop()?.toLowerCase() ?? ''
+}
+
 // Derives an imported Photo's mime_type from its key's file extension (no
 // per-object HeadObject round trip — see listAllBucketImages above), so
 // every imported Photo row still gets a real `image/*` mime_type despite
 // the bucket walk itself being extension-only.
 export function mimeTypeFromKey(key: string): string {
-  const extension = key.split('.').pop()?.toLowerCase() ?? ''
-  return mimeTypesByExtension[extension] ?? 'application/octet-stream'
+  return mimeTypesByExtension[extensionFromKey(key)] ?? 'application/octet-stream'
+}
+
+// Bytes read from the start of an object when hunting for EXIF (issue
+// #162) — generous enough to cover a JPEG's APP1 segment and most HEIC
+// files' `meta` box without downloading the whole (often multi-MB)
+// original.
+export const EXIF_RANGE_BYTES = 131_072
+
+// Extensions with no EXIF/metadata container whatsoever, at the format
+// level — no amount of bytes read will ever contain a date, so unlike
+// every other supported extension, a miss on the initial ranged read
+// never escalates to a full-object GetObject for these (see
+// fetchTakenAt below).
+const noExifContainerExtensions = new Set(['gif', 'bmp'])
+
+async function bodyToBuffer(body: NonNullable<GetObjectCommandOutput['Body']>): Promise<Buffer> {
+  return Buffer.from(await body.transformToByteArray())
+}
+
+// Fetches a Photo's Taken At date (issue #162) by reading just enough of
+// its underlying S3 object to find EXIF metadata: a small ranged read
+// first (cheap, and sufficient for JPEG and most real-world HEIC files),
+// escalating to a full-object read only when that misses — and only for
+// formats capable of carrying EXIF at all (TIFF's IFD and some HEIC
+// `meta` boxes can legally sit anywhere in the file, including past the
+// initial range, hence bothering to escalate for them; GIF/BMP can never
+// contain EXIF no matter how much is read, so a miss there goes straight
+// to null rather than paying for a wasted full download). Any AWS-level
+// failure (bad credentials, missing object, ...) is swallowed to null
+// rather than surfaced — a Photo import/upload must never fail just
+// because its Taken At couldn't be determined; callers fall back to
+// `last_modified` themselves.
+export async function fetchTakenAt(awsCredentials: AwsCredentials, key: string): Promise<Date | null> {
+  const client = createClient(awsCredentials)
+
+  try {
+    const rangeResponse = await client.send(new GetObjectCommand({
+      Bucket: awsCredentials.bucket,
+      Key: key,
+      Range: `bytes=0-${EXIF_RANGE_BYTES - 1}`,
+    }))
+    const rangeTakenAt = await extractTakenAt(await bodyToBuffer(rangeResponse.Body!))
+    if (rangeTakenAt)
+      return rangeTakenAt
+
+    if (noExifContainerExtensions.has(extensionFromKey(key)))
+      return null
+
+    const fullResponse = await client.send(new GetObjectCommand({ Bucket: awsCredentials.bucket, Key: key }))
+    return await extractTakenAt(await bodyToBuffer(fullResponse.Body!))
+  }
+  catch {
+    return null
+  }
 }
 
 // Generates a time-limited signed URL for any object in a User's own
