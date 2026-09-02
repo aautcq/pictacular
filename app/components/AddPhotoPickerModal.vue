@@ -10,12 +10,14 @@ const {
   photos: libraryPhotos,
   fetchNextPage: fetchNextLibraryPage,
   hasMore: libraryHasMore,
+  loaded: libraryLoaded,
   loading: libraryLoading,
 } = usePhotoLibrary()
 const toast = useToast()
 const { translateError } = useErrorMessage()
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
 
+const grid = useTemplateRef<HTMLElement | null>('grid')
 const savingPhotoId = shallowRef<number | null>(null)
 const loadingMembership = shallowRef(false)
 // Issue #170: the Album no longer carries its full Photo list (it can
@@ -51,7 +53,7 @@ watch(() => isOpen.value, async (newValue) => {
   if (!newValue)
     return
 
-  if (!libraryPhotos.value.length)
+  if (!libraryLoaded.value)
     await fetchNextLibraryPage()
 
   loadingMembership.value = true
@@ -77,7 +79,7 @@ watch(() => isOpen.value, async (newValue) => {
         {{ t('libraryEmpty') }}
       </p>
 
-      <div class="grid grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4">
+      <div ref="grid" class="grid max-h-96 grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4">
         <button
           v-for="photo in libraryPhotos"
           :key="photo.id"
@@ -94,17 +96,13 @@ watch(() => isOpen.value, async (newValue) => {
             <Icon name="ph:check-bold" class="text-white" size="1.5em" />
           </div>
         </button>
+
+        <BaseInfiniteScroll :has-more="libraryHasMore" :loading="libraryLoading" :root="grid" @load-more="fetchNextLibraryPage" />
       </div>
 
-      <button
-        v-if="libraryHasMore"
-        type="button"
-        class="text-sm text-green-600 hover:underline dark:text-green-400"
-        :disabled="libraryLoading"
-        @click="fetchNextLibraryPage"
-      >
-        {{ libraryLoading ? t('loading') : t('loadMore') }}
-      </button>
+      <p v-if="libraryLoading" class="text-center text-sm text-gray-500 dark:text-gray-300">
+        {{ t('loading') }}
+      </p>
     </template>
 
     <template #footer="{ close }">
@@ -125,7 +123,6 @@ watch(() => isOpen.value, async (newValue) => {
     "addPhotosModalTitle": "Add photos to album",
     "libraryEmpty": "Your photo library is empty.",
     "loading": "Loading…",
-    "loadMore": "Load more",
     "done": "Done"
   }
 }
