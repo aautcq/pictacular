@@ -104,7 +104,7 @@ describe('album public share links', async () => {
   })
 
   afterAll(async () => {
-    await prisma.albumsOnPhotos.deleteMany({})
+    await prisma.albumsOnPhotos.deleteMany({ where: { album: { admin_id: { in: [owner.id, collaborator.id, other.id] } } } })
     await prisma.album.deleteMany({ where: { admin_id: { in: [owner.id, collaborator.id, other.id] } } })
     await prisma.user.deleteMany({ where: { email: { startsWith: emailPrefix } } })
     await fakeS3.close()

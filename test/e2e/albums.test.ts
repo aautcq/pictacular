@@ -113,7 +113,7 @@ describe('albums core', async () => {
   })
 
   afterAll(async () => {
-    await prisma.albumsOnPhotos.deleteMany({})
+    await prisma.albumsOnPhotos.deleteMany({ where: { album: { admin_id: { in: [owner.id, other.id, collaborator.id] } } } })
     await prisma.album.deleteMany({ where: { admin_id: { in: [owner.id, other.id, collaborator.id] } } })
     await prisma.user.deleteMany({ where: { email: { startsWith: emailPrefix } } })
     await fakeS3.close()
