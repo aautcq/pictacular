@@ -10,7 +10,6 @@ const { translateError } = useErrorMessage()
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
 
 const grid = useTemplateRef<HTMLElement | null>('grid')
-const sentinel = useTemplateRef<HTMLElement | null>('sentinel')
 const query = shallowRef('')
 const debouncedQuery = refDebounced(query, 300)
 const searchResults = ref<AlbumSummary[] | null>(null)
@@ -50,15 +49,6 @@ watch(isOpen, async (newValue) => {
     searchResults.value = null
   }
 })
-
-// Observed relative to the grid's own scroll container (rather than the
-// default viewport `root`) since the grid scrolls internally within the
-// modal — otherwise the sentinel would never cross the viewport boundary
-// while the user scrolls the grid.
-useIntersectionObserver(sentinel, ([entry]) => {
-  if (entry?.isIntersecting && !searchResults.value && hasMore.value && !loading.value)
-    fetchNextPage()
-}, { root: grid })
 
 async function addToAlbum(albumId: number) {
   if (saving.value)
@@ -128,7 +118,7 @@ async function addToAlbum(albumId: number) {
           <span class="truncate text-sm font-medium">{{ album.title }}</span>
         </button>
 
-        <div v-if="!searchResults" ref="sentinel" class="h-4" />
+        <BaseInfiniteScroll v-if="!searchResults" :has-more="hasMore" :loading="loading" :root="grid" @load-more="fetchNextPage" />
       </div>
 
       <p v-if="loading" class="text-center text-sm text-gray-500 dark:text-gray-300">
