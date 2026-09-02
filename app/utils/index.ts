@@ -11,5 +11,5 @@ export async function downloadFile(url: string, filename: string) {
 }
 
 export function getPhotoFileName(photo: Photo) {
-  return photo.url.split('/').pop()?.split('?')[0] ?? `photo-${photo.id}`
+  return photo.filename
 }

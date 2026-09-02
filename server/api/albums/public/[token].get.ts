@@ -18,12 +18,12 @@ export default defineEventHandler(async (event) => {
       })
     : null
 
-  if (!album) {
+  if (!album || !token) {
     throw createError({
       statusCode: 404,
       statusMessage: 'albums.not_found',
     })
   }
 
-  return serializeAlbumPublic(album)
+  return serializeAlbumPublic(album, token)
 })

@@ -1,4 +1,5 @@
 import type { FakeS3Server } from './fake-s3-server'
+import { Buffer } from 'node:buffer'
 import process from 'node:process'
 import { $fetch, fetch, setup, url } from '@nuxt/test-utils/e2e'
 import { afterAll, describe, expect, it } from 'vitest'
@@ -78,7 +79,7 @@ describe('personal photo library', async () => {
   }
 
   async function uploadPhoto(cookieHeader: string, overrides: Record<string, unknown> = {}) {
-    return $fetch<{ id: number, url: string, liked: boolean }>('/api/photos', {
+    return $fetch<{ id: number, url: string, filename: string, liked: boolean }>('/api/photos', {
       method: 'POST',
       headers: { cookie: cookieHeader },
       body: { filename: 'photo.png', mime_type: 'image/png', base64: tinyPngBase64, ...overrides },
@@ -96,7 +97,8 @@ describe('personal photo library', async () => {
 
       const photo = await uploadPhoto(cookieHeader)
 
-      expect(photo.url).toContain(`photo.png`)
+      expect(photo.url).toBe(`/api/photos/${photo.id}/image`)
+      expect(photo.filename).toBe('photo.png')
       expect(photo.liked).toBe(false)
 
       const row = await prisma.photo.findUniqueOrThrow({ where: { id: photo.id } })
@@ -294,9 +296,10 @@ describe('personal photo library', async () => {
       expect(stateById.get(archivedPhoto.id)).toBe('archived')
       expect(stateById.get(restoringPhoto.id)).toBe('restoring')
 
-      // A non-archived Photo's own response shape (its signed `url` above
-      // all) must stay exactly as it was before this feature.
-      expect(response.photos.find(photo => photo.id === normalPhoto.id)?.url).toContain('photo.png')
+      // A non-archived Photo's own response shape (its stable image `url`
+      // above all) must stay exactly as it was before this feature.
+      const normalResult = response.photos.find(photo => photo.id === normalPhoto.id)
+      expect(normalResult?.url).toBe(`/api/photos/${normalPhoto.id}/image`)
     })
 
     it('rejects a User without a Storage Connection', async () => {
@@ -373,6 +376,95 @@ describe('personal photo library', async () => {
       await expect(
         $fetch('/api/photos/1/like', { method: 'POST' }),
       ).rejects.toMatchObject({ statusCode: 401 })
+    })
+  })
+
+  describe('image (issue #168)', () => {
+    it('streams the owner\'s Photo bytes with the right content-type', async () => {
+      const { cookieHeader } = await createConnectedUser()
+      const photo = await uploadPhoto(cookieHeader)
+
+      const response = await fetch(photo.url, { headers: { cookie: cookieHeader } })
+
+      expect(response.status).toBe(200)
+      expect(response.headers.get('content-type')).toBe('image/png')
+      const bytes = Buffer.from(await response.arrayBuffer())
+      expect(bytes.length).toBeGreaterThan(0)
+    })
+
+    it('lets a Collaborator on a shared Album view the Photo it\'s assigned to', async () => {
+      const owner = await createConnectedUser()
+      const collaborator = await createConnectedUser()
+      const photo = await uploadPhoto(owner.cookieHeader)
+
+      const album = await $fetch<{ id: number }>('/api/albums', {
+        method: 'POST',
+        headers: { cookie: owner.cookieHeader },
+        body: { title: 'Shared With Collaborator' },
+      })
+      await $fetch(`/api/albums/${album.id}/photos/${photo.id}`, {
+        method: 'POST',
+        headers: { cookie: owner.cookieHeader },
+      })
+      await prisma.album.update({ where: { id: album.id }, data: { users: { connect: { id: collaborator.id } } } })
+
+      const response = await fetch(photo.url, { headers: { cookie: collaborator.cookieHeader } })
+
+      expect(response.status).toBe(200)
+    })
+
+    it('rejects a User unrelated to the Photo with 404', async () => {
+      const owner = await createConnectedUser()
+      const other = await createConnectedUser()
+      const photo = await uploadPhoto(owner.cookieHeader)
+
+      await expect(
+        $fetch(photo.url, { headers: { cookie: other.cookieHeader } }),
+      ).rejects.toMatchObject({ statusCode: 404, statusMessage: 'photos.not_found' })
+    })
+
+    it('rejects an unauthenticated request with 401', async () => {
+      await expect($fetch('/api/photos/1/image')).rejects.toMatchObject({ statusCode: 401 })
+    })
+
+    it('rejects an Archived Photo with 409', async () => {
+      const { id: userId, cookieHeader, bucket } = await createConnectedUser()
+      const archivedPhoto = await prisma.photo.create({
+        data: {
+          key: 'archived-image.jpg',
+          mime_type: 'image/jpeg',
+          size: 1,
+          last_modified: new Date(),
+          storage_class: 'GLACIER',
+          user: { connect: { id: userId } },
+        },
+      })
+      fakeS3.seedBucket(bucket, [{ key: 'archived-image.jpg', storageClass: 'GLACIER' }])
+
+      await expect(
+        $fetch(`/api/photos/${archivedPhoto.id}/image`, { headers: { cookie: cookieHeader } }),
+      ).rejects.toMatchObject({ statusCode: 409, statusMessage: 'photos.archived' })
+    })
+
+    it('streams a Restored Photo\'s bytes rather than treating it as still Archived (issue #145)', async () => {
+      const { id: userId, cookieHeader, bucket } = await createConnectedUser()
+      const restoreExpiresAt = new Date(Date.now() + 60 * 60 * 1000)
+      const restoredPhoto = await prisma.photo.create({
+        data: {
+          key: 'restored-image.jpg',
+          mime_type: 'image/jpeg',
+          size: 1,
+          last_modified: new Date(),
+          storage_class: 'GLACIER',
+          restore_expires_at: restoreExpiresAt,
+          user: { connect: { id: userId } },
+        },
+      })
+      fakeS3.seedBucket(bucket, [{ key: 'restored-image.jpg', storageClass: 'GLACIER', restoreExpiresAt, body: Buffer.from(tinyPngBase64, 'base64'), contentType: 'image/jpeg' }])
+
+      const response = await fetch(`/api/photos/${restoredPhoto.id}/image`, { headers: { cookie: cookieHeader } })
+
+      expect(response.status).toBe(200)
     })
   })
 })

@@ -86,7 +86,7 @@ export default defineEventHandler(async (event) => {
 
     imported += 1
 
-    const serialized = await serializePhoto(photo, account.aws_credentials, user.id)
+    const serialized = serializePhoto(photo, user.id)
     sendMessageToUser(user.id, 'import:progress', { imported, total: images.length, photo: serialized })
   }
 

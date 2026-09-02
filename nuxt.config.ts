@@ -31,6 +31,29 @@ export default defineNuxtConfig({
 
   css: ['~/assets/css/main.css'],
 
+  // Photos/covers are served through this app's own stable per-Photo
+  // image endpoints (issue #168, server/api/photos/[id]/image.get.ts and
+  // its Public Share Link counterpart) rather than raw presigned S3 URLs,
+  // so every image source is same-origin. These endpoints need the
+  // viewer's own session cookie to authorize the read, which the default
+  // `ipx` provider's server-side fetch can't carry (it either reads a
+  // literal file from `public/`, or fetches an allow-listed absolute URL
+  // with no request context) — so Photo `<NuxtImg>`s use the `photo`
+  // provider below instead, which resizes in the route itself (see
+  // server/utils/photo-image-resize.ts) via plain query params on an
+  // ordinary same-origin request. `format`/`quality` stay as this
+  // module's own defaults, applied by that same resize helper.
+  image: {
+    format: ['webp'],
+    quality: 80,
+    providers: {
+      photo: {
+        name: 'photo',
+        provider: '~/providers/photo.ts',
+      },
+    },
+  },
+
   vite: {
     plugins: [
       tailwindcss(),
@@ -144,14 +167,50 @@ export default defineNuxtConfig({
   security: {
     headers: {
       contentSecurityPolicy: {
-        // Every User's Photos/avatar are served from their own Storage
-        // Connection bucket (any bucket name/region, per ADR 0001), not a
-        // single fixed host — a wildcard is required so signed image URLs
-        // from any User's bucket can load. AWS_S3_ENDPOINT is only ever set
-        // to point the S3 client at the in-process fake S3 double used by
-        // browser tests (see server/utils/storage.ts), so it's additionally
-        // allow-listed here to let those tests load real photo bytes.
+        // Photos/avatars used to be served from each User's own Storage
+        // Connection bucket directly (any bucket name/region, per ADR
+        // 0001), requiring a wildcard here. Photos now proxy through this
+        // app's own stable image endpoints (issue #168), so only avatars
+        // (server/utils/serialize-user.ts, unaffected by that change)
+        // still load a raw signed S3 URL client-side — hence the
+        // wildcard staying put.
         'img-src': ['\'self\'', 'data:', 'https://*.s3.amazonaws.com', 'https://*.s3.eu-west-3.amazonaws.com', ...(process.env.AWS_S3_ENDPOINT ? [process.env.AWS_S3_ENDPOINT] : [])],
+      },
+    },
+  },
+
+  // Photo images now proxy through this app's own routes (issue #168)
+  // instead of being fetched by the browser directly from S3, so a
+  // single gallery page load can issue dozens of image requests against
+  // this server. nuxt-security's default rateLimiter (150 req/5min) is a
+  // single shared per-IP bucket across every route, so those image
+  // requests were exhausting the same budget as regular API calls and
+  // causing 429s on unrelated endpoints (e.g. GET /api/albums/:id).
+  // Give the image routes their own, much higher budget instead of
+  // disabling rate limiting for them entirely.
+  //
+  // Nitro's routeRules matcher (radix3) only supports "**" as a
+  // trailing catch-all, not mid-path (e.g. '/api/photos/**/image' never
+  // matches anything), so this has to scope to the whole '/api/photos/**'
+  // and '/api/albums/public/**' prefixes rather than the image routes
+  // alone. Every route under those prefixes is already
+  // authenticated/authorized per-Photo or per-share-token, so the wider
+  // budget is safe to share with them too.
+  routeRules: {
+    '/api/photos/**': {
+      security: {
+        rateLimiter: {
+          tokensPerInterval: 2000,
+          interval: 300000,
+        },
+      },
+    },
+    '/api/albums/public/**': {
+      security: {
+        rateLimiter: {
+          tokensPerInterval: 2000,
+          interval: 300000,
+        },
       },
     },
   },

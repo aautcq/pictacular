@@ -44,9 +44,7 @@ export default defineEventHandler(async (event) => {
     .map(result => result.value)
   const failed = settled.filter(result => result.status === 'rejected').length
 
-  const photos = await Promise.all(
-    updated.map(photo => serializePhoto(photo, account.aws_credentials, user.id)),
-  )
+  const photos = updated.map(photo => serializePhoto(photo, user.id))
 
   return { restored: photos.length, failed, photos }
 })

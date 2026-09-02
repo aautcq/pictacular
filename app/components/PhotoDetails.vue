@@ -85,6 +85,9 @@ function formatExpiry(date: string) {
         v-else
         :src="photo.url"
         :alt="t('photoAlt', { id: photo.id })"
+        :width="2048"
+        :height="2048"
+        fit="inside"
         class="max-h-[75vh] max-w-full rounded object-contain"
       />
       <p v-if="photo.archived_state === 'restored' && photo.restore_expires_at" class="text-xs text-gray-300">

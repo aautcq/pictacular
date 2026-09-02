@@ -8,7 +8,7 @@ export default defineEventHandler(async (event) => {
   const { user } = requireAuth(event)
   const id = requirePhotoIdParam(event)
 
-  const account = await requirePhotoStorageConnection(user.id)
+  await requirePhotoStorageConnection(user.id)
 
   const photo = await prisma.photo.findFirst({ where: { id, user_id: user.id } })
   if (!photo) {
@@ -24,5 +24,5 @@ export default defineEventHandler(async (event) => {
     include: { likes: { select: { id: true } } },
   })
 
-  return serializePhoto(updated, account.aws_credentials, user.id)
+  return serializePhoto(updated, user.id)
 })
