@@ -178,6 +178,34 @@ export default defineNuxtConfig({
       },
     },
   },
+
+  // Photo images now proxy through this app's own routes (issue #168)
+  // instead of being fetched by the browser directly from S3, so a
+  // single gallery page load can issue dozens of image requests against
+  // this server. nuxt-security's default rateLimiter (150 req/5min) is a
+  // single shared per-IP bucket across every route, so those image
+  // requests were exhausting the same budget as regular API calls and
+  // causing 429s on unrelated endpoints (e.g. GET /api/albums/:id).
+  // Give the image routes their own, much higher budget instead of
+  // disabling rate limiting for them entirely.
+  routeRules: {
+    '/api/photos/**/image': {
+      security: {
+        rateLimiter: {
+          tokensPerInterval: 2000,
+          interval: 300000,
+        },
+      },
+    },
+    '/api/albums/public/**/image': {
+      security: {
+        rateLimiter: {
+          tokensPerInterval: 2000,
+          interval: 300000,
+        },
+      },
+    },
+  },
   icon: {
     clientBundle: {
       scan: true,
