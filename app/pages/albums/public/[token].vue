@@ -52,12 +52,17 @@ useHead({ title: computed(() => album.value?.title) })
           :key="photo.id"
           class="aspect-square overflow-hidden rounded"
         >
-          <img
+          <NuxtImg
             :src="photo.url"
             :alt="t('photoAlt', { id: photo.id })"
+            provider="photo"
+            :width="400"
+            :height="400"
+            fit="cover"
+            format="webp"
             class="h-full w-full object-cover"
             loading="lazy"
-          >
+          />
         </div>
       </div>
     </template>

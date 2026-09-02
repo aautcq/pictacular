@@ -1,5 +1,11 @@
 <script setup lang="ts">
-defineProps<{ src: string, alt: string }>()
+const { width = 400, height = 400, fit = 'cover' } = defineProps<{
+  src: string
+  alt: string
+  width?: number
+  height?: number
+  fit?: string
+}>()
 
 const hasError = shallowRef(false)
 const isLoaded = shallowRef(false)
@@ -12,10 +18,11 @@ const isLoaded = shallowRef(false)
       v-bind="$attrs"
       :src
       :alt
+      :width
+      :height
+      :fit
+      provider="photo"
       format="webp"
-      fit="cover"
-      height="100%"
-      width="100%"
       placeholder
       loading="lazy"
       class="h-full w-full object-cover"

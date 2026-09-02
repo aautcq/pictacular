@@ -310,6 +310,18 @@ export async function generateSecureObjectUrl(awsCredentials: AwsCredentials, ke
   return getSignedUrl(client, command, { expiresIn })
 }
 
+// Fetches a Photo's underlying object bytes as a stream (issue #168), for
+// GET /api/photos/[id]/image and its Public Share Link counterpart to pipe
+// straight through to the response rather than buffering a potentially
+// multi-MB original in memory (unlike bodyToBuffer above, which the
+// EXIF/Taken At read path needs a full in-memory Buffer for). The route
+// handler is responsible for streaming `Body` on to its own response.
+export async function fetchPhotoObject(awsCredentials: AwsCredentials, key: string) {
+  const client = createClient(awsCredentials)
+
+  return client.send(new GetObjectCommand({ Bucket: awsCredentials.bucket, Key: key }))
+}
+
 // Uploads a User's avatar image (base64-in-JSON, per the legacy upload
 // contract preserved by this rebuild) to their own Storage Connection
 // bucket under a fixed per-user key, so re-uploading always replaces the

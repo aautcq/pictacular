@@ -172,7 +172,7 @@ describe('albums core', async () => {
       expect(ids).toContain(firstAlbum.id)
       expect(ids).not.toContain(othersAlbum.id)
       expect(response.albums[0]!.id).toBe(secondAlbum.id)
-      expect(response.albums[0]!.cover).toContain('photo.png')
+      expect(response.albums[0]!.cover).toBe(`/api/photos/${photo.id}/image`)
       expect(response.albums[0]!.photo_count).toBe(1)
       expect(response.albums.find(album => album.id === firstAlbum.id)!.photo_count).toBe(0)
     })

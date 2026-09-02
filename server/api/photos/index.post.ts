@@ -52,7 +52,7 @@ export default defineEventHandler(async (event) => {
     include: { likes: { select: { id: true } } },
   })
 
-  const serialized = await serializePhoto(photo, account.aws_credentials, user.id)
+  const serialized = serializePhoto(photo, user.id)
 
   sendMessageToUser(user.id, 'photo:uploaded', serialized)
 

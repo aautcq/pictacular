@@ -16,8 +16,8 @@ import { sendMessageToUser } from '#server/utils/websocket'
 // story 9), reusing the same WS + web-push infra `photo:uploaded` already
 // uses (server/utils/websocket.ts, server/utils/web-push.ts) rather than
 // inventing a second notification path.
-async function notifyPhotoRestored(userId: number, photo: Parameters<typeof serializePhoto>[0], awsCredentials: Parameters<typeof serializePhoto>[1]) {
-  const serialized = await serializePhoto(photo, awsCredentials, userId)
+async function notifyPhotoRestored(userId: number, photo: Parameters<typeof serializePhoto>[0]) {
+  const serialized = serializePhoto(photo, userId)
   sendMessageToUser(userId, 'photo:restored', serialized)
 
   const subscriptions = await prisma.pushSubscription.findMany({ where: { user_id: userId } })
@@ -136,7 +136,7 @@ const archivedPhotosScanTask: Task = {
           // re-run of this idempotent task never double-notifies (issue
           // #145's story 14).
           if (previousState === 'restoring' && photoArchiveState(updated) === 'restored')
-            await notifyPhotoRestored(account.id, updated, awsCredentials)
+            await notifyPhotoRestored(account.id, updated)
         })
       }
       catch (error) {

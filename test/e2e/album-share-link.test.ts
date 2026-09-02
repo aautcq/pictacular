@@ -227,6 +227,46 @@ describe('album public share links', async () => {
     })
   })
 
+  describe('public image (issue #168)', () => {
+    it('streams a Photo\'s bytes for a valid token, no session needed', async () => {
+      const album = await createAlbum(owner.cookieHeader, { title: 'Public Image Album' })
+      const photo = await uploadPhoto(owner.cookieHeader)
+      await $fetch(`/api/albums/${album.id}/photos/${photo.id}`, { method: 'POST', headers: { cookie: owner.cookieHeader } })
+      const { share_token } = await $fetch<{ share_token: string }>(`/api/albums/${album.id}/share-link`, {
+        method: 'POST',
+        headers: { cookie: owner.cookieHeader },
+      })
+
+      const response = await fetch(`/api/albums/public/${share_token}/photos/${photo.id}/image`)
+
+      expect(response.status).toBe(200)
+      expect(response.headers.get('content-type')).toBe('image/png')
+    })
+
+    it('rejects an unknown token with 404', async () => {
+      const album = await createAlbum(owner.cookieHeader)
+      const photo = await uploadPhoto(owner.cookieHeader)
+      await $fetch(`/api/albums/${album.id}/photos/${photo.id}`, { method: 'POST', headers: { cookie: owner.cookieHeader } })
+
+      await expect(
+        $fetch(`/api/albums/public/does-not-exist/photos/${photo.id}/image`),
+      ).rejects.toMatchObject({ statusCode: 404, statusMessage: 'albums.not_found' })
+    })
+
+    it('rejects a Photo not assigned to that token\'s Album with 404', async () => {
+      const album = await createAlbum(owner.cookieHeader, { title: 'Empty Public Album' })
+      const otherPhoto = await uploadPhoto(owner.cookieHeader)
+      const { share_token } = await $fetch<{ share_token: string }>(`/api/albums/${album.id}/share-link`, {
+        method: 'POST',
+        headers: { cookie: owner.cookieHeader },
+      })
+
+      await expect(
+        $fetch(`/api/albums/public/${share_token}/photos/${otherPhoto.id}/image`),
+      ).rejects.toMatchObject({ statusCode: 404, statusMessage: 'albums.not_found' })
+    })
+  })
+
   describe('like/edit endpoints reject a share token', () => {
     it('rejects liking a Photo with only a share token, no session', async () => {
       const album = await createAlbum(owner.cookieHeader)

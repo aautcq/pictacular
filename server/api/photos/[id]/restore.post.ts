@@ -23,5 +23,5 @@ export default defineEventHandler(async (event) => {
 
   const updated = await requestPhotoRestore(photo, account.aws_credentials)
 
-  return serializePhoto(updated, account.aws_credentials, user.id)
+  return serializePhoto(updated, user.id)
 })

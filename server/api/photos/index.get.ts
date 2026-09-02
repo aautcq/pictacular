@@ -30,7 +30,7 @@ export default defineEventHandler(async (event) => {
 
   const { cursor, limit } = result.data
 
-  const account = await requirePhotoStorageConnection(user.id)
+  await requirePhotoStorageConnection(user.id)
 
   // The cursor Photo's own effective date anchors the keyset comparison
   // below — it must belong to this User, exactly like every other Photo
@@ -81,7 +81,7 @@ export default defineEventHandler(async (event) => {
   const page = pageIds.map(id => photosById.get(id)!)
 
   return {
-    photos: await Promise.all(page.map(photo => serializePhoto(photo, account.aws_credentials, user.id))),
+    photos: page.map(photo => serializePhoto(photo, user.id)),
     next_cursor: has_more ? requestedIds[requestedIds.length - 1] : null,
   }
 })
