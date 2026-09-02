@@ -27,7 +27,7 @@ describe('album public share link journey', async () => {
   const tinyPngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
 
   afterAll(async () => {
-    await prisma.albumsOnPhotos.deleteMany({})
+    await prisma.albumsOnPhotos.deleteMany({ where: { album: { admin: { email: { startsWith: emailPrefix } } } } })
     await prisma.album.deleteMany({ where: { admin: { email: { startsWith: emailPrefix } } } })
     await prisma.user.deleteMany({ where: { email: { startsWith: emailPrefix } } })
     await fakeS3.close()
