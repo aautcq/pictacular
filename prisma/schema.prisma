@@ -120,6 +120,14 @@ model Photo {
   size          Int
   last_modified DateTime
 
+  // Issue #162: when the photo was actually taken, derived from the image
+  // file's own EXIF metadata (e.g. DateTimeOriginal) at import/upload time
+  // — null when no such metadata could be found (unsupported format,
+  // missing tag, or a fetch/parse failure), in which case `last_modified`
+  // is used instead wherever Photos need a chronological date. Never
+  // backfilled for Photos that already existed before this field shipped.
+  taken_at DateTime?
+
   // Issue #145: persisted mirror of the underlying S3 object's current
   // storage class + Restore Request status, refreshed by the
   // `archived-photos:scan` task (and by a User-triggered restore) from

@@ -8,6 +8,7 @@ export interface SerializablePhoto {
   mime_type: string
   size: number
   last_modified: Date
+  taken_at: Date | null
   created_at: Date
   likes: { id: number }[]
   storage_class: string | null

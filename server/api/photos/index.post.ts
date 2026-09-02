@@ -1,3 +1,5 @@
+import { Buffer } from 'node:buffer'
+import { extractTakenAt } from '#server/utils/exif'
 import { requirePhotoStorageConnection } from '#server/utils/photo-guards'
 import { prisma } from '#server/utils/prisma'
 import { serializePhoto } from '#server/utils/serialize-photo'
@@ -33,12 +35,18 @@ export default defineEventHandler(async (event) => {
   const { filename, mime_type, base64, last_modified } = result.data
   const { key, size } = await uploadPhotoObject(account.aws_credentials, account.id, filename, mime_type, base64)
 
+  // Extracted directly from the already-in-memory uploaded bytes (issue
+  // #162) — unlike import, upload never needs an extra S3 round trip to
+  // find EXIF.
+  const taken_at = await extractTakenAt(Buffer.from(base64, 'base64'))
+
   const photo = await prisma.photo.create({
     data: {
       key,
       mime_type,
       size,
       last_modified: last_modified ? new Date(last_modified) : new Date(),
+      taken_at,
       user: { connect: { id: account.id } },
     },
     include: { likes: { select: { id: true } } },

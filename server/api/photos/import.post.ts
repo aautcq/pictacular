@@ -1,7 +1,7 @@
 import { requirePhotoStorageConnection } from '#server/utils/photo-guards'
 import { prisma } from '#server/utils/prisma'
 import { serializePhoto } from '#server/utils/serialize-photo'
-import { listAllBucketImages, mimeTypeFromKey } from '#server/utils/storage'
+import { fetchTakenAt, listAllBucketImages, mimeTypeFromKey } from '#server/utils/storage'
 import { sendMessageToUser } from '#server/utils/websocket'
 
 // Imports the authenticated User's pre-existing bucket contents into
@@ -53,12 +53,19 @@ export default defineEventHandler(async (event) => {
       where: { user_id: account.id, key: image.key },
       include: { likes: { select: { id: true } } },
     })
+    // Only fetched for a Photo actually being created here — re-running an
+    // import against an already-imported object never re-fetches its
+    // Taken At (issue #162 is forward-only, no backfill of pre-existing
+    // Photos).
+    const taken_at = existingPhoto ? undefined : await fetchTakenAt(account.aws_credentials, image.key)
+
     const photo = existingPhoto ?? await prisma.photo.create({
       data: {
         key: image.key,
         mime_type: mimeTypeFromKey(image.key),
         size: image.size,
         last_modified: image.last_modified,
+        taken_at,
         // Free from the same `ListObjectsV2` page as the rest of `image`
         // (issue #145) — an imported Photo that's already Archived is
         // reflected immediately, without waiting for the next

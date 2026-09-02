@@ -1,9 +1,12 @@
-import type { FakeS3Server } from './fake-s3-server'
+import type { FakeS3Server, SeedObject } from './fake-s3-server'
+import { Buffer } from 'node:buffer'
 import process from 'node:process'
 import { $fetch, fetch, setup, url } from '@nuxt/test-utils/e2e'
 import { afterAll, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import { prisma } from '../../server/utils/prisma'
+import { EXIF_RANGE_BYTES } from '../../server/utils/storage'
+import { buildJpegWithDateTimeOriginal } from './exif-fixtures'
 import { startFakeS3Server } from './fake-s3-server'
 
 // Black-box HTTP tests for importing a User's pre-existing bucket
@@ -61,7 +64,7 @@ describe('import bucket photos', async () => {
       .join('; ')
   }
 
-  async function createConnectedUser(keys: string[] = []) {
+  async function createConnectedUser(keys: (string | SeedObject)[] = []) {
     const user = await createVerifiedUser()
     const cookieHeader = await loginCookieHeader(user.email)
     const bucket = uniqueBucketName()
@@ -186,6 +189,62 @@ describe('import bucket photos', async () => {
     const album = await prisma.album.findFirstOrThrow({ where: { admin_id: userId, title: 'holiday' } })
     const links = await prisma.albumsOnPhotos.findMany({ where: { album_id: album.id } })
     expect(links).toHaveLength(1)
+  })
+
+  // issue #162: an imported Photo's Taken At date, derived from its own
+  // EXIF metadata rather than defaulting to import time.
+  describe('taken At (issue #162)', () => {
+    it('extracts taken_at from a JPEG\'s EXIF via a single ranged read', async () => {
+      const takenAt = new Date('2020-01-15T10:30:00.000Z')
+      const jpeg = buildJpegWithDateTimeOriginal(takenAt)
+      const { id: userId, cookieHeader } = await createConnectedUser([{ key: 'holiday/ranged-read.jpg', body: jpeg, contentType: 'image/jpeg' }])
+
+      await $fetch('/api/photos/import', { method: 'POST', headers: { cookie: cookieHeader } })
+
+      const photo = await prisma.photo.findFirstOrThrow({ where: { user_id: userId, key: 'holiday/ranged-read.jpg' } })
+      expect(photo.taken_at).toEqual(takenAt)
+
+      const requests = fakeS3.getRequestsFor('holiday/ranged-read.jpg')
+      expect(requests).toHaveLength(1)
+      expect(requests[0]!.range).toBe(`bytes=0-${EXIF_RANGE_BYTES - 1}`)
+    })
+
+    it('escalates to a full-object read when the ranged read misses EXIF placed past its byte window', async () => {
+      const takenAt = new Date('2019-06-01T08:00:00.000Z')
+      const jpeg = buildJpegWithDateTimeOriginal(takenAt, EXIF_RANGE_BYTES + 10_000)
+      const { id: userId, cookieHeader } = await createConnectedUser([{ key: 'holiday/escalated-read.jpg', body: jpeg, contentType: 'image/jpeg' }])
+
+      await $fetch('/api/photos/import', { method: 'POST', headers: { cookie: cookieHeader } })
+
+      const photo = await prisma.photo.findFirstOrThrow({ where: { user_id: userId, key: 'holiday/escalated-read.jpg' } })
+      expect(photo.taken_at).toEqual(takenAt)
+
+      const requests = fakeS3.getRequestsFor('holiday/escalated-read.jpg')
+      expect(requests).toHaveLength(2)
+      expect(requests[0]!.range).toBe(`bytes=0-${EXIF_RANGE_BYTES - 1}`)
+      expect(requests[1]!.range).toBeUndefined()
+    })
+
+    it('leaves taken_at null, without escalating, for a GIF (no EXIF container exists at any byte range)', async () => {
+      const { id: userId, cookieHeader } = await createConnectedUser([{ key: 'holiday/clip.gif', body: Buffer.from('GIF89a-fake-body'), contentType: 'image/gif' }])
+
+      await $fetch('/api/photos/import', { method: 'POST', headers: { cookie: cookieHeader } })
+
+      const photo = await prisma.photo.findFirstOrThrow({ where: { user_id: userId, key: 'holiday/clip.gif' } })
+      expect(photo.taken_at).toBeNull()
+
+      const requests = fakeS3.getRequestsFor('holiday/clip.gif')
+      expect(requests).toHaveLength(1)
+    })
+
+    it('leaves taken_at null for a supported image with no EXIF metadata', async () => {
+      const { id: userId, cookieHeader } = await createConnectedUser([{ key: 'holiday/plain.png', body: Buffer.from('fake-png-body'), contentType: 'image/png' }])
+
+      await $fetch('/api/photos/import', { method: 'POST', headers: { cookie: cookieHeader } })
+
+      const photo = await prisma.photo.findFirstOrThrow({ where: { user_id: userId, key: 'holiday/plain.png' } })
+      expect(photo.taken_at).toBeNull()
+    })
   })
 
   it('imports nothing from an empty bucket', async () => {
