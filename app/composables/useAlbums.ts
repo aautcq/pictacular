@@ -18,11 +18,13 @@ export interface AlbumSummary {
 
 export interface AlbumFull extends AlbumSummary {
   collaborators: AlbumMember[]
-  photos: Photo[]
   // Issue #53: only present (non-null) when the requesting User is the
   // Album's admin — a Collaborator's full show response always gets null.
   share_token: string | null
 }
+// Issue #170: an Album can hold thousands of Photos, so its own Photos
+// are fetched separately, paginated (see useAlbumPhotos), rather than
+// embedded in AlbumFull.
 
 // Issue #53: a Public Share Link Photo omits `liked`/like-eligibility
 // entirely — there's no signed-in User to like on behalf of on the public,
@@ -37,11 +39,11 @@ export interface PublicAlbumPhoto {
 }
 
 // Issue #53: the Public Share Link response — title/description/cover/
-// admin + Photos only, deliberately narrower than AlbumFull (no
-// Collaborators, no share_token itself), matching serializeAlbumPublic.
-export interface PublicAlbum extends AlbumSummary {
-  photos: PublicAlbumPhoto[]
-}
+// admin only, deliberately narrower than AlbumFull (no Collaborators, no
+// share_token itself), matching serializeAlbumPublic. Its Photos (issue
+// #170) are fetched separately, paginated, via usePublicAlbumPhotos —
+// same reasoning as AlbumFull above.
+export type PublicAlbum = AlbumSummary
 
 // Issue #52: the add-Collaborators endpoint's response, on top of the
 // refreshed AlbumFull — which emails were linked to an existing User
@@ -114,12 +116,28 @@ export function useAlbums() {
     albums.value = albums.value.filter(album => album.id !== id)
   }
 
+  // Issue #170: returns just the added Photo (not the whole Album, which
+  // can hold thousands) — callers merge it into their own already-loaded
+  // photo list (see useAlbumPhotos.prependPhoto).
   async function addPhotoToAlbum(albumId: number, photoId: number) {
-    return $fetch<AlbumFull>(`/api/albums/${albumId}/photos/${photoId}`, { method: 'POST' })
+    return $fetch<Photo>(`/api/albums/${albumId}/photos/${photoId}`, { method: 'POST' })
   }
 
+  // Issue #170: no response body (204) — callers already know which
+  // Photo id they removed and splice it out of their own list themselves
+  // (see useAlbumPhotos.removePhoto).
   async function removePhotoFromAlbum(albumId: number, photoId: number) {
-    return $fetch<AlbumFull>(`/api/albums/${albumId}/photos/${photoId}`, { method: 'DELETE' })
+    await $fetch(`/api/albums/${albumId}/photos/${photoId}`, { method: 'DELETE' })
+  }
+
+  // Issue #170: every Photo id currently assigned to an Album, with no
+  // per-Photo join/URL cost — used by the photo picker
+  // (AddPhotoPickerModal) to render its "already in this album"
+  // checkmarks without paginating through the whole Album.
+  async function fetchAlbumPhotoIds(albumId: number) {
+    const requestFetch = import.meta.server ? useRequestFetch() : $fetch
+    const response = await requestFetch<{ photo_ids: number[] }>(`/api/albums/${albumId}/photo-ids`)
+    return response.photo_ids
   }
 
   // Issue #52: adds Collaborators by email — existing Users are linked
@@ -164,6 +182,7 @@ export function useAlbums() {
     deleteAlbum,
     addPhotoToAlbum,
     removePhotoFromAlbum,
+    fetchAlbumPhotoIds,
     addCollaborators,
     removeCollaborator,
     generateShareLink,

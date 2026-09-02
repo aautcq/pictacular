@@ -28,6 +28,18 @@ export const albumListQuerySchema = z.object({
 
 export type AlbumListQuery = z.infer<typeof albumListQuerySchema>
 
+// zod schema for GET /api/albums/:id/photos' (and its Public Share Link
+// counterpart's) pagination query params — an Album can hold thousands of
+// Photos, so both mirror the personal Photo list endpoint's keyset-cursor
+// contract and default limit (see validation/photo.ts) rather than the
+// Album list's smaller one, since these paginate Photos, not Albums.
+export const albumPhotosQuerySchema = z.object({
+  cursor: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional().default(60),
+})
+
+export type AlbumPhotosQuery = z.infer<typeof albumPhotosQuerySchema>
+
 // zod schema for GET /api/albums/search's keyword query param.
 export const albumSearchQuerySchema = z.object({
   q: z.string().min(1),

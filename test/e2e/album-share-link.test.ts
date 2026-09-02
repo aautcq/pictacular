@@ -185,7 +185,7 @@ describe('album public share links', async () => {
   })
 
   describe('public token lookup', () => {
-    it('returns the Album\'s title, cover, and Photos unauthenticated, without Collaborators or like info', async () => {
+    it('returns the Album\'s title, cover, and photo_count unauthenticated, without Collaborators or Photos (issue #170)', async () => {
       const album = await createAlbum(owner.cookieHeader, { title: 'Public Album' })
       const photo = await uploadPhoto(owner.cookieHeader)
       await $fetch(`/api/albums/${album.id}/photos/${photo.id}`, { method: 'POST', headers: { cookie: owner.cookieHeader } })
@@ -198,16 +198,16 @@ describe('album public share links', async () => {
         id: number
         title: string
         admin: { id: number }
-        photos: { id: number, url: string }[]
+        photo_count: number
+        photos?: unknown
         collaborators?: unknown
       }>(`/api/albums/public/${share_token}`)
 
       expect(publicAlbum.id).toBe(album.id)
       expect(publicAlbum.title).toBe('Public Album')
       expect(publicAlbum.admin.id).toBe(owner.id)
-      expect(publicAlbum.photos).toHaveLength(1)
-      expect(publicAlbum.photos[0]!.id).toBe(photo.id)
-      expect(publicAlbum.photos[0]).not.toHaveProperty('liked')
+      expect(publicAlbum.photo_count).toBe(1)
+      expect(publicAlbum).not.toHaveProperty('photos')
       expect(publicAlbum).not.toHaveProperty('collaborators')
     })
 
@@ -224,6 +224,39 @@ describe('album public share links', async () => {
 
       const response = await fetch(`/api/albums/public/${share_token}`)
       expect(response.status).toBe(200)
+    })
+  })
+
+  describe('public paginated photos (issue #170)', () => {
+    it('lists the shared Album\'s Photos unauthenticated, without like info, paginated with a keyset cursor', async () => {
+      const album = await createAlbum(owner.cookieHeader, { title: 'Public Paginated Photos Album' })
+      const photos = []
+      for (let i = 0; i < 3; i++) {
+        const photo = await uploadPhoto(owner.cookieHeader)
+        await $fetch(`/api/albums/${album.id}/photos/${photo.id}`, { method: 'POST', headers: { cookie: owner.cookieHeader } })
+        photos.push(photo)
+      }
+      const { share_token } = await $fetch<{ share_token: string }>(`/api/albums/${album.id}/share-link`, {
+        method: 'POST',
+        headers: { cookie: owner.cookieHeader },
+      })
+
+      const firstPage = await $fetch<{ photos: { id: number, url: string, liked?: unknown }[], next_cursor: number | null }>(`/api/albums/public/${share_token}/photos?limit=2`)
+
+      expect(firstPage.photos).toHaveLength(2)
+      expect(firstPage.photos.map(p => p.id)).toEqual([photos[2]!.id, photos[1]!.id])
+      expect(firstPage.photos[0]).not.toHaveProperty('liked')
+      expect(firstPage.next_cursor).not.toBeNull()
+
+      const secondPage = await $fetch<{ photos: { id: number }[], next_cursor: number | null }>(`/api/albums/public/${share_token}/photos?limit=2&cursor=${firstPage.next_cursor}`)
+
+      expect(secondPage.photos).toHaveLength(1)
+      expect(secondPage.photos[0]!.id).toBe(photos[0]!.id)
+      expect(secondPage.next_cursor).toBeNull()
+    })
+
+    it('rejects an unknown token with 404', async () => {
+      await expect($fetch('/api/albums/public/does-not-exist/photos')).rejects.toMatchObject({ statusCode: 404, statusMessage: 'albums.not_found' })
     })
   })
 

@@ -8,10 +8,18 @@ const token = computed(() => route.params.token as string)
 const { fetchPublicAlbum } = useAlbums()
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
 
-const { data: album, status } = await useAsyncData(
-  `album-public-${token.value}`,
-  async () => await fetchPublicAlbum(token.value),
-)
+const { photos, hasMore: photosHaveMore, loading: photosLoading, fetchNextPage: fetchNextPhotosPage } = usePublicAlbumPhotos(token)
+
+// Issue #170: an Album can hold thousands of Photos, so its metadata and
+// its first page of Photos are two separate requests — run together
+// rather than one after the other.
+const [{ data: album, status }] = await Promise.all([
+  useAsyncData(
+    `album-public-${token.value}`,
+    async () => await fetchPublicAlbum(token.value),
+  ),
+  useAsyncData(`album-public-photos-${token.value}`, fetchNextPhotosPage),
+])
 
 useHead({ title: computed(() => album.value?.title) })
 </script>
@@ -42,13 +50,13 @@ useHead({ title: computed(() => album.value?.title) })
         </p>
       </div>
 
-      <div v-if="!album.photos.length" class="py-20 text-center text-gray-500 dark:text-gray-300">
+      <div v-if="!photos.length && !photosLoading" class="py-20 text-center text-gray-500 dark:text-gray-300">
         <p>{{ t('emptyAlbum') }}</p>
       </div>
 
       <div v-else class="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-6">
         <div
-          v-for="photo in album.photos"
+          v-for="photo in photos"
           :key="photo.id"
           class="aspect-square overflow-hidden rounded"
         >
@@ -65,6 +73,14 @@ useHead({ title: computed(() => album.value?.title) })
           />
         </div>
       </div>
+
+      <BaseInfiniteScroll :has-more="photosHaveMore" :loading="photosLoading" @load-more="fetchNextPhotosPage">
+        <template #loading>
+          <p class="text-center text-sm text-gray-500 dark:text-gray-300">
+            {{ t('loading') }}
+          </p>
+        </template>
+      </BaseInfiniteScroll>
     </template>
   </div>
 </template>
