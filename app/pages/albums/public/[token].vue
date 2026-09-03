@@ -2,6 +2,15 @@
 // Public, read-only Album view (issue #53): reachable by anyone with the
 // link, no `auth`/`guest` middleware — a signed-in User browsing their own
 // shared link should see the same thing an anonymous visitor does.
+import type { PublicAlbumPhoto } from '~/composables/useAlbums'
+import type { GridColumnBreakpoint } from '~/composables/useVirtualGrid'
+
+const breakpoints: GridColumnBreakpoint[] = [
+  { minWidth: 0, columns: 2 },
+  { minWidth: 640, columns: 4 },
+  { minWidth: 768, columns: 6 },
+]
+
 const route = useRoute()
 const token = computed(() => route.params.token as string)
 
@@ -54,33 +63,37 @@ useHead({ title: computed(() => album.value?.title) })
         <p>{{ t('emptyAlbum') }}</p>
       </div>
 
-      <div v-else class="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-6">
-        <div
-          v-for="photo in photos"
-          :key="photo.id"
-          class="aspect-square overflow-hidden rounded"
-        >
-          <NuxtImg
-            :src="photo.url"
-            :alt="t('photoAlt', { id: photo.id })"
-            provider="photo"
-            :width="400"
-            :height="400"
-            fit="cover"
-            format="webp"
-            class="h-full w-full object-cover"
-            loading="lazy"
-          />
-        </div>
-      </div>
+      <BaseVirtualGrid
+        v-else
+        :items="photos"
+        :item-key="(photo: PublicAlbumPhoto) => photo.id"
+        :has-more="photosHaveMore"
+        :loading="photosLoading"
+        :breakpoints="breakpoints"
+        @load-more="fetchNextPhotosPage"
+      >
+        <template #default="{ item: photo }">
+          <div class="aspect-square overflow-hidden rounded">
+            <NuxtImg
+              :src="photo.url"
+              :alt="t('photoAlt', { id: photo.id })"
+              provider="photo"
+              :width="400"
+              :height="400"
+              fit="cover"
+              format="webp"
+              class="h-full w-full object-cover"
+              loading="lazy"
+            />
+          </div>
+        </template>
 
-      <BaseInfiniteScroll :has-more="photosHaveMore" :loading="photosLoading" @load-more="fetchNextPhotosPage">
         <template #loading>
           <p class="text-center text-sm text-gray-500 dark:text-gray-300">
             {{ t('loading') }}
           </p>
         </template>
-      </BaseInfiniteScroll>
+      </BaseVirtualGrid>
     </template>
   </div>
 </template>

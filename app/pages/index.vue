@@ -1,8 +1,33 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { Photo } from '~/composables/usePhotoLibrary'
+import type { GridColumnBreakpoint } from '~/composables/useVirtualGrid'
 
 definePageMeta({ middleware: ['auth', 'storage-connection'] })
+
+// Issue #175: the one grouped `BaseInfiniteScroll` consumer — every other
+// page/modal is a flat list handled by `BaseVirtualGrid`, but the date
+// headers here need to stay in-flow between their own day's photo rows,
+// so this builds its own row descriptors directly on `useVirtualGrid`
+// rather than going through that shared wrapper. Row *heights* are still
+// fixed/uniform per row type (never measured), matching every other
+// virtualized grid: a header row is a constant height (its own text plus
+// the `gap-y-3` spacer down to its first photo row, plus a leading
+// `gap-y-8` once it's not the very first group — mirroring the previous
+// `flex flex-col gap-y-8`/`gap-y-3` layout), and a photo row is the
+// current column width (square cells) plus the grid's own `gap-2`.
+const breakpoints: GridColumnBreakpoint[] = [
+  { minWidth: 0, columns: 2 },
+  { minWidth: 640, columns: 4 },
+  { minWidth: 768, columns: 6 },
+]
+const GAP = 8
+const HEADER_ROW_HEIGHT = 32
+const GROUP_SPACING = 32
+
+interface HeaderRow { type: 'header', date: string, isFirstGroup: boolean }
+interface PhotoRow { type: 'photos', photos: Photo[] }
+type GridRow = HeaderRow | PhotoRow
 
 const { fullName } = useCurrentUser()
 const { translateError } = useErrorMessage()
@@ -47,7 +72,46 @@ const isDeleteModalOpen = shallowRef(false)
 
 const hasArchivedPhotos = computed(() => photos.value.some(photo => photo.archived_state === 'archived'))
 
+const container = useTemplateRef<HTMLElement | null>('container')
+const { columnCount } = useGridColumns(container, breakpoints, GAP)
+
+const rows = computed<GridRow[]>(() => {
+  const result: GridRow[] = []
+  groupedByDate.value.forEach((group, groupIndex) => {
+    result.push({ type: 'header', date: group.date, isFirstGroup: groupIndex === 0 })
+    for (let i = 0; i < group.photos.length; i += columnCount.value)
+      result.push({ type: 'photos', photos: group.photos.slice(i, i + columnCount.value) })
+  })
+  return result
+})
+
+const { virtualRows, totalSize } = useVirtualGrid({
+  container,
+  breakpoints,
+  gap: GAP,
+  rowCount: () => rows.value.length,
+  rowHeight: (index, _columnCount, columnWidth) => {
+    const row = rows.value[index]
+    if (row?.type === 'header')
+      return HEADER_ROW_HEIGHT + (row.isFirstGroup ? 0 : GROUP_SPACING)
+    return columnWidth + GAP
+  },
+  hasMore: computed(() => hasMore.value),
+  loading: computed(() => loading.value),
+  onLoadMore: () => fetchNextPage(),
+})
+
 await useAsyncData('photos', fetchNextPage)
+
+function headerRow(index: number): HeaderRow | null {
+  const row = rows.value[index]
+  return row?.type === 'header' ? row : null
+}
+
+function photoRow(index: number): PhotoRow | null {
+  const row = rows.value[index]
+  return row?.type === 'photos' ? row : null
+}
 
 function formatDate(date: string) {
   return new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
@@ -215,38 +279,48 @@ onUnmounted(() => {
           <p>{{ t('empty') }}</p>
         </div>
 
-        <div v-for="group in groupedByDate" :key="group.date" class="flex flex-col gap-y-3">
-          <div class="flex items-center gap-x-3">
-            <h2 class="text-sm font-semibold text-gray-600 dark:text-gray-300">
-              {{ formatDate(group.date) }}
-            </h2>
-            <button type="button" class="text-xs text-green-600 hover:underline dark:text-green-400" @click="selectDay(group.date)">
-              {{ t('selectDay') }}
-            </button>
-          </div>
+        <div v-else ref="container" class="relative w-full" :style="{ height: `${totalSize}px` }">
+          <template v-for="row in virtualRows" :key="row.index">
+            <div
+              v-if="headerRow(row.index)"
+              class="absolute left-0 flex w-full items-end gap-x-3"
+              :style="{
+                top: `${row.start}px`,
+                height: `${HEADER_ROW_HEIGHT + (headerRow(row.index)!.isFirstGroup ? 0 : GROUP_SPACING)}px`,
+                paddingTop: `${headerRow(row.index)!.isFirstGroup ? 0 : GROUP_SPACING}px`,
+              }"
+            >
+              <h2 class="text-sm font-semibold text-gray-600 dark:text-gray-300">
+                {{ formatDate(headerRow(row.index)!.date) }}
+              </h2>
+              <button type="button" class="text-xs text-green-600 hover:underline dark:text-green-400" @click="selectDay(headerRow(row.index)!.date)">
+                {{ t('selectDay') }}
+              </button>
+            </div>
 
-          <div class="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-6">
-            <BaseGalleryPhoto
-              v-for="photo in group.photos"
-              :key="photo.id"
-              :photo="photo"
-              :is-selected="selectedIds.has(photo.id)"
-              :selection-mode="selectionMode"
-              @toggle-selection="toggleSelection"
-              @toggle-like="onToggleLike"
-              @restore="onRestorePhoto"
-              @click="detailsPhotoId = photo.id"
-            />
-          </div>
+            <div
+              v-else
+              class="absolute left-0 grid w-full"
+              :style="{ top: `${row.start}px`, gridTemplateColumns: `repeat(${columnCount}, 1fr)`, gap: `${GAP}px` }"
+            >
+              <BaseGalleryPhoto
+                v-for="photo in photoRow(row.index)?.photos ?? []"
+                :key="photo.id"
+                :photo="photo"
+                :is-selected="selectedIds.has(photo.id)"
+                :selection-mode="selectionMode"
+                @toggle-selection="toggleSelection"
+                @toggle-like="onToggleLike"
+                @restore="onRestorePhoto"
+                @click="detailsPhotoId = photo.id"
+              />
+            </div>
+          </template>
         </div>
 
-        <BaseInfiniteScroll :has-more="hasMore" :loading="loading" @load-more="fetchNextPage">
-          <template #loading>
-            <p class="text-center text-sm text-gray-500 dark:text-gray-300">
-              {{ t('loading') }}
-            </p>
-          </template>
-        </BaseInfiniteScroll>
+        <p v-if="loading" class="text-center text-sm text-gray-500 dark:text-gray-300">
+          {{ t('loading') }}
+        </p>
       </BaseDropzone>
 
       <Transition name="modal-fade">

@@ -1,7 +1,21 @@
 <script setup lang="ts">
 import type { AlbumSummary } from '~/composables/useAlbums'
+import type { GridColumnBreakpoint } from '~/composables/useVirtualGrid'
 
 definePageMeta({ middleware: ['auth'] })
+
+// Issue #175: the "New album" tile isn't paginated data, but it still needs
+// to flow as the grid's first cell (same row as the first real Album) —
+// folded into the virtualized item list as its own item type rather than
+// rendered outside the grid, so `BaseVirtualGrid`'s row chunking still
+// accounts for it.
+type GridItem = { type: 'new-album' } | { type: 'album', album: AlbumSummary }
+
+const breakpoints: GridColumnBreakpoint[] = [
+  { minWidth: 0, columns: 2 },
+  { minWidth: 640, columns: 3 },
+  { minWidth: 768, columns: 4 },
+]
 
 const { albums, hasMore, loading, fetchNextPage, searchAlbums } = useAlbums()
 const toast = useToast()
@@ -15,8 +29,20 @@ const searchResults = ref<AlbumSummary[] | null>(null)
 const searching = shallowRef(false)
 
 const displayedAlbums = computed(() => searchResults.value ?? albums.value)
+const gridItems = computed<GridItem[]>(() => [
+  { type: 'new-album' },
+  ...displayedAlbums.value.map(album => ({ type: 'album' as const, album })),
+])
+// Search results are fetched in full up front (see `searchAlbums`), so the
+// grid never needs to page further while a search is active.
+const gridHasMore = computed(() => !searchResults.value && hasMore.value)
+const gridLoading = computed(() => !searchResults.value && loading.value)
 
 await useAsyncData('albums', fetchNextPage)
+
+function gridItemKey(item: GridItem) {
+  return item.type === 'new-album' ? 'new-album' : item.album.id
+}
 
 function formatDate(date: string) {
   return new Date(date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
@@ -73,49 +99,58 @@ watch(debouncedQuery, (value) => {
       </p>
     </div>
 
-    <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-      <NuxtLink
-        to="/albums/new"
-        class="flex flex-col gap-y-2 overflow-hidden rounded"
-      >
-        <div class="aspect-square overflow-hidden rounded bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
-          <Icon name="ph:plus" size="2em" class="text-gray-400" />
-        </div>
-        <div class="flex flex-col">
-          <span class="truncate font-medium">{{ t('newAlbum') }}</span>
-        </div>
-      </NuxtLink>
-
-      <NuxtLink
-        v-for="album in displayedAlbums"
-        :key="album.id"
-        :to="`/albums/${album.id}`"
-        class="flex flex-col gap-y-2 overflow-hidden rounded"
-      >
-        <div class="aspect-square overflow-hidden rounded bg-gray-200 dark:bg-gray-700">
-          <BaseImg
-            v-if="album.cover"
-            :src="album.cover"
-            :alt="album.title ?? t('albumCoverAlt')"
-          />
-          <div v-else class="flex h-full w-full items-center justify-center text-gray-400">
-            <Icon name="ph:image" size="2em" />
+    <BaseVirtualGrid
+      :items="gridItems"
+      :item-key="gridItemKey"
+      :has-more="gridHasMore"
+      :loading="gridLoading"
+      :breakpoints="breakpoints"
+      :gap="16"
+      :extra-item-height="48"
+      @load-more="fetchNextPage"
+    >
+      <template #default="{ item }">
+        <NuxtLink
+          v-if="item.type === 'new-album'"
+          to="/albums/new"
+          class="flex flex-col gap-y-2 overflow-hidden rounded"
+        >
+          <div class="aspect-square overflow-hidden rounded bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+            <Icon name="ph:plus" size="2em" class="text-gray-400" />
           </div>
-        </div>
-        <div class="flex flex-col">
-          <span class="truncate font-medium">{{ album.title }}</span>
-          <span class="text-xs text-gray-500 dark:text-gray-300">{{ t('photoCount', album.photo_count) }} · {{ formatDate(album.created_at) }}</span>
-        </div>
-      </NuxtLink>
-    </div>
+          <div class="flex flex-col">
+            <span class="truncate font-medium">{{ t('newAlbum') }}</span>
+          </div>
+        </NuxtLink>
 
-    <BaseInfiniteScroll v-if="!searchResults" :has-more="hasMore" :loading="loading" @load-more="fetchNextPage">
+        <NuxtLink
+          v-else
+          :to="`/albums/${item.album.id}`"
+          class="flex flex-col gap-y-2 overflow-hidden rounded"
+        >
+          <div class="aspect-square overflow-hidden rounded bg-gray-200 dark:bg-gray-700">
+            <BaseImg
+              v-if="item.album.cover"
+              :src="item.album.cover"
+              :alt="item.album.title ?? t('albumCoverAlt')"
+            />
+            <div v-else class="flex h-full w-full items-center justify-center text-gray-400">
+              <Icon name="ph:image" size="2em" />
+            </div>
+          </div>
+          <div class="flex flex-col">
+            <span class="truncate font-medium">{{ item.album.title }}</span>
+            <span class="text-xs text-gray-500 dark:text-gray-300">{{ t('photoCount', item.album.photo_count) }} · {{ formatDate(item.album.created_at) }}</span>
+          </div>
+        </NuxtLink>
+      </template>
+
       <template #loading>
         <p class="text-center text-sm text-gray-500 dark:text-gray-300">
           {{ t('loading') }}
         </p>
       </template>
-    </BaseInfiniteScroll>
+    </BaseVirtualGrid>
   </div>
 </template>
 

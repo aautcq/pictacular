@@ -1,8 +1,16 @@
 <script setup lang="ts">
 import type { Photo } from '~/composables/usePhotoLibrary'
+import type { GridColumnBreakpoint } from '~/composables/useVirtualGrid'
 
 const { albumId } = defineProps<{ albumId: number }>()
+
 const emit = defineEmits<{ photoAdded: [photo: Photo], photoRemoved: [photoId: number] }>()
+
+const breakpoints: GridColumnBreakpoint[] = [
+  { minWidth: 0, columns: 3 },
+  { minWidth: 640, columns: 4 },
+]
+
 const isOpen = defineModel<boolean>('isOpen', { required: true })
 
 const { addPhotoToAlbum, removePhotoFromAlbum, fetchAlbumPhotoIds } = useAlbums()
@@ -79,25 +87,34 @@ watch(() => isOpen.value, async (newValue) => {
         {{ t('libraryEmpty') }}
       </p>
 
-      <div ref="grid" class="grid max-h-96 grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4">
-        <button
-          v-for="photo in libraryPhotos"
-          :key="photo.id"
-          type="button"
-          :disabled="savingPhotoId === photo.id || loadingMembership"
-          class="group relative aspect-square overflow-hidden rounded disabled:opacity-50"
-          @click="togglePhoto(photo)"
+      <div ref="grid" class="max-h-96 overflow-y-auto">
+        <BaseVirtualGrid
+          :items="libraryPhotos"
+          :item-key="(photo: Photo) => photo.id"
+          :has-more="libraryHasMore"
+          :loading="libraryLoading"
+          :breakpoints="breakpoints"
+          :root="grid"
+          scroll-container
+          @load-more="fetchNextLibraryPage"
         >
-          <BaseImg :src="photo.url" :alt="getPhotoFileName(photo)" />
-          <div
-            v-if="albumPhotoIds.has(photo.id)"
-            class="absolute inset-0 flex items-center justify-center bg-green-500/50"
-          >
-            <Icon name="ph:check-bold" class="text-white" size="1.5em" />
-          </div>
-        </button>
-
-        <BaseInfiniteScroll :has-more="libraryHasMore" :loading="libraryLoading" :root="grid" @load-more="fetchNextLibraryPage" />
+          <template #default="{ item: photo }">
+            <button
+              type="button"
+              :disabled="savingPhotoId === photo.id || loadingMembership"
+              class="group relative aspect-square overflow-hidden rounded disabled:opacity-50"
+              @click="togglePhoto(photo)"
+            >
+              <BaseImg :src="photo.url" :alt="getPhotoFileName(photo)" />
+              <div
+                v-if="albumPhotoIds.has(photo.id)"
+                class="absolute inset-0 flex items-center justify-center bg-green-500/50"
+              >
+                <Icon name="ph:check-bold" class="text-white" size="1.5em" />
+              </div>
+            </button>
+          </template>
+        </BaseVirtualGrid>
       </div>
 
       <p v-if="libraryLoading" class="text-center text-sm text-gray-500 dark:text-gray-300">
