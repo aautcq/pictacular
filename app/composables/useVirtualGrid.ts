@@ -59,7 +59,12 @@ export interface UseVirtualGridOptions {
   breakpoints: GridColumnBreakpoint[]
   /** Pixel gap between both rows and columns (matches the grid's Tailwind `gap-*`). Default `8` (`gap-2`). */
   gap?: number
-  /** Rows to render outside the visible range on either side. Default `3`. */
+  /**
+   * Rows to render outside the visible range on either side. Defaults to
+   * however many rows fit in one viewport's height (see the `overscan`
+   * computation below) so that scrolling one screen down and back never
+   * unmounts a row's images — pass a fixed number to override that.
+   */
   overscan?: number
   /** Row count as a function of the current column count (e.g. `Math.ceil(itemCount / columnCount)`). */
   rowCount: (columnCount: number) => number
@@ -81,12 +86,40 @@ export interface UseVirtualGridOptions {
 // itself (the network/cursor layer) is unchanged; this only decides when to
 // ask for the next page.
 export function useVirtualGrid(options: UseVirtualGridOptions) {
-  const { container, scrollElement, breakpoints, gap = 8, overscan = 3, rowCount, rowHeight, hasMore, loading, nearEndRows = 2, onLoadMore } = options
+  const { container, scrollElement, breakpoints, gap = 8, overscan: fixedOverscan, rowCount, rowHeight, hasMore, loading, nearEndRows = 2, onLoadMore } = options
 
   const { columnCount, columnWidth } = useGridColumns(container, breakpoints, gap)
 
   const rowCountValue = computed(() => rowCount(columnCount.value))
   const estimateSize = (index: number) => rowHeight(index, columnCount.value, columnWidth.value)
+
+  // A fixed row-count `overscan` (the previous default, 3) shrinks in
+  // effective *distance* as columns/row-height change, so a "scroll one
+  // screen down, then back up" that stayed within 3 rows on a narrow,
+  // many-column grid could still unmount rows on a wider one. Sizing it to
+  // however many rows fit in one viewport's height instead keeps that
+  // guarantee independent of column count (issue #178) — measured against
+  // the scrollable element's own height for the 2 modal grids, or the
+  // window's for the 4 page-level ones.
+  const viewportHeight = scrollElement
+    ? useElementSize(scrollElement).height
+    : useWindowSize().height
+  const overscan = computed(() => {
+    if (fixedOverscan !== undefined)
+      return fixedOverscan
+
+    const estimatedRowHeight = estimateSize(0)
+    // `useWindowSize()` reports `Infinity` for its `height` until it mounts
+    // client-side (there's no `window` during SSR to measure), so the 4
+    // page-level grids would otherwise compute an `Infinity` overscan on
+    // the server and render every row unbounded — falling back to the
+    // fixed default here until a real, finite height is available avoids
+    // reintroducing the unbounded-DOM problem virtualization exists to fix.
+    if (!estimatedRowHeight || !Number.isFinite(viewportHeight.value))
+      return 3
+
+    return Math.max(1, Math.ceil(viewportHeight.value / estimatedRowHeight))
+  })
 
   // The window virtualizer positions rows relative to the *document*, not
   // the grid container, so it needs to know how far down the page the
@@ -111,13 +144,13 @@ export function useVirtualGrid(options: UseVirtualGridOptions) {
     ? useVirtualizer(computed(() => ({
         count: rowCountValue.value,
         estimateSize,
-        overscan,
+        overscan: overscan.value,
         getScrollElement: () => scrollElement.value ?? null,
       })))
     : useWindowVirtualizer(computed(() => ({
         count: rowCountValue.value,
         estimateSize,
-        overscan,
+        overscan: overscan.value,
         scrollMargin: scrollMargin.value,
       })))
 

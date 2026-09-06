@@ -137,6 +137,38 @@ export default defineNuxtConfig({
       globPatterns: ['**/*.{js,ts,css,html}'],
       sourcemap: true,
       // importScripts: ['/push-notifications-sw.js'],
+      // Virtualized grids (ADR 0009) unmount/remount `<img>`s outside their
+      // overscan buffer as the user scrolls, re-requesting the same stable
+      // per-Photo image URL (issue #168). That route's own
+      // `cache-control: private, max-age=3600` is cache-eligible, but plain
+      // browser HTTP disk cache offers no guarantee of survival under
+      // storage pressure in a photo-heavy PWA — so repeat scrolling was
+      // producing real network refetches that tripped nuxt-security's rate
+      // limiter (429s, issue #178). A dedicated Workbox `CacheFirst` cache
+      // gives the app its own budget, independent of browser heuristics.
+      // Safe to cache this long: a Photo's bytes never change in place for
+      // a given id (see ADR 0010) — if an edit-in-place feature is ever
+      // added, this policy needs revisiting (e.g. embedding `last_modified`
+      // in the cache key).
+      runtimeCaching: [
+        {
+          // Workbox matches a route's `urlPattern` regex against the
+          // *full* absolute URL (`RegExpRoute` runs `regExp.exec(url.href)`),
+          // not just the pathname — an anchored `^/api/...` pattern would
+          // never match `https://.../api/...` and silently never cache
+          // anything, so this matches on `url.pathname` via a function
+          // instead.
+          urlPattern: ({ url }) => /^\/api\/(?:photos\/[^/]+\/image|albums\/public\/[^/]+\/photos\/[^/]+\/image)$/.test(url.pathname),
+          handler: 'CacheFirst',
+          options: {
+            cacheName: 'photo-images',
+            expiration: {
+              maxEntries: 1000,
+              maxAgeSeconds: 60 * 60 * 24 * 7,
+            },
+          },
+        },
+      ],
     },
     devOptions: {
       enabled: false,
