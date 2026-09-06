@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
+import type { GridColumnBreakpoint } from '~/composables/useVirtualGrid'
 
 definePageMeta({ layout: false, middleware: ['auth'] })
+
+const breakpoints: GridColumnBreakpoint[] = [
+  { minWidth: 0, columns: 2 },
+  { minWidth: 640, columns: 4 },
+  { minWidth: 768, columns: 6 },
+]
 
 const route = useRoute()
 const albumId = computed(() => Number(route.params.id))
@@ -294,29 +301,33 @@ const settingsItems = computed<DropdownMenuItem[][]>(() => [
           <p>{{ t('emptyAlbum') }}</p>
         </div>
 
-        <div v-else-if="album" class="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-6">
-          <BaseGalleryPhoto
-            v-for="photo in photos"
-            :key="photo.id"
-            :photo="photo"
-            :is-selected="selectedIds.has(photo.id)"
-            :selection-mode="selectionMode"
-            @toggle-selection="toggleSelection"
-            @toggle-like="onToggleLike"
-            @click="detailsPhotoId = photo.id"
-          />
-        </div>
+        <BaseVirtualGrid
+          v-if="album"
+          :items="photos"
+          :item-key="(photo: Photo) => photo.id"
+          :has-more="photosHaveMore"
+          :loading="photosLoading"
+          :breakpoints="breakpoints"
+          @load-more="fetchNextPhotosPage"
+        >
+          <template #default="{ item: photo }">
+            <BaseGalleryPhoto
+              :photo="photo"
+              :is-selected="selectedIds.has(photo.id)"
+              :selection-mode="selectionMode"
+              @toggle-selection="toggleSelection"
+              @toggle-like="onToggleLike"
+              @click="detailsPhotoId = photo.id"
+            />
+          </template>
 
-        <BaseInfiniteScroll v-if="album" :has-more="photosHaveMore" :loading="photosLoading" @load-more="fetchNextPhotosPage">
           <template #loading>
             <p class="text-center text-sm text-gray-500 dark:text-gray-300">
               {{ t('loading') }}
             </p>
           </template>
-        </BaseInfiniteScroll>
-      </BaseDropzone>
-
-      <Transition name="modal-fade">
+        </BaseVirtualGrid>
+      </BaseDropzone><Transition name="modal-fade">
         <PhotoDetails
           v-if="detailsPhoto"
           :photo="detailsPhoto"

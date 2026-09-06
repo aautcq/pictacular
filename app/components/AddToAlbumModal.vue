@@ -1,8 +1,16 @@
 <script setup lang="ts">
 import type { AlbumSummary } from '~/composables/useAlbums'
+import type { GridColumnBreakpoint } from '~/composables/useVirtualGrid'
 
 const props = defineProps<{ photoIds: number[] }>()
+
 const emit = defineEmits<{ added: [albumId: number] }>()
+
+const breakpoints: GridColumnBreakpoint[] = [
+  { minWidth: 0, columns: 3 },
+  { minWidth: 640, columns: 4 },
+]
+
 const isOpen = defineModel<boolean>('isOpen', { required: true })
 const { albums, hasMore, loaded, loading, fetchNextPage, searchAlbums, addPhotoToAlbum } = useAlbums()
 const toast = useToast()
@@ -17,6 +25,11 @@ const searching = shallowRef(false)
 const saving = shallowRef(false)
 
 const displayedAlbums = computed(() => searchResults.value ?? albums.value)
+// Search results are fetched in full up front, so the grid never needs to
+// page further while a search is active (see albums/index.vue's identical
+// pattern).
+const gridHasMore = computed(() => !searchResults.value && hasMore.value)
+const gridLoading = computed(() => !searchResults.value && loading.value)
 
 async function runSearch(keyword: string) {
   searching.value = true
@@ -96,29 +109,39 @@ async function addToAlbum(albumId: number) {
         <span v-else>{{ t('empty') }}</span>
       </p>
 
-      <div ref="grid" class="grid max-h-96 grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4">
-        <button
-          v-for="album in displayedAlbums"
-          :key="album.id"
-          type="button"
-          :disabled="saving"
-          class="flex flex-col gap-y-1 disabled:opacity-50"
-          @click="addToAlbum(album.id)"
+      <div ref="grid" class="max-h-96 overflow-y-auto">
+        <BaseVirtualGrid
+          :items="displayedAlbums"
+          :item-key="(album: AlbumSummary) => album.id"
+          :has-more="gridHasMore"
+          :loading="gridLoading"
+          :breakpoints="breakpoints"
+          :root="grid"
+          :extra-item-height="24"
+          scroll-container
+          @load-more="fetchNextPage"
         >
-          <div class="aspect-square w-full overflow-hidden rounded bg-gray-200 dark:bg-gray-700">
-            <BaseImg
-              v-if="album.cover"
-              :src="album.cover"
-              :alt="album.title ?? t('albumCoverAlt')"
-            />
-            <div v-else class="flex h-full w-full items-center justify-center text-gray-400">
-              <Icon name="ph:image" size="2em" />
-            </div>
-          </div>
-          <span class="truncate text-sm font-medium">{{ album.title }}</span>
-        </button>
-
-        <BaseInfiniteScroll v-if="!searchResults" :has-more="hasMore" :loading="loading" :root="grid" @load-more="fetchNextPage" />
+          <template #default="{ item: album }">
+            <button
+              type="button"
+              :disabled="saving"
+              class="flex flex-col gap-y-1 disabled:opacity-50"
+              @click="addToAlbum(album.id)"
+            >
+              <div class="aspect-square w-full overflow-hidden rounded bg-gray-200 dark:bg-gray-700">
+                <BaseImg
+                  v-if="album.cover"
+                  :src="album.cover"
+                  :alt="album.title ?? t('albumCoverAlt')"
+                />
+                <div v-else class="flex h-full w-full items-center justify-center text-gray-400">
+                  <Icon name="ph:image" size="2em" />
+                </div>
+              </div>
+              <span class="truncate text-sm font-medium">{{ album.title }}</span>
+            </button>
+          </template>
+        </BaseVirtualGrid>
       </div>
 
       <p v-if="loading" class="text-center text-sm text-gray-500 dark:text-gray-300">
