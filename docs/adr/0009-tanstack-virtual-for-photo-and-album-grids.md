@@ -19,9 +19,12 @@ library builds its own wrapper directly on the composable).
 Column count can no longer be pure-CSS/media-query driven — the virtualizer needs to know items
 per row (and item size) to compute offsets. We track it via a `ResizeObserver` on each grid
 container's own rendered width (not viewport breakpoints), which is the one mechanism that's
-correct for both the full-width pages and the two width-capped modals. Item size is fixed/
-uniform in all 6 cases (`aspect-square` cells throughout), so no dynamic-height measurement is
-needed. `BaseInfiniteScroll.vue`'s DOM-sentinel `IntersectionObserver` trigger is replaced by an
-index-based "near the end of what's loaded" check inside the composable, since most items are
-never mounted; `BaseInfiniteScroll.vue` is deleted once migration is complete (zero remaining
-callers).
+correct for both the full-width pages and the two width-capped modals. Row height is a fixed
+constant per consumer rather than measured per item — 4 of the 6 cases are pure `aspect-square`
+cells, but the two Album-tile grids (the user's albums list, the "add to album" modal) also
+render a title/metadata text block below the cover image, so `BaseVirtualGrid` takes an
+`extraItemHeight` prop to pad the row-height estimate for those two; either way no dynamic
+per-item measurement is needed. `BaseInfiniteScroll.vue`'s DOM-sentinel `IntersectionObserver`
+trigger is replaced by an index-based "near the end of what's loaded" check inside the
+composable, since most items are never mounted; `BaseInfiniteScroll.vue` is deleted once
+migration is complete (zero remaining callers).
