@@ -182,9 +182,8 @@ async function resend() {
       </UFormField>
 
       <UFormField :label="t('passwordLabel')" name="password">
-        <UInput
+        <BasePasswordInput
           v-model="state.password"
-          type="password"
           required
           autocomplete="new-password"
           class="w-full"
@@ -192,9 +191,8 @@ async function resend() {
       </UFormField>
 
       <UFormField :label="t('confirmPasswordLabel')" name="password_confirmation">
-        <UInput
+        <BasePasswordInput
           v-model="state.password_confirmation"
-          type="password"
           required
           autocomplete="new-password"
           class="w-full"

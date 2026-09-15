@@ -49,9 +49,8 @@ async function submit() {
       @submit.prevent="submit"
     >
       <UFormField :label="t('newPasswordLabel')" name="password">
-        <UInput
+        <BasePasswordInput
           v-model="password"
-          type="password"
           required
           autocomplete="new-password"
           autofocus
@@ -61,9 +60,8 @@ async function submit() {
       </UFormField>
 
       <UFormField :label="t('confirmNewPasswordLabel')" name="password_confirmation">
-        <UInput
+        <BasePasswordInput
           v-model="password_confirmation"
-          type="password"
           required
           autocomplete="new-password"
           :placeholder="t('confirmPasswordPlaceholder')"
