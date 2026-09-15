@@ -106,9 +106,8 @@ if (isSupported && hasStoredCredential.value)
       </UFormField>
 
       <UFormField :label="t('passwordLabel')" name="password">
-        <UInput
+        <BasePasswordInput
           v-model="password"
-          type="password"
           required
           autocomplete="current-password"
           :placeholder="t('passwordPlaceholder')"

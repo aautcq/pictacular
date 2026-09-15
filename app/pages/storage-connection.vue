@@ -183,9 +183,8 @@ const importResultText = computed(() => {
         </UFormField>
 
         <UFormField :label="t('accessKeyLabel')" name="access_key_id">
-          <UInput
+          <BasePasswordInput
             v-model="state.access_key_id"
-            type="password"
             autocomplete="off"
             required
             :placeholder="t('accessKeyPlaceholder')"
@@ -194,9 +193,8 @@ const importResultText = computed(() => {
         </UFormField>
 
         <UFormField :label="t('secretKeyLabel')" name="secret_access_key">
-          <UInput
+          <BasePasswordInput
             v-model="state.secret_access_key"
-            type="password"
             autocomplete="off"
             required
             :placeholder="t('secretKeyPlaceholder')"
