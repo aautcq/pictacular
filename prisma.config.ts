@@ -9,4 +9,7 @@ export default defineConfig({
   datasource: {
     url: env('NUXT_DATABASE_URL'),
   },
+  migrations: {
+    seed: 'node prisma/seed.ts',
+  },
 })
