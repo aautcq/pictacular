@@ -2,7 +2,7 @@
 definePageMeta({ middleware: 'auth' })
 
 const { connectStorage, checkBucket, user } = useCurrentUser()
-const { importing, progress, result, importPhotos } = useBucketImport()
+const { importing, progress, result, etaSeconds, importPhotos } = useBucketImport()
 const toast = useToast()
 const { translateError, getFieldErrors } = useErrorMessage()
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
@@ -75,6 +75,20 @@ const importResultText = computed(() => {
     albumCount: t('albumCount', result.value.albums),
   })
 })
+
+const etaLabel = computed(() => {
+  const seconds = etaSeconds.value
+  if (seconds === null)
+    return null
+
+  if (seconds < 60)
+    return t('etaLessThanMinute')
+
+  if (seconds < 3600)
+    return t('etaMinutes', Math.max(1, Math.ceil(seconds / 60)))
+
+  return t('etaHours', Math.max(1, Math.ceil(seconds / 3600)))
+})
 </script>
 
 <template>
@@ -101,6 +115,9 @@ const importResultText = computed(() => {
               {{ progress?.imported ?? 0 }} / {{ progress?.total ?? 0 }}
             </template>
           </UProgress>
+          <p v-if="etaLabel" class="text-sm text-gray-500 dark:text-gray-400">
+            {{ etaLabel }}
+          </p>
         </div>
         <div v-else class="flex justify-center gap-x-4">
           <UButton
@@ -219,6 +236,9 @@ const importResultText = computed(() => {
     "title": "Connect your storage",
     "importPrompt": "It looks like your bucket already has some image files in it. We can import them into Pictacular, auto-creating Albums from your folder structure.",
     "importingProgress": "Importing your photos…",
+    "etaLessThanMinute": "Less than a minute remaining",
+    "etaMinutes": "About {count} minute remaining | About {count} minutes remaining",
+    "etaHours": "About {count} hour remaining | About {count} hours remaining",
     "importButton": "Import my existing photos",
     "skipImport": "Skip for now",
     "photoCount": "{count} photo | {count} photos",
