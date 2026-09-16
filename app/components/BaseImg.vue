@@ -1,4 +1,11 @@
 <script setup lang="ts">
+// `$attrs` (class/style especially) are only meant to reach the inner
+// `NuxtImg` below (via the explicit `v-bind="$attrs"`), not this
+// component's own root div — without this, Vue's default attribute
+// inheritance applies them to *both* elements, e.g. double-applying a
+// caller's `transform` style (compounding any scale/translate).
+defineOptions({ inheritAttrs: false })
+
 const { width = 400, height = 400, fit = 'cover' } = defineProps<{
   src: string
   alt: string

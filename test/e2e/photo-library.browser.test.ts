@@ -2,6 +2,7 @@ import type { FakeS3Server } from './fake-s3-server'
 import { Buffer } from 'node:buffer'
 import process from 'node:process'
 import { createPage, setup, url } from '@nuxt/test-utils/e2e'
+import sharp from 'sharp'
 import { afterAll, describe, expect, it } from 'vitest'
 import { hashPassword } from '../../server/utils/crypto'
 import { encodeAwsCredentials } from '../../server/utils/jwt'
@@ -171,6 +172,186 @@ describe('personal photo library journey', async () => {
     expect(groupHeadings).toHaveLength(2)
     expect(groupHeadings[0]).not.toContain('2016')
     expect(groupHeadings[1]).toContain('2016')
+
+    await page.close()
+  }, 60_000)
+
+  // issue #193: the details modal's photo can be zoomed (Ctrl+scroll /
+  // pinch) and panned (drag) without the whole page zooming, resets on
+  // photo navigation, and is clamped to a 3x maximum.
+  it('zooms and pans the photo in the details modal, resetting on navigation', async () => {
+    const zoomBucket = `${bucket}-zoom`
+    fakeS3.seedBucket(zoomBucket)
+
+    const zoomEmailPrefix = `${emailPrefix}-zoom`
+    const zoomEmail = `${zoomEmailPrefix}@example.com`
+    const bigPng = await sharp({ create: { width: 800, height: 600, channels: 3, background: { r: 200, g: 100, b: 50 } } }).png().toBuffer()
+
+    const user = await prisma.user.create({
+      data: {
+        email: zoomEmail,
+        first_name: 'Jane',
+        last_name: 'Doe',
+        password: hashPassword(password),
+        is_verified: true,
+        verification_token: `token-${zoomEmailPrefix}`,
+      },
+    })
+
+    await prisma.awsCredentials.create({
+      data: {
+        bucket: zoomBucket,
+        region: 'eu-west-3',
+        tokens: encodeAwsCredentials({ access_key_id: 'AKIATEST', secret_access_key: 'test-secret' }),
+        user: { connect: { id: user.id } },
+      },
+    })
+
+    const page = await createPage('/login')
+    await page.getByLabel('Email').fill(zoomEmail)
+    await page.getByLabel('Password').fill(password)
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+
+    await page.waitForURL(url('/'))
+    await page.getByText(`Welcome, Jane Doe`).waitFor()
+    await page.getByText('Your photo library is empty').waitFor()
+
+    await page.locator('input[type="file"]').first().setInputFiles({
+      name: 'zoom-first.png',
+      mimeType: 'image/png',
+      // A real, sizeable image (unlike the other tests' 1x1 fixture) — the
+      // zoom/pan interactions below need a substantial rendered box to drag
+      // within, which a 1x1 source image doesn't give us.
+      buffer: bigPng,
+    })
+    await page.locator('img[alt$="zoom-first.png"]').first().waitFor({ timeout: 15_000 })
+
+    await page.locator('input[type="file"]').first().setInputFiles({
+      name: 'zoom-second.png',
+      mimeType: 'image/png',
+      buffer: bigPng,
+    })
+    await page.locator('img[alt$="zoom-second.png"]').first().waitFor({ timeout: 15_000 })
+
+    await page.locator('img[alt$="zoom-second.png"]').first().click()
+
+    const detailsImage = page.locator('img[alt^="Photo "]')
+    await detailsImage.waitFor()
+
+    async function transformOf() {
+      return detailsImage.evaluate((el: HTMLElement) => el.style.transform)
+    }
+    function scaleOf(transform: string) {
+      return Number(transform.match(/scale\(([\d.]+)\)/)?.[1])
+    }
+
+    expect(scaleOf(await transformOf())).toBe(1)
+
+    // Ctrl+scroll zooms in, clamped to a 3x maximum even with a lot of scroll.
+    const box = (await detailsImage.boundingBox())!
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.keyboard.down('Control')
+    await page.mouse.wheel(0, -4000)
+    await page.keyboard.up('Control')
+
+    await expect.poll(async () => scaleOf(await transformOf())).toBe(3)
+
+    // Dragging pans the zoomed photo.
+    const zoomedBox = (await detailsImage.boundingBox())!
+    const center = { x: zoomedBox.x + zoomedBox.width / 2, y: zoomedBox.y + zoomedBox.height / 2 }
+    await page.mouse.move(center.x, center.y)
+    await page.mouse.down()
+    await page.mouse.move(center.x - 40, center.y - 20, { steps: 5 })
+    await page.mouse.up()
+
+    expect(await transformOf()).toBe('translate(-40px, -20px) scale(3)')
+
+    // Navigating (next-photo button) resets zoom/pan (the just-uploaded
+    // photo sorts first/newest, so "next" moves to the earlier upload).
+    const detailsAltBeforeNav = await detailsImage.getAttribute('alt')
+    await page.getByRole('button', { name: 'Next photo' }).click()
+    await expect.poll(() => detailsImage.getAttribute('alt')).not.toBe(detailsAltBeforeNav)
+    expect(await transformOf()).toBe('translate(0px, 0px) scale(1)')
+
+    await page.close()
+  }, 60_000)
+
+  // issue #193: a photo whose fitted size is much smaller than the viewing
+  // area first *grows* in place as it's zoomed in, up to that area's
+  // ceiling, only cropping/panning beyond that point.
+  it('grows a small photo in place before cropping into it when zoomed', async () => {
+    const smallZoomBucket = `${bucket}-small-zoom`
+    fakeS3.seedBucket(smallZoomBucket)
+
+    const smallZoomEmailPrefix = `${emailPrefix}-small-zoom`
+    const smallZoomEmail = `${smallZoomEmailPrefix}@example.com`
+    const smallPng = await sharp({ create: { width: 120, height: 90, channels: 3, background: { r: 50, g: 150, b: 200 } } }).png().toBuffer()
+
+    const user = await prisma.user.create({
+      data: {
+        email: smallZoomEmail,
+        first_name: 'Jane',
+        last_name: 'Doe',
+        password: hashPassword(password),
+        is_verified: true,
+        verification_token: `token-${smallZoomEmailPrefix}`,
+      },
+    })
+
+    await prisma.awsCredentials.create({
+      data: {
+        bucket: smallZoomBucket,
+        region: 'eu-west-3',
+        tokens: encodeAwsCredentials({ access_key_id: 'AKIATEST', secret_access_key: 'test-secret' }),
+        user: { connect: { id: user.id } },
+      },
+    })
+
+    const page = await createPage('/login')
+    await page.getByLabel('Email').fill(smallZoomEmail)
+    await page.getByLabel('Password').fill(password)
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+
+    await page.waitForURL(url('/'))
+    await page.getByText(`Welcome, Jane Doe`).waitFor()
+    await page.getByText('Your photo library is empty').waitFor()
+
+    await page.locator('input[type="file"]').first().setInputFiles({
+      name: 'small-photo.png',
+      mimeType: 'image/png',
+      // Much smaller than the modal's reserved viewing area (85vw/75vh),
+      // so it never grows to fill it just by the plain "fit" CSS sizing.
+      buffer: smallPng,
+    })
+    await page.locator('img[alt$="small-photo.png"]').first().waitFor({ timeout: 15_000 })
+
+    await page.locator('img[alt$="small-photo.png"]').first().click()
+
+    const detailsImage = page.locator('img[alt^="Photo "]')
+    await detailsImage.waitFor()
+
+    function scaleOf(transform: string) {
+      return Number(transform.match(/scale\(([\d.]+)\)/)?.[1])
+    }
+
+    const fittedBox = (await detailsImage.boundingBox())!
+
+    // Ctrl+scroll a small amount, well within the growth phase: the photo's
+    // own box visibly grows, but it isn't cropped/panned yet (scale stays 1).
+    await page.mouse.move(fittedBox.x + fittedBox.width / 2, fittedBox.y + fittedBox.height / 2)
+    await page.keyboard.down('Control')
+    await page.mouse.wheel(0, -50)
+    await page.keyboard.up('Control')
+
+    await expect.poll(async () => (await detailsImage.boundingBox())!.width).toBeGreaterThan(fittedBox.width * 1.5)
+    expect(scaleOf(await detailsImage.evaluate((el: HTMLElement) => el.style.transform))).toBe(1)
+
+    // Zooming further eventually maxes out the growth and starts cropping.
+    await page.keyboard.down('Control')
+    await page.mouse.wheel(0, -6000)
+    await page.keyboard.up('Control')
+
+    await expect.poll(async () => scaleOf(await detailsImage.evaluate((el: HTMLElement) => el.style.transform))).toBeGreaterThan(1)
 
     await page.close()
   }, 60_000)
