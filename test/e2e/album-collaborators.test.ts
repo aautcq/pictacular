@@ -288,6 +288,103 @@ describe('album collaborators + invitations', async () => {
     })
   })
 
+  // Issue #171 / ADR 0012: suggestions are scoped to Users who already
+  // collaborate with the requesting admin on some *other* Album — never
+  // the full user directory, and never someone who's never collaborated
+  // with this admin at all. Uses its own fresh Users/admin (rather than
+  // the outer `admin`/`existingUser`/`other`, which accumulate ad hoc
+  // Collaborator links from earlier describe blocks in this file) so
+  // "never collaborated with this admin" is actually true.
+  describe('collaborator suggestions', () => {
+    it('suggests a User who collaborates with the admin on another Album', async () => {
+      const suggestAdmin = await createLoggedInUser('suggest-admin-1')
+      const collaboratorElsewhere = await createLoggedInUser('suggest-collab-1')
+
+      const otherAlbum = await createAlbum(suggestAdmin.cookieHeader)
+      await prisma.album.update({ where: { id: otherAlbum.id }, data: { users: { connect: { id: collaboratorElsewhere.id } } } })
+
+      const targetAlbum = await createAlbum(suggestAdmin.cookieHeader)
+
+      const response = await $fetch<{ suggestions: { id: number, email: string }[] }>(`/api/albums/${targetAlbum.id}/collaborator-suggestions`, {
+        headers: { cookie: suggestAdmin.cookieHeader },
+        query: { q: collaboratorElsewhere.email.slice(0, 6) },
+      })
+
+      expect(response.suggestions.map(s => s.id)).toContain(collaboratorElsewhere.id)
+    })
+
+    it('does not suggest a User who has never collaborated with the admin anywhere', async () => {
+      const suggestAdmin = await createLoggedInUser('suggest-admin-2')
+      const stranger = await createLoggedInUser('suggest-stranger-2')
+
+      const targetAlbum = await createAlbum(suggestAdmin.cookieHeader)
+
+      const response = await $fetch<{ suggestions: { id: number }[] }>(`/api/albums/${targetAlbum.id}/collaborator-suggestions`, {
+        headers: { cookie: suggestAdmin.cookieHeader },
+        query: { q: stranger.email.slice(0, 6) },
+      })
+
+      expect(response.suggestions.map(s => s.id)).not.toContain(stranger.id)
+    })
+
+    it('does not suggest a User who is already a Collaborator on this same Album', async () => {
+      const suggestAdmin = await createLoggedInUser('suggest-admin-3')
+      const collaboratorElsewhere = await createLoggedInUser('suggest-collab-3')
+
+      const otherAlbum = await createAlbum(suggestAdmin.cookieHeader)
+      await prisma.album.update({ where: { id: otherAlbum.id }, data: { users: { connect: { id: collaboratorElsewhere.id } } } })
+
+      const targetAlbum = await createAlbum(suggestAdmin.cookieHeader)
+      await prisma.album.update({ where: { id: targetAlbum.id }, data: { users: { connect: { id: collaboratorElsewhere.id } } } })
+
+      const response = await $fetch<{ suggestions: { id: number }[] }>(`/api/albums/${targetAlbum.id}/collaborator-suggestions`, {
+        headers: { cookie: suggestAdmin.cookieHeader },
+        query: { q: collaboratorElsewhere.email.slice(0, 6) },
+      })
+
+      expect(response.suggestions.map(s => s.id)).not.toContain(collaboratorElsewhere.id)
+    })
+
+    it('rejects a non-admin member with 403', async () => {
+      const album = await createAlbum(admin.cookieHeader)
+      await prisma.album.update({ where: { id: album.id }, data: { users: { connect: { id: other.id } } } })
+
+      await expect(
+        $fetch(`/api/albums/${album.id}/collaborator-suggestions`, {
+          headers: { cookie: other.cookieHeader },
+          query: { q: 'a' },
+        }),
+      ).rejects.toMatchObject({ statusCode: 403, statusMessage: 'albums.admin_only' })
+    })
+
+    it('rejects a non-member with 404', async () => {
+      const album = await createAlbum(admin.cookieHeader)
+
+      await expect(
+        $fetch(`/api/albums/${album.id}/collaborator-suggestions`, {
+          headers: { cookie: other.cookieHeader },
+          query: { q: 'a' },
+        }),
+      ).rejects.toMatchObject({ statusCode: 404, statusMessage: 'albums.not_found' })
+    })
+
+    it('rejects a missing query with 400', async () => {
+      const album = await createAlbum(admin.cookieHeader)
+
+      await expect(
+        $fetch(`/api/albums/${album.id}/collaborator-suggestions`, {
+          headers: { cookie: admin.cookieHeader },
+        }),
+      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'albums.invalid_query' })
+    })
+
+    it('rejects an unauthenticated request with 401', async () => {
+      await expect(
+        $fetch('/api/albums/1/collaborator-suggestions', { query: { q: 'a' } }),
+      ).rejects.toMatchObject({ statusCode: 401 })
+    })
+  })
+
   describe('invitation token lookup', () => {
     it('returns the Album summary and invited email for a pending Invitation', async () => {
       const album = await createAlbum(admin.cookieHeader, { title: 'Invitation Lookup Album' })

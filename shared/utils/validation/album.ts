@@ -56,3 +56,13 @@ export const albumCollaboratorsSchema = z.object({
 })
 
 export type AlbumCollaboratorsInput = z.infer<typeof albumCollaboratorsSchema>
+
+// zod schema for GET /api/albums/:id/collaborator-suggestions' keyword
+// query param (see ADR 0012): same shape as albumSearchQuerySchema, kept
+// separate since the two searches have unrelated result sets/limits.
+export const albumCollaboratorSuggestionsQuerySchema = z.object({
+  q: z.string().min(1),
+  limit: z.coerce.number().int().min(1).max(20).optional().default(10),
+})
+
+export type AlbumCollaboratorSuggestionsQuery = z.infer<typeof albumCollaboratorSuggestionsQuerySchema>
