@@ -21,6 +21,14 @@ export interface SerializablePhoto {
 // when it's actually there, rather than assumed.
 const uuidKeyPrefixPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-/i
 
+// Postgres-flavored twin of uuidKeyPrefixPattern (issue #190): filename
+// search (server/api/photos/search.get.ts) matches against the same
+// derived filename this module computes in JS, but needs to do so inside
+// a raw SQL WHERE clause — Postgres regexp_replace takes its pattern as
+// text, not a JS RegExp, so this is kept as a separate plain string
+// rather than re-deriving one from the other.
+export const uuidKeyPrefixSqlPattern = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-'
+
 function filenameFromKey(key: string): string {
   const lastSegment = key.split('/').pop() ?? key
   return lastSegment.replace(uuidKeyPrefixPattern, '')

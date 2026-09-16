@@ -18,15 +18,10 @@ const breakpoints: GridColumnBreakpoint[] = [
 ]
 
 const { albums, hasMore, loading, fetchNextPage, searchAlbums } = useAlbums()
-const toast = useToast()
-const { translateError } = useErrorMessage()
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
 const { t: tg } = useI18n({ useScope: 'global' })
 
-const query = shallowRef('')
-const debouncedQuery = refDebounced(query, 300)
-const searchResults = ref<AlbumSummary[] | null>(null)
-const searching = shallowRef(false)
+const { query, results: searchResults, searching } = useSearch(searchAlbums)
 
 const displayedAlbums = computed(() => searchResults.value ?? albums.value)
 const gridItems = computed<GridItem[]>(() => [
@@ -47,48 +42,21 @@ function gridItemKey(item: GridItem) {
 function formatDate(date: string) {
   return new Date(date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
 }
-
-async function runSearch(keyword: string) {
-  searching.value = true
-  try {
-    searchResults.value = await searchAlbums(keyword)
-  }
-  catch (error) {
-    toast.add({ title: translateError(error), color: 'error' })
-  }
-  finally {
-    searching.value = false
-  }
-}
-
-watch(debouncedQuery, (value) => {
-  if (!value.trim()) {
-    searchResults.value = null
-    return
-  }
-
-  runSearch(value.trim())
-})
 </script>
 
 <template>
   <div class="mx-auto flex max-w-5xl flex-col gap-y-8">
-    <h1 class="text-xl font-semibold">
-      {{ tg('common.nav.albums') }}
-    </h1>
+    <div class="flex items-center justify-between">
+      <h1 class="text-xl font-semibold">
+        {{ tg('common.nav.albums') }}
+      </h1>
 
-    <label>
-      <span class="sr-only">{{ t('searchLabel') }}</span>
-      <UInput
+      <BaseSearchToggle
         v-model="query"
-        type="search"
-        variant="soft"
-        autofocus
+        :label="t('searchLabel')"
         :placeholder="t('searchPlaceholder')"
-        icon="ph:magnifying-glass"
-        class="w-full"
       />
-    </label>
+    </div>
 
     <div v-if="!displayedAlbums.length && !loading && !searching" class="py-20 text-center text-gray-500 dark:text-gray-300">
       <p v-if="searchResults">

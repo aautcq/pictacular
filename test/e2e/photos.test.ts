@@ -2,7 +2,7 @@ import type { FakeS3Server } from './fake-s3-server'
 import { Buffer } from 'node:buffer'
 import process from 'node:process'
 import { $fetch, fetch, setup, url } from '@nuxt/test-utils/e2e'
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import { prisma } from '../../server/utils/prisma'
 import { buildJpegWithDateTimeOriginal } from './exif-fixtures'
@@ -85,6 +85,33 @@ describe('personal photo library', async () => {
       body: { filename: 'photo.png', mime_type: 'image/png', base64: tinyPngBase64, ...overrides },
     })
   }
+
+  async function createAlbum(cookieHeader: string, overrides: Record<string, unknown> = {}) {
+    return $fetch<{ id: number, title: string }>('/api/albums', {
+      method: 'POST',
+      headers: { cookie: cookieHeader },
+      body: { title: 'My Album', ...overrides },
+    })
+  }
+
+  async function addPhotoToAlbum(cookieHeader: string, albumId: number, photoId: number) {
+    await $fetch(`/api/albums/${albumId}/photos/${photoId}`, { method: 'POST', headers: { cookie: cookieHeader } })
+  }
+
+  // Shared only by the "search" tests below (see that describe block's
+  // comment) — every other describe in this file keeps registering a
+  // fresh User per test. Declared/populated at this top level (rather
+  // than in a nested beforeAll) because a beforeAll nested inside a
+  // describe whose parent describe body is itself async does not
+  // reliably see the @nuxt/test-utils context set up by `await setup()`
+  // above.
+  let searchOwner: Awaited<ReturnType<typeof createConnectedUser>>
+  let searchOther: Awaited<ReturnType<typeof createConnectedUser>>
+
+  beforeAll(async () => {
+    searchOwner = await createConnectedUser()
+    searchOther = await createConnectedUser()
+  })
 
   afterAll(async () => {
     await prisma.user.deleteMany({ where: { email: { startsWith: emailPrefix } } })
@@ -465,6 +492,88 @@ describe('personal photo library', async () => {
       const response = await fetch(`/api/photos/${restoredPhoto.id}/image`, { headers: { cookie: cookieHeader } })
 
       expect(response.status).toBe(200)
+    })
+  })
+
+  describe('search', () => {
+    // Unlike every other describe block in this file, these tests share
+    // one small fixed pair of connected Users (searchOwner/searchOther,
+    // set up above) rather than registering a fresh one per test:
+    // registering + connecting one is 4 HTTP requests, and this block's 7
+    // scenarios would otherwise risk tripping nuxt-security's rate limit
+    // when the full suite runs together — the same reasoning
+    // albums.test.ts documents for its own shared-Users setup.
+    // Photos/Albums themselves stay cheap to create per test (one request
+    // each), so test isolation is unaffected as long as every
+    // filename/title used below is unique to its own test.
+    it('finds a Photo by a keyword in its filename', async () => {
+      const target = await uploadPhoto(searchOwner.cookieHeader, { filename: 'vacation-selfie-unique.png' })
+      await uploadPhoto(searchOwner.cookieHeader, { filename: 'unrelated.png' })
+
+      const response = await $fetch<{ photos: { id: number }[] }>('/api/photos/search?q=selfie-unique', {
+        headers: { cookie: searchOwner.cookieHeader },
+      })
+
+      expect(response.photos.map(photo => photo.id)).toEqual([target.id])
+    })
+
+    it('finds a Photo library-wide by the title of an Album it belongs to', async () => {
+      const target = await uploadPhoto(searchOwner.cookieHeader, { filename: 'unmatched-name.png' })
+      await uploadPhoto(searchOwner.cookieHeader, { filename: 'also-unmatched.png' })
+      const album = await createAlbum(searchOwner.cookieHeader, { title: 'Summer Trip Unique' })
+      await addPhotoToAlbum(searchOwner.cookieHeader, album.id, target.id)
+
+      const response = await $fetch<{ photos: { id: number }[] }>('/api/photos/search?q=trip unique', {
+        headers: { cookie: searchOwner.cookieHeader },
+      })
+
+      expect(response.photos.map(photo => photo.id)).toEqual([target.id])
+    })
+
+    it('never returns another User\'s Photo', async () => {
+      const theirs = await uploadPhoto(searchOther.cookieHeader, { filename: 'cross-account-unique.png' })
+
+      const response = await $fetch<{ photos: { id: number }[] }>('/api/photos/search?q=cross-account-unique', {
+        headers: { cookie: searchOwner.cookieHeader },
+      })
+      expect(response.photos.map(photo => photo.id)).not.toContain(theirs.id)
+    })
+
+    it('scopes results to the given Album\'s own Photos, matching filename only (not another Album\'s title)', async () => {
+      const matchingFilename = await uploadPhoto(searchOwner.cookieHeader, { filename: 'inside-album-unique.png' })
+      const matchingTitleElsewhere = await uploadPhoto(searchOwner.cookieHeader, { filename: 'no-match-here.png' })
+      const album = await createAlbum(searchOwner.cookieHeader, { title: 'Scoped Album' })
+      const otherAlbum = await createAlbum(searchOwner.cookieHeader, { title: 'Elsewhere Unique Title' })
+      await addPhotoToAlbum(searchOwner.cookieHeader, album.id, matchingFilename.id)
+      await addPhotoToAlbum(searchOwner.cookieHeader, otherAlbum.id, matchingTitleElsewhere.id)
+
+      const byFilename = await $fetch<{ photos: { id: number }[] }>(`/api/photos/search?q=inside-album-unique&album_id=${album.id}`, {
+        headers: { cookie: searchOwner.cookieHeader },
+      })
+      expect(byFilename.photos.map(photo => photo.id)).toEqual([matchingFilename.id])
+
+      const byOtherAlbumsTitle = await $fetch<{ photos: { id: number }[] }>(`/api/photos/search?q=elsewhere unique title&album_id=${album.id}`, {
+        headers: { cookie: searchOwner.cookieHeader },
+      })
+      expect(byOtherAlbumsTitle.photos).toHaveLength(0)
+    })
+
+    it('rejects an album_id the requesting User is not a member of', async () => {
+      const album = await createAlbum(searchOwner.cookieHeader, { title: 'Not A Member Album' })
+
+      await expect(
+        $fetch(`/api/photos/search?q=x&album_id=${album.id}`, { headers: { cookie: searchOther.cookieHeader } }),
+      ).rejects.toMatchObject({ statusCode: 404, statusMessage: 'albums.not_found' })
+    })
+
+    it('rejects a missing keyword', async () => {
+      await expect(
+        $fetch('/api/photos/search', { headers: { cookie: searchOwner.cookieHeader } }),
+      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'photos.invalid_query' })
+    })
+
+    it('rejects an unauthenticated request with 401', async () => {
+      await expect($fetch('/api/photos/search?q=x')).rejects.toMatchObject({ statusCode: 401 })
     })
   })
 })

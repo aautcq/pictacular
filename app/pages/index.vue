@@ -39,6 +39,7 @@ const {
   hasMore,
   loading,
   fetchNextPage,
+  searchPhotos,
   addUploadedPhoto,
   deletePhotos,
   toggleLike,
@@ -46,6 +47,17 @@ const {
   restorePhoto,
   restoreArchivedPhotos,
 } = usePhotoLibrary()
+const { query, results: searchResults, searching } = useSearch(searchPhotos)
+const isSearching = computed(() => searchResults.value !== null)
+// The grid's actual source of truth (issue #190): search results in
+// place of the paginated library while a search is active, mirroring
+// albums/index.vue's own `displayedAlbums`. Passed into usePhotoGallery
+// below (not the raw paginated `photos`) so selection, multi-select
+// shift-click ranges, and the details modal's prev/next all operate on
+// whatever's actually on screen — a search result Photo can easily be
+// one `photos` hasn't paginated in yet, so binding to `photos` directly
+// would silently break clicking into an unpaginated match's details.
+const displayedPhotos = computed(() => searchResults.value ?? photos.value)
 const {
   selectedIds,
   selectedCount,
@@ -60,7 +72,7 @@ const {
   showNext,
   closeDetails,
   downloadSelected,
-} = usePhotoGallery(photos)
+} = usePhotoGallery(displayedPhotos)
 const { queueUpload, uploads } = usePhotoUpload()
 const toast = useToast()
 
@@ -265,6 +277,13 @@ onUnmounted(() => {
           />
         </UTooltip>
 
+        <BaseSearchToggle
+          v-if="!selectionMode"
+          v-model="query"
+          :label="t('searchLabel')"
+          :placeholder="t('searchPlaceholder')"
+        />
+
         <BaseFilesUpload @files-uploaded="handleFiles" />
       </template>
 
@@ -275,9 +294,46 @@ onUnmounted(() => {
 
         <PhotoUploads v-if="uploads.length" :uploads />
 
-        <div v-if="!photos.length && !loading" class="py-20 text-center text-gray-500 dark:text-gray-300">
-          <p>{{ t('empty') }}</p>
+        <div v-if="!displayedPhotos.length && !loading && !searching" class="py-20 text-center text-gray-500 dark:text-gray-300">
+          <p v-if="isSearching">
+            {{ t('noResults') }}
+          </p>
+          <p v-else>
+            {{ t('empty') }}
+          </p>
         </div>
+
+        <!-- Search results (issue #190): flattened, no date headers —
+        unlike the grouped timeline below, a filtered result set has no
+        obvious single day to group by, and mirrors how every other flat
+        photo/album grid in this app renders its own search results. -->
+        <BaseVirtualGrid
+          v-else-if="isSearching"
+          :items="displayedPhotos"
+          :item-key="(photo: Photo) => photo.id"
+          :has-more="false"
+          :loading="searching"
+          :breakpoints="breakpoints"
+          :gap="GAP"
+        >
+          <template #default="{ item: photo }">
+            <BaseGalleryPhoto
+              :photo="photo"
+              :is-selected="selectedIds.has(photo.id)"
+              :selection-mode="selectionMode"
+              @toggle-selection="toggleSelection"
+              @toggle-like="onToggleLike"
+              @restore="onRestorePhoto"
+              @click="detailsPhotoId = photo.id"
+            />
+          </template>
+
+          <template #loading>
+            <p class="text-center text-sm text-gray-500 dark:text-gray-300">
+              {{ t('loading') }}
+            </p>
+          </template>
+        </BaseVirtualGrid>
 
         <div v-else ref="container" class="relative w-full" :style="{ height: `${totalSize}px` }">
           <template v-for="row in virtualRows" :key="row.index">
@@ -318,7 +374,7 @@ onUnmounted(() => {
           </template>
         </div>
 
-        <p v-if="loading" class="text-center text-sm text-gray-500 dark:text-gray-300">
+        <p v-if="loading && !isSearching" class="text-center text-sm text-gray-500 dark:text-gray-300">
           {{ t('loading') }}
         </p>
       </BaseDropzone>
@@ -373,6 +429,9 @@ onUnmounted(() => {
 {
   "en": {
     "welcome": "Welcome, {name}",
+    "searchLabel": "Search photos",
+    "searchPlaceholder": "Search photos…",
+    "noResults": "No photos match your search.",
     "dropzoneHint": "Drag and drop photos here, or use the Upload photos button above.",
     "selectedCount": "{count} selected | {count} selected",
     "cancel": "Cancel",
