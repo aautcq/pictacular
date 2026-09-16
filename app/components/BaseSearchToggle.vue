@@ -22,6 +22,15 @@ function open() {
   isOpen.value = true
 }
 
+// Cmd/Ctrl+K opens the search from anywhere on the page (preventDefault
+// stops the browser's own address-bar-focus shortcut from also firing).
+defineShortcuts({
+  meta_k: (event) => {
+    event?.preventDefault()
+    open()
+  },
+})
+
 // Closes and clears on Escape (an explicit "cancel search") — but merely
 // losing focus only closes it when there's no query typed, so clicking a
 // search result (which blurs the input) never silently discards it.
@@ -37,7 +46,7 @@ function onBlur() {
 </script>
 
 <template>
-  <UTooltip v-if="!isOpen" :text="label">
+  <UTooltip v-if="!isOpen" :text="label" :kbds="['meta', 'K']">
     <UButton
       type="button"
       icon="ph:magnifying-glass"
