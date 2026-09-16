@@ -29,6 +29,11 @@ function onDetailsKeydown(event: KeyboardEvent) {
     emit('showPrevious')
   else if (event.key === 'ArrowRight' && hasNext)
     emit('showNext')
+  // Ctrl/Cmd + Plus/Minus/0 are the other native page-zoom trigger. Some
+  // browsers reserve these as OS-level shortcuts a page can't override, but
+  // this still blocks it wherever the browser does allow prevention.
+  else if ((event.ctrlKey || event.metaKey) && ['+', '-', '=', '0'].includes(event.key))
+    event.preventDefault()
 }
 
 async function downloadPhoto(photo: Photo) {
@@ -72,29 +77,33 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
+// The pannable range shrinks/grows with the current scale, against the
+// wrapper's own (untransformed — CSS `transform` doesn't affect layout)
+// fitted box.
+function clampOffsets(x: number, y: number) {
+  const box = zoomBoxRef.value?.getBoundingClientRect()
+  if (!box)
+    return { x: 0, y: 0 }
+  const maxOffsetX = (scale.value - 1) * box.width / 2
+  const maxOffsetY = (scale.value - 1) * box.height / 2
+  return { x: clamp(x, -maxOffsetX, maxOffsetX), y: clamp(y, -maxOffsetY, maxOffsetY) }
+}
+
 function applyZoom(nextScale: number) {
   const previousScale = scale.value
   scale.value = clamp(nextScale, MIN_SCALE, MAX_SCALE)
   // Keep the current pan proportionally in range as scale shrinks, and
   // snap back to centered once fully zoomed out.
-  const box = zoomBoxRef.value?.getBoundingClientRect()
-  if (!box)
-    return
-  const maxOffsetX = (scale.value - 1) * box.width / 2
-  const maxOffsetY = (scale.value - 1) * box.height / 2
   const ratio = previousScale === scale.value ? 1 : scale.value / previousScale
-  translateX.value = clamp(translateX.value * ratio, -maxOffsetX, maxOffsetX)
-  translateY.value = clamp(translateY.value * ratio, -maxOffsetY, maxOffsetY)
+  const clamped = clampOffsets(translateX.value * ratio, translateY.value * ratio)
+  translateX.value = clamped.x
+  translateY.value = clamped.y
 }
 
 function pan(deltaX: number, deltaY: number) {
-  const box = zoomBoxRef.value?.getBoundingClientRect()
-  if (!box)
-    return
-  const maxOffsetX = (scale.value - 1) * box.width / 2
-  const maxOffsetY = (scale.value - 1) * box.height / 2
-  translateX.value = clamp(translateX.value + deltaX, -maxOffsetX, maxOffsetX)
-  translateY.value = clamp(translateY.value + deltaY, -maxOffsetY, maxOffsetY)
+  const clamped = clampOffsets(translateX.value + deltaX, translateY.value + deltaY)
+  translateX.value = clamped.x
+  translateY.value = clamped.y
 }
 
 // Trackpad pinch and Ctrl/Cmd+scroll-wheel both surface as `wheel` events
@@ -107,38 +116,50 @@ function onWheel(event: WheelEvent) {
   applyZoom(scale.value * Math.exp(-event.deltaY * 0.01))
 }
 
+interface DragStart { x: number, y: number, translateX: number, translateY: number }
+
+let dragStart: DragStart | null = null
+
+function onMouseMove(event: MouseEvent) {
+  if (!dragStart)
+    return
+  translateX.value = dragStart.translateX
+  translateY.value = dragStart.translateY
+  pan(event.clientX - dragStart.x, event.clientY - dragStart.y)
+}
+
+function stopMousePan() {
+  isPanning.value = false
+  dragStart = null
+  window.removeEventListener('mousemove', onMouseMove)
+  window.removeEventListener('mouseup', stopMousePan)
+}
+
 function onMouseDown(event: MouseEvent) {
   if (scale.value <= MIN_SCALE || event.button !== 0)
     return
   event.preventDefault()
   isPanning.value = true
-  const startX = event.clientX
-  const startY = event.clientY
-  const startTranslateX = translateX.value
-  const startTranslateY = translateY.value
-
-  function onMouseMove(moveEvent: MouseEvent) {
-    translateX.value = startTranslateX
-    translateY.value = startTranslateY
-    pan(moveEvent.clientX - startX, moveEvent.clientY - startY)
-  }
-  function onMouseUp() {
-    isPanning.value = false
-    window.removeEventListener('mousemove', onMouseMove)
-    window.removeEventListener('mouseup', onMouseUp)
-  }
+  dragStart = { x: event.clientX, y: event.clientY, translateX: translateX.value, translateY: translateY.value }
   window.addEventListener('mousemove', onMouseMove)
-  window.addEventListener('mouseup', onMouseUp)
+  window.addEventListener('mouseup', stopMousePan)
 }
+
+// Guards against a leaked `window` listener if the modal is closed (the
+// component unmounts) mid-drag, e.g. pressing Escape while panning.
+onUnmounted(stopMousePan)
 
 function touchDistance(touches: TouchList) {
   const [a, b] = [touches[0]!, touches[1]!]
   return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)
 }
 
+// Two-finger touches are also prevented at the modal root (`onModalTouchMove`
+// below), not just over the photo, so pinching anywhere in the modal never
+// falls through to the browser's native page zoom.
 let pinchStartDistance = 0
 let pinchStartScale = MIN_SCALE
-let panStart: { x: number, y: number, translateX: number, translateY: number } | null = null
+let panStart: DragStart | null = null
 
 function onTouchStart(event: TouchEvent) {
   if (event.touches.length === 2) {
@@ -173,6 +194,14 @@ function onTouchEnd(event: TouchEvent) {
   if (event.touches.length < 1)
     panStart = null
 }
+
+// Blocks native pinch-zoom anywhere in the modal (buttons, background),
+// not just over the photo — the photo itself still only zooms via
+// `onTouchMove` above, scoped to `zoomBoxRef`.
+function onModalTouchMove(event: TouchEvent) {
+  if (event.touches.length >= 2)
+    event.preventDefault()
+}
 </script>
 
 <template>
@@ -183,6 +212,7 @@ function onTouchEnd(event: TouchEvent) {
     @keydown.esc="emit('close')"
     @click.self="emit('close')"
     @wheel="onWheel"
+    @touchmove="onModalTouchMove"
   >
     <button
       type="button"

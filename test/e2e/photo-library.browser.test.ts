@@ -176,7 +176,7 @@ describe('personal photo library journey', async () => {
     await page.close()
   }, 60_000)
 
-  // issue #zoom: the details modal's photo can be zoomed (Ctrl+scroll /
+  // issue #193: the details modal's photo can be zoomed (Ctrl+scroll /
   // pinch) and panned (drag) without the whole page zooming, resets on
   // photo navigation, and is clamped to a 3x maximum.
   it('zooms and pans the photo in the details modal, resetting on navigation', async () => {
