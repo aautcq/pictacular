@@ -24,9 +24,16 @@ const prisma = new PrismaClient({ adapter })
 const PASSWORD = 'Password123!'
 
 async function upsertVerifiedUser(email: string, firstName: string, lastName: string) {
+  // https://pravatar.cc serves a stable placeholder photo per `u` value,
+  // so re-seeding always yields the same avatar for the same email
+  // (deterministic, no API key/signup required). Set on both branches so
+  // re-running against a DB seeded before this avatar_url was introduced
+  // still backfills it.
+  const avatarUrl = `https://i.pravatar.cc/300?u=${encodeURIComponent(email)}`
+
   return prisma.user.upsert({
     where: { email },
-    update: {},
+    update: { avatar_url: avatarUrl },
     create: {
       email,
       first_name: firstName,
@@ -34,6 +41,7 @@ async function upsertVerifiedUser(email: string, firstName: string, lastName: st
       password: hashPassword(PASSWORD),
       is_verified: true,
       verification_token: generateRandomString(32),
+      avatar_url: avatarUrl,
     },
   })
 }

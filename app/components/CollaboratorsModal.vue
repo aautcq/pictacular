@@ -93,14 +93,26 @@ async function removeCollaboratorFromAlbum(userId: number) {
         <li class="flex items-center justify-between gap-x-2">
           <span>{{ album?.admin.first_name }} {{ album?.admin.last_name }} <span class="text-xs text-gray-500 dark:text-gray-300">({{ t('admin') }})</span></span>
         </li>
-        <li v-for="collaborator in album?.collaborators" :key="collaborator.id" class="flex items-center justify-between gap-x-2">
-          <span>{{ collaborator.first_name }} {{ collaborator.last_name }}</span>
+      </ul>
+
+      <ul v-if="album?.collaborators.length" class="flex flex-wrap gap-2">
+        <li
+          v-for="collaborator in album.collaborators"
+          :key="collaborator.id"
+          class="flex items-center gap-x-2 rounded-full bg-gray-100 py-1 pl-1 pr-2 dark:bg-gray-800"
+        >
+          <UAvatar
+            :src="collaborator.avatar_url ?? undefined"
+            :alt="`${collaborator.first_name} ${collaborator.last_name}`"
+            size="xs"
+          />
+          <span class="text-sm">{{ collaborator.first_name }} {{ collaborator.last_name }}</span>
           <button
             v-if="isAdmin"
             type="button"
             :title="t('removeCollaboratorTitle')"
             :disabled="removingCollaboratorId === collaborator.id"
-            class="flex h-8 w-8 items-center justify-center rounded-full text-red-500 hover:bg-gray-200 disabled:opacity-50 dark:hover:bg-gray-700"
+            class="flex h-5 w-5 items-center justify-center rounded-full text-red-500 hover:bg-gray-200 disabled:opacity-50 dark:hover:bg-gray-700"
             @click="removeCollaboratorFromAlbum(collaborator.id)"
           >
             <Icon name="ph:x-bold" />
@@ -114,6 +126,7 @@ async function removeCollaboratorFromAlbum(userId: number) {
         class="space-y-2"
         :schema="albumCollaboratorsSchema"
         :state="{ emails }"
+        :validate-on="['blur']"
         @submit.prevent="submitInvite"
       >
         <UFormField :label="t('inviteByEmailLabel')" name="emails">
