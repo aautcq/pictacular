@@ -186,6 +186,20 @@ describe('album collaborators + invitations', async () => {
       ).rejects.toMatchObject({ statusCode: 403, statusMessage: 'albums.admin_only' })
     })
 
+    it('passes through a linked Collaborator\'s avatar_url as-is (no signing for other members)', async () => {
+      const album = await createAlbum(admin.cookieHeader)
+      const collaborator = await createLoggedInUser('with-avatar')
+      await prisma.user.update({ where: { id: collaborator.id }, data: { avatar_url: 'https://example.com/avatar.png' } })
+
+      const response = await $fetch<{ collaborators: { id: number, avatar_url: string | null }[] }>(`/api/albums/${album.id}/collaborators`, {
+        method: 'POST',
+        headers: { cookie: admin.cookieHeader },
+        body: { emails: [collaborator.email] },
+      })
+
+      expect(response.collaborators.find(c => c.id === collaborator.id)?.avatar_url).toBe('https://example.com/avatar.png')
+    })
+
     it('rejects a non-member with 404', async () => {
       const album = await createAlbum(admin.cookieHeader)
 

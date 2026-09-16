@@ -5,6 +5,11 @@ export interface AlbumMember {
   id: number
   first_name: string
   last_name: string
+  // Raw S3 object key or external URL, passed through unsigned — see ADR
+  // 0011: unlike a User's own profile (serializeUser), there's no
+  // per-member signing here, so a real S3-key avatar won't render for
+  // other members yet (only externally-hosted avatar_url values do).
+  avatar_url: string | null
 }
 
 export interface AlbumWithMembers {
@@ -18,7 +23,7 @@ export interface AlbumWithMembers {
   share_token: string | null
 }
 
-export const memberSelect = { id: true, first_name: true, last_name: true } as const
+export const memberSelect = { id: true, first_name: true, last_name: true, avatar_url: true } as const
 
 // Parses and validates the `id` route param shared by every
 // single-Album endpoint (show, light show, update, delete, add/remove

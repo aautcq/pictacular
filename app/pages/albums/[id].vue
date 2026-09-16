@@ -273,6 +273,19 @@ const settingsItems = computed<DropdownMenuItem[][]>(() => [
             >
               {{ album.title }}
             </button>
+
+            <UAvatarGroup size="sm" :max="5" class="ml-auto">
+              <UTooltip
+                v-for="collaborator in album?.collaborators"
+                :key="collaborator.id"
+                :text="`${collaborator.first_name} ${collaborator.last_name}`"
+              >
+                <UAvatar
+                  :src="collaborator.avatar_url ?? undefined"
+                  :alt="`${collaborator.first_name} ${collaborator.last_name}`"
+                />
+              </UTooltip>
+            </UAvatarGroup>
           </div>
 
           <textarea
@@ -327,7 +340,9 @@ const settingsItems = computed<DropdownMenuItem[][]>(() => [
             </p>
           </template>
         </BaseVirtualGrid>
-      </BaseDropzone><Transition name="modal-fade">
+      </BaseDropzone>
+
+      <Transition name="modal-fade">
         <PhotoDetails
           v-if="detailsPhoto"
           :photo="detailsPhoto"
