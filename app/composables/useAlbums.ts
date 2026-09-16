@@ -7,6 +7,13 @@ export interface AlbumMember {
   avatar_url: string | null
 }
 
+// Issue #171: a Collaborator typeahead suggestion (see ADR 0012) — same
+// shape as AlbumMember plus the email the picker matches against and the
+// invite ultimately gets sent to.
+export interface CollaboratorSuggestion extends AlbumMember {
+  email: string
+}
+
 export interface AlbumSummary {
   id: number
   title: string | null
@@ -153,6 +160,17 @@ export function useAlbums() {
     return $fetch<AlbumFull>(`/api/albums/${albumId}/collaborators/${userId}`, { method: 'DELETE' })
   }
 
+  // Issue #171: the Collaborators-modal typeahead's data source (see ADR
+  // 0012) — an empty query short-circuits without a request, since the
+  // server route requires a non-empty `q` anyway.
+  async function searchCollaboratorSuggestions(albumId: number, q: string) {
+    if (!q.trim())
+      return []
+
+    const { suggestions } = await $fetch<{ suggestions: CollaboratorSuggestion[] }>(`/api/albums/${albumId}/collaborator-suggestions`, { query: { q } })
+    return suggestions
+  }
+
   // Issue #53: generates (or rotates) the admin's Public Share Link
   // token for an Album — calling this again simply replaces whatever
   // token was previously issued.
@@ -186,6 +204,7 @@ export function useAlbums() {
     fetchAlbumPhotoIds,
     addCollaborators,
     removeCollaborator,
+    searchCollaboratorSuggestions,
     generateShareLink,
     fetchPublicAlbum,
   }

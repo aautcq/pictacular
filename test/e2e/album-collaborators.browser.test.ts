@@ -54,8 +54,13 @@ describe('album collaborators + invitations journey', async () => {
     // app/pages/albums/[id].vue's settingsItems), not a standalone button.
     await adminPage.getByRole('button', { name: 'Settings' }).click()
     await adminPage.getByRole('menuitem', { name: 'Collaborators' }).click()
-    await adminPage.getByRole('dialog').getByLabel('Invite by email').fill(inviteeEmail)
-    await adminPage.getByRole('dialog').getByRole('button', { name: 'Invite' }).click()
+    // The typeahead (see ADR 0012) never suggests a brand-new invitee, so
+    // the raw-email fallback item is what gets picked here — typing a
+    // full, unmatched email surfaces an `Invite "…"` item; selecting it
+    // invites immediately (no separate submit button).
+    const dialog = adminPage.getByRole('dialog')
+    await dialog.getByPlaceholder('Search by name or email…').fill(inviteeEmail)
+    await dialog.getByText(`Invite "${inviteeEmail}"`).click()
     // Scoped to the toast's visible title to avoid Playwright strict-mode
     // matching the aria-live announcer span too (see
     // i18n-error-messages.browser.test.ts's identical fix).
