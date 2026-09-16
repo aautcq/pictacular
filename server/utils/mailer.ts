@@ -5,6 +5,7 @@ import { BrevoClient } from '@getbrevo/brevo'
 // export), unlike the CJS build's exports object — so we import the
 // default and pull `render` off it instead of a named import.
 import ejs from 'ejs'
+import { isTest } from 'std-env'
 import { t } from './i18n/emails'
 
 export type EmailType = 'verification' | 'password-reset' | 'invitation'
@@ -37,6 +38,18 @@ function loadTemplate() {
 // The @sendgrid/mail SDK call was swapped for the @getbrevo/brevo SDK
 // (issue #134).
 export async function sendEmail(data: EmailData, type: EmailType, lang: EmailLang = 'en') {
+  // Test specs create real EmailOutbox rows with throwaway @example.com
+  // addresses (RFC 2606, guaranteed non-existent) and let the outbox's
+  // fire-and-forget send attempt run for real — a real Brevo API call
+  // against those addresses previously got this account blocked for hard
+  // bounces. Throwing here (rather than skipping silently) keeps
+  // attemptEmailOutboxSend's failure/backoff bookkeeping — attempts,
+  // next_attempt_at, last_error, dead-lettering — exercised exactly as
+  // before, but with zero network call and no dependence on whatever key
+  // happens to be in the developer's .env.
+  if (isTest)
+    throw new Error('Email sending is disabled in the test environment')
+
   const config = useRuntimeConfig()
   const brevo = new BrevoClient({ apiKey: config.brevoApiKey })
 
