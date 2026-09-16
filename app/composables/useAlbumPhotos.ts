@@ -44,6 +44,16 @@ export function useAlbumPhotos(albumId: Ref<number>) {
     }
   }
 
+  // Search scoped to this Album's own Photos (issue #190), filename only
+  // — the Album's title is already the fixed context here, so it isn't
+  // also matched against (unlike usePhotoLibrary#searchPhotos' library-
+  // wide search). A single capped batch of matches, not part of the
+  // paginated `photos` state above.
+  async function searchPhotos(keyword: string) {
+    const response = await $fetch<{ photos: Photo[] }>('/api/photos/search', { query: { q: keyword, album_id: albumId.value } })
+    return response.photos
+  }
+
   watch(albumId, async () => {
     reset()
     await fetchNextPage()
@@ -74,6 +84,7 @@ export function useAlbumPhotos(albumId: Ref<number>) {
     loaded,
     loading,
     fetchNextPage,
+    searchPhotos,
     prependPhoto,
     removePhoto,
     updatePhoto,

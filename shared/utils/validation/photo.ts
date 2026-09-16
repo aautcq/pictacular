@@ -22,3 +22,19 @@ export const photoListQuerySchema = z.object({
 })
 
 export type PhotoListQuery = z.infer<typeof photoListQuerySchema>
+
+// zod schema for GET /api/photos/search's query params (issue #190):
+// `album_id`, when given, scopes the search to one Album's own Photos
+// (filename only) instead of the requesting User's whole library
+// (filename OR Album title) — see server/api/photos/search.get.ts. A
+// smaller max/default `limit` than the list endpoints above: search
+// results are a single capped batch of "best matches", never
+// further-paginated, so there's no reason to allow as large a page as a
+// keyset-paginated list.
+export const photoSearchQuerySchema = z.object({
+  q: z.string().min(1),
+  album_id: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(50),
+})
+
+export type PhotoSearchQuery = z.infer<typeof photoSearchQuerySchema>

@@ -38,6 +38,7 @@ const {
   hasMore: photosHaveMore,
   loading: photosLoading,
   fetchNextPage: fetchNextPhotosPage,
+  searchPhotos,
   prependPhoto,
   removePhoto,
   updatePhoto,
@@ -51,6 +52,15 @@ const [{ data: album, pending }] = await Promise.all([
   useAsyncData('album', async () => await fetchAlbum(albumId.value), { watch: [albumId] }),
   useAsyncData('album-photos', fetchNextPhotosPage),
 ])
+
+// Issue #190: search scoped to this Album's own Photos (filename only —
+// see useAlbumPhotos#searchPhotos). Same "search results replace the
+// paginated grid" shape as the library page and albums/index.vue.
+const { query, results: searchResults, searching } = useSearch(searchPhotos)
+const isSearching = computed(() => searchResults.value !== null)
+const displayedPhotos = computed(() => searchResults.value ?? photos.value)
+const gridHasMore = computed(() => !isSearching.value && photosHaveMore.value)
+const gridLoading = computed(() => isSearching.value ? searching.value : photosLoading.value)
 
 const {
   selectedIds,
@@ -66,7 +76,7 @@ const {
   showNext,
   closeDetails,
   downloadSelected,
-} = usePhotoGallery(photos)
+} = usePhotoGallery(displayedPhotos)
 
 useHead({ title: computed(() => album.value?.title) })
 
@@ -232,6 +242,13 @@ const settingsItems = computed<DropdownMenuItem[][]>(() => [
           </UTooltip>
         </UDropdownMenu>
 
+        <BaseSearchToggle
+          v-if="!selectionMode"
+          v-model="query"
+          :label="t('searchLabel')"
+          :placeholder="t('searchPlaceholder')"
+        />
+
         <BaseFilesUpload v-if="isAdmin" @files-uploaded="handleFiles" />
       </template>
 
@@ -310,16 +327,21 @@ const settingsItems = computed<DropdownMenuItem[][]>(() => [
 
         <PhotoUploads v-if="uploads.length" :uploads />
 
-        <div v-if="album && !photos.length && !photosLoading" class="py-20 text-center text-gray-500 dark:text-gray-300">
-          <p>{{ t('emptyAlbum') }}</p>
+        <div v-if="album && !displayedPhotos.length && !gridLoading" class="py-20 text-center text-gray-500 dark:text-gray-300">
+          <p v-if="isSearching">
+            {{ t('noResults') }}
+          </p>
+          <p v-else>
+            {{ t('emptyAlbum') }}
+          </p>
         </div>
 
         <BaseVirtualGrid
           v-if="album"
-          :items="photos"
+          :items="displayedPhotos"
           :item-key="(photo: Photo) => photo.id"
-          :has-more="photosHaveMore"
-          :loading="photosLoading"
+          :has-more="gridHasMore"
+          :loading="gridLoading"
           :breakpoints="breakpoints"
           @load-more="fetchNextPhotosPage"
         >
@@ -412,6 +434,9 @@ const settingsItems = computed<DropdownMenuItem[][]>(() => [
 {
   "en": {
     "loading": "Loading…",
+    "searchLabel": "Search photos",
+    "searchPlaceholder": "Search photos…",
+    "noResults": "No photos match your search.",
     "addDescriptionPlaceholder": "Add a description",
     "collaboratorsButton": "Collaborators",
     "shareButton": "Share",

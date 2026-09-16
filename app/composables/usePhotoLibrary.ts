@@ -84,6 +84,15 @@ export function usePhotoLibrary() {
     }
   }
 
+  // Library-wide Photo search (issue #190): a single capped batch of
+  // matches (filename OR the title of any Album the Photo belongs to),
+  // not part of the paginated `photos` state above — mirrors
+  // useAlbums#searchAlbums's own "stateless, one-off lookup" shape.
+  async function searchPhotos(keyword: string) {
+    const response = await $fetch<{ photos: Photo[] }>('/api/photos/search', { query: { q: keyword } })
+    return response.photos
+  }
+
   function addUploadedPhoto(photo: Photo) {
     if (photos.value.some(existing => existing.id === photo.id))
       return
@@ -148,6 +157,7 @@ export function usePhotoLibrary() {
     loaded,
     loading,
     fetchNextPage,
+    searchPhotos,
     addUploadedPhoto,
     deletePhoto,
     deletePhotos,

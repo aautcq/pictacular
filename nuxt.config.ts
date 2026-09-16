@@ -228,7 +228,24 @@ export default defineNuxtConfig({
   // alone. Every route under those prefixes is already
   // authenticated/authorized per-Photo or per-share-token, so the wider
   // budget is safe to share with them too.
+  //
+  // '/api/photos/**' also does not match the bare '/api/photos' path
+  // itself (list/upload) — radix3's "**" only matches routes with at
+  // least one further path segment — so that exact path needs its own
+  // rule too (issue #190's search tests, which upload/list more Photos
+  // than any prior suite, were the first to push plain '/api/photos'
+  // traffic over the default budget and surfaced this gap). There is no
+  // bare '/api/albums/public' route, so it doesn't need the same
+  // treatment.
   routeRules: {
+    '/api/photos': {
+      security: {
+        rateLimiter: {
+          tokensPerInterval: 2000,
+          interval: 300000,
+        },
+      },
+    },
     '/api/photos/**': {
       security: {
         rateLimiter: {
