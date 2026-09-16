@@ -6,20 +6,17 @@
 // expands into a debounced-search UInput when clicked. Purely the input
 // chrome — the actual debounce/search-result state lives in useSearch,
 // called by each page with its own searchFn.
-const { modelValue, label, placeholder } = defineProps<{
-  modelValue: string
+const { label, placeholder } = defineProps<{
   label: string
   placeholder: string
 }>()
-const emit = defineEmits<{
-  'update:modelValue': [value: string]
-}>()
+const model = defineModel<string>({ default: '' })
 
 // Starts open when mounted with an already-non-empty query (e.g. a
 // v-model bound to useSearch state that survived a client-only
 // navigation) — otherwise the active filter would be invisible behind a
 // closed icon.
-const isOpen = shallowRef(!!modelValue)
+const isOpen = shallowRef(!!model.value)
 
 function open() {
   isOpen.value = true
@@ -30,11 +27,11 @@ function open() {
 // search result (which blurs the input) never silently discards it.
 function closeAndClear() {
   isOpen.value = false
-  emit('update:modelValue', '')
+  model.value = ''
 }
 
 function onBlur() {
-  if (!modelValue)
+  if (!model.value)
     isOpen.value = false
 }
 </script>
@@ -54,14 +51,13 @@ function onBlur() {
   <label v-else class="flex items-center">
     <span class="sr-only">{{ label }}</span>
     <UInput
-      :model-value="modelValue"
+      v-model="model"
       type="search"
       variant="soft"
       autofocus
-      :placeholder="placeholder"
+      :placeholder
       icon="ph:magnifying-glass"
       class="w-36 sm:w-64"
-      @update:model-value="emit('update:modelValue', String($event))"
       @keyup.esc="closeAndClear"
       @blur="onBlur"
     />
