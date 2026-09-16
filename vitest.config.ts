@@ -21,6 +21,12 @@ export default defineConfig({
     // whatever host the test server actually binds to.
     env: {
       NUXT_COOKIE_DOMAIN: '',
+      // Belt-and-suspenders alongside sendEmail's own `isTest` guard
+      // (server/utils/mailer.ts): forces every test run to fail Brevo auth
+      // rather than ever depend on whatever real key sits in a developer's
+      // local .env (a real key there is what got this account blocked for
+      // hard bounces against test fixtures' @example.com addresses).
+      NUXT_BREVO_API_KEY: 'test-invalid-key',
     },
     alias: {
       '#server/': new URL('./server/', import.meta.url).pathname,
