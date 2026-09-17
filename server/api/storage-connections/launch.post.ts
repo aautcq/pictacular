@@ -1,18 +1,13 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import { encodeStorageConnectionLaunch } from '#server/utils/jwt'
 import { prisma } from '#server/utils/prisma'
+import { CREATE_BUCKET_STACK_REGION } from '#server/utils/storage'
 
 // GitHub raw URL for the CloudFormation template CloudFormation itself
 // fetches when a User clicks "Launch Stack" (issue #149's template) — this
 // only resolves once that template is actually merged to `main`, a
 // deployment-order dependency called out in this ticket's PR description.
 const cfnTemplateUrl = 'https://raw.githubusercontent.com/aautcq/pictacular/main/cloudformation/create-bucket.yaml'
-
-// AWS Console region the CloudFormation "quick-create" URL opens in — the
-// stack/Role/bucket it creates are not confined to this region (S3
-// buckets and IAM Roles are global/all-region resources), this only picks
-// which regional Console UI walks the User through creating them.
-const cfnConsoleRegion = 'us-east-1'
 
 function randomSuffix() {
   return randomBytes(8).toString('hex')
@@ -81,7 +76,7 @@ export default defineEventHandler(async (event) => {
   // template URL and every stack parameter — lives inside the URL
   // fragment (`#...`), not as this URL's own top-level query string
   // (which only ever carries `region`).
-  const launchUrl = `https://console.aws.amazon.com/cloudformation/home?region=${cfnConsoleRegion}#/stacks/create/review?${stackParams.toString()}`
+  const launchUrl = `https://console.aws.amazon.com/cloudformation/home?region=${CREATE_BUCKET_STACK_REGION}#/stacks/create/review?${stackParams.toString()}`
 
   return {
     launch_url: launchUrl,

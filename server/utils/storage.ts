@@ -34,6 +34,16 @@ export interface AwsCredentials {
   external_id: string
 }
 
+// The single region a "create a new bucket" CloudFormation stack is ever
+// launched/created in (issue #150) — a CloudFormation stack's resources
+// (the bucket and Role included) are created in whichever region the
+// stack itself runs in, so this is the same region
+// server/api/storage-connections/launch.post.ts pre-selects in the Launch
+// Stack Console URL and the one confirmStorageConnection below assumes/
+// falls back to before it can look up the bucket's real region: one
+// shared constant, so the two can never independently drift apart.
+export const CREATE_BUCKET_STACK_REGION = 'us-east-1'
+
 // File extensions the legacy import/check-bucket flow treated as "photos"
 // (see docs/legacy-features.md) — no per-object HeadObject/mime-type round
 // trip, matching this app's "no image resizing/thumbnailing" scope.
@@ -73,7 +83,7 @@ async function createClient(awsCredentials: AwsCredentials) {
 // used), rather than trusting a value Pictacular itself already knows the
 // stack was asked to use.
 export async function confirmStorageConnection(roleArn: string, externalId: string, bucket: string) {
-  const client = await createClient({ bucket, region: 'us-east-1', role_arn: roleArn, external_id: externalId })
+  const client = await createClient({ bucket, region: CREATE_BUCKET_STACK_REGION, role_arn: roleArn, external_id: externalId })
 
   try {
     await client.send(new HeadBucketCommand({ Bucket: bucket }))
@@ -82,13 +92,13 @@ export async function confirmStorageConnection(roleArn: string, externalId: stri
     throw createError({ statusCode: 502, statusMessage: 'storage.bucket_not_ready', cause: error })
   }
 
-  let region = 'us-east-1'
+  let region = CREATE_BUCKET_STACK_REGION
   try {
     const location = await client.send(new GetBucketLocationCommand({ Bucket: bucket }))
     // AWS reports an empty LocationConstraint for buckets in us-east-1
     // specifically (its historical "US Standard" default) rather than
     // omitting/erroring — that's a *successful* lookup, not a fallback case.
-    region = location.LocationConstraint || 'us-east-1'
+    region = location.LocationConstraint || CREATE_BUCKET_STACK_REGION
   }
   catch {
     // Fall back to the default region when the location lookup isn't
