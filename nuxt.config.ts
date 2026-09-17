@@ -308,6 +308,10 @@ export default defineNuxtConfig({
       publicKey: '',
       privateKey: '',
     },
+    aws: {
+      accessKeyId: '',
+      secretAccessKey: '',
+    },
   },
   compatibilityDate: '2026-08-22',
 })

@@ -16,6 +16,20 @@ import { createServer } from 'node:http'
 // implementing real request signing verification.
 export const badAccessKeyId = 'BAD_ACCESS_KEY_ID'
 
+// Fixed Role ARN + External ID a Storage Connection test fixture uses to
+// stand in for a real "create new bucket" CloudFormation stack's output
+// (see server/utils/sts.ts) — every fixture-seeding spec uses the same
+// pair rather than each inventing its own, since neither value needs to be
+// unique for the fake STS double below to accept it.
+export const testRoleArn = 'arn:aws:iam::111111111111:role/pictacular-test-role'
+export const testExternalId = 'test-external-id'
+// A Role ARN sentinel the fake STS double below always rejects
+// `AssumeRole` for (mirroring a real revoked/deleted cross-account Role),
+// so specs simulating "credentials revoked after connecting" can force an
+// AssumeRole failure — the same error surface a real revoked Role now
+// fails at, rather than the old bad-access-key-id S3-level failure.
+export const badRoleArn = 'arn:aws:iam::111111111111:role/revoked-role'
+
 // Per-object storage-class + Restore Request status (issue #145),
 // separate from the actual uploaded bytes in `objects` below: a seeded
 // object (photo-import/archived-photo tests) may have metadata without
@@ -102,6 +116,37 @@ export async function startFakeS3Server(): Promise<FakeS3Server> {
     if (accessKeyIdFromAuthHeader(req.headers.authorization) === badAccessKeyId) {
       res.writeHead(403, { 'Content-Type': 'application/xml' })
       res.end(xmlError('InvalidAccessKeyId', 'The AWS Access Key Id you provided does not exist in our records.'))
+      return
+    }
+
+    // STS AssumeRole (server/utils/sts.ts): the AWS Query protocol, not
+    // the S3 REST API, hence handled up front by path/body shape (`POST
+    // /` with a form-encoded `Action=AssumeRole` body) rather than by
+    // bucket/key like every other branch below — this fake double hosts
+    // both S3 and STS on the same port/origin (see AWS_S3_ENDPOINT reuse
+    // in server/utils/sts.ts) purely to avoid every test file needing a
+    // second endpoint env var.
+    if (req.method === 'POST' && url.pathname === '/') {
+      let stsBody = ''
+      req.on('data', chunk => (stsBody += chunk))
+      req.on('end', () => {
+        const params = new URLSearchParams(stsBody)
+        if (params.get('Action') !== 'AssumeRole') {
+          res.writeHead(404)
+          res.end()
+          return
+        }
+
+        const roleArn = params.get('RoleArn')
+        if (roleArn === badRoleArn) {
+          res.writeHead(403, { 'Content-Type': 'application/xml' })
+          res.end('<?xml version="1.0" encoding="UTF-8"?><ErrorResponse><Error><Type>Sender</Type><Code>AccessDenied</Code><Message>User is not authorized to perform sts:AssumeRole</Message></Error><RequestId>fake-sts</RequestId></ErrorResponse>')
+          return
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/xml' })
+        res.end(`<?xml version="1.0" encoding="UTF-8"?><AssumeRoleResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/"><AssumeRoleResult><Credentials><AccessKeyId>FAKESTSACCESSKEY</AccessKeyId><SecretAccessKey>FAKESTSSECRETKEY</SecretAccessKey><SessionToken>FAKESTSSESSIONTOKEN</SessionToken><Expiration>2030-01-01T00:00:00Z</Expiration></Credentials><AssumedRoleUser><AssumedRoleId>AROAFAKESTS:pictacular</AssumedRoleId><Arn>${roleArn}</Arn></AssumedRoleUser></AssumeRoleResult><ResponseMetadata><RequestId>fake-sts</RequestId></ResponseMetadata></AssumeRoleResponse>`)
+      })
       return
     }
 

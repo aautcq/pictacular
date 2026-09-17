@@ -12,10 +12,14 @@ ever handling a long-lived access key.
 - `connect-bucket.yaml` — "connect an existing bucket" mode (issue #151, not yet built): applies
   the Role + CORS rule to a bucket the User already owns, named as a stack parameter.
 
-Both parameters `ExternalId` and `AllowedOrigin` are meant to be pre-filled by Pictacular via
-the Launch Stack URL's query string (`...&param_ExternalId=...&param_AllowedOrigin=...`) when
-it builds the "Connect your storage" link — a User launching the stack never has to type
-either value by hand.
+Every parameter (`ExternalId`, `AllowedOrigin`, and — for `create-bucket.yaml` — `BucketName`/
+`RoleName`) is meant to be pre-filled by Pictacular via the Launch Stack URL's query string
+(`...&param_ExternalId=...&param_BucketName=...`) when it builds the "Connect your storage"
+link — a User launching the stack never has to type any of them by hand, nor paste anything
+back out of the AWS Console afterwards: Pictacular already knows the bucket name/Role ARN it
+asked CloudFormation to create (see `server/api/storage-connections/launch.post.ts`), and
+confirms the stack has finished via a direct `sts:AssumeRole` call rather than querying
+CloudFormation's own stack Outputs.
 
 Linted in CI (`.github/workflows/cfn-lint.yml`) with
 [`cfn-lint`](https://github.com/aws-cloudformation/cfn-lint) on every change under this
