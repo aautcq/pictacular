@@ -1,11 +1,21 @@
+import type { FakeS3Server } from './fake-s3-server'
+import process from 'node:process'
 import { $fetch, fetch, setup } from '@nuxt/test-utils/e2e'
 import { afterAll, describe, expect, it } from 'vitest'
-import { encodeAwsCredentials } from '../../server/utils/jwt'
 import { prisma } from '../../server/utils/prisma'
+import { startFakeS3Server, testExternalId, testRoleArn } from './fake-s3-server'
 
 // Black-box HTTP tests for authenticated self-service profile management
 // (issue #33): get/update/delete one's own account via /api/users/me.
 describe('user profile self-service', async () => {
+  // A signed avatar URL/upload now requires an AssumeRole round trip
+  // before any signing happens (issue #150), even though the signing
+  // itself is still purely local — so this suite needs the same in-
+  // process fake STS/S3 double every Storage-Connection-aware spec uses,
+  // despite never itself asserting on the bucket's contents.
+  const fakeS3: FakeS3Server = await startFakeS3Server()
+  process.env.AWS_S3_ENDPOINT = fakeS3.url
+
   await setup()
 
   const emailPrefix = `profile-${Date.now()}`
@@ -55,6 +65,7 @@ describe('user profile self-service', async () => {
 
   afterAll(async () => {
     await prisma.user.deleteMany({ where: { email: { startsWith: emailPrefix } } })
+    await fakeS3.close()
   })
 
   describe('get profile', () => {
@@ -86,7 +97,8 @@ describe('user profile self-service', async () => {
         data: {
           bucket: 'pictacular-test-bucket',
           region: 'eu-west-3',
-          tokens: encodeAwsCredentials({ access_key_id: 'AKIATEST', secret_access_key: 'test-secret' }),
+          role_arn: testRoleArn,
+          external_id: testExternalId,
           user: { connect: { id: user.id } },
         },
       })
@@ -97,7 +109,7 @@ describe('user profile self-service', async () => {
       })
 
       expect(response.has_aws_credentials).toBe(true)
-      expect(response.avatar_url).toMatch(/^https:\/\/pictacular-test-bucket\.s3\./)
+      expect(response.avatar_url).toContain('pictacular-test-bucket')
     })
 
     it('rejects an unauthenticated request with 401', async () => {
@@ -257,7 +269,8 @@ describe('user profile self-service', async () => {
         data: {
           bucket: 'pictacular-test-bucket',
           region: 'eu-west-3',
-          tokens: encodeAwsCredentials({ access_key_id: 'AKIATEST', secret_access_key: 'test-secret' }),
+          role_arn: testRoleArn,
+          external_id: testExternalId,
           user: { connect: { id: user.id } },
         },
       })

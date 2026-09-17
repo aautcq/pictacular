@@ -5,10 +5,9 @@ import { createPage, setup, url } from '@nuxt/test-utils/e2e'
 import sharp from 'sharp'
 import { afterAll, describe, expect, it } from 'vitest'
 import { hashPassword } from '../../server/utils/crypto'
-import { encodeAwsCredentials } from '../../server/utils/jwt'
 import { prisma } from '../../server/utils/prisma'
 import { buildDecodableJpegWithDateTimeOriginal } from './exif-fixtures'
-import { startFakeS3Server } from './fake-s3-server'
+import { startFakeS3Server, testExternalId, testRoleArn } from './fake-s3-server'
 
 // Browser-driven test (issue #50): a signed-in User with a Storage
 // Connection uploads a Photo via the personal photo library's dropzone,
@@ -52,7 +51,8 @@ describe('personal photo library journey', async () => {
       data: {
         bucket,
         region: 'eu-west-3',
-        tokens: encodeAwsCredentials({ access_key_id: 'AKIATEST', secret_access_key: 'test-secret' }),
+        role_arn: testRoleArn,
+        external_id: testExternalId,
         user: { connect: { id: user.id } },
       },
     })
@@ -127,7 +127,8 @@ describe('personal photo library journey', async () => {
       data: {
         bucket: groupingBucket,
         region: 'eu-west-3',
-        tokens: encodeAwsCredentials({ access_key_id: 'AKIATEST', secret_access_key: 'test-secret' }),
+        role_arn: testRoleArn,
+        external_id: testExternalId,
         user: { connect: { id: user.id } },
       },
     })
@@ -202,7 +203,8 @@ describe('personal photo library journey', async () => {
       data: {
         bucket: zoomBucket,
         region: 'eu-west-3',
-        tokens: encodeAwsCredentials({ access_key_id: 'AKIATEST', secret_access_key: 'test-secret' }),
+        role_arn: testRoleArn,
+        external_id: testExternalId,
         user: { connect: { id: user.id } },
       },
     })
@@ -302,7 +304,8 @@ describe('personal photo library journey', async () => {
       data: {
         bucket: smallZoomBucket,
         region: 'eu-west-3',
-        tokens: encodeAwsCredentials({ access_key_id: 'AKIATEST', secret_access_key: 'test-secret' }),
+        role_arn: testRoleArn,
+        external_id: testExternalId,
         user: { connect: { id: user.id } },
       },
     })

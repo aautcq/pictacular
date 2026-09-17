@@ -16,11 +16,6 @@ export interface RefreshToken {
   sessionId: number
 }
 
-export interface AwsCredentialsTokens {
-  access_key_id: string
-  secret_access_key: string
-}
-
 export const accessTokenTtl = 15 * 60 // In seconds (15 minutes)
 export const refreshTokenTtl = 7 * 24 * 60 * 60 // In seconds (7 days)
 
@@ -53,14 +48,14 @@ export function createTokens(
 
 // `verifyToken` used to only ever be called inside a live Nitro request,
 // where the useRuntimeConfig() auto-import is available — issue #145's
-// scan task changes that: it decodes a Storage Connection's AWS
-// credentials (via decodeAwsCredentials below) with no HTTP entry point
-// at all, following the exact "invoke run() directly, no request context"
-// precedent server/tasks/email-outbox/process.ts's own test already
-// established. `typeof useRuntimeConfig` (rather than calling it
-// unconditionally) is what safely detects that missing auto-import
-// without throwing, mirroring encodeAwsCredentials' own
-// call-it-directly-from-a-standalone-spec accommodation just below.
+// scan task first broke that assumption (server/tasks/archived-photos/scan.ts
+// invokes `run()` directly, with no HTTP entry point at all, following the
+// exact "invoke run() directly, no request context" precedent
+// server/tasks/email-outbox/process.ts's own test already established).
+// `typeof useRuntimeConfig` (rather than calling it unconditionally) is
+// what safely detects that missing auto-import without throwing —
+// server/utils/web-push.ts's own JWT verification uses the same
+// accommodation for the same reason.
 export function verifyToken<T>(token: string): T | null {
   try {
     const publicKey = typeof useRuntimeConfig === 'function'
@@ -76,18 +71,38 @@ export function verifyToken<T>(token: string): T | null {
   }
 }
 
-// Unlike createTokens/verifyToken (only ever called inside a live Nitro
-// request, where the useRuntimeConfig() auto-import is available), this is
-// also called directly by e2e specs (outside of Nitro) to sign fixture
-// tokens for direct DB setup — so it reads the env var itself rather than
-// relying on the auto-import.
-export function encodeAwsCredentials(payload: AwsCredentialsTokens) {
-  return jwt.sign(payload, process.env.NUXT_JWT_PRIVATE_KEY as string, {
-    expiresIn: refreshTokenTtl,
+export interface StorageConnectionLaunch {
+  user_id: number
+  external_id: string
+  bucket: string
+  role_arn: string
+}
+
+export const storageConnectionLaunchTtl = 60 * 60 // In seconds (1 hour) — long enough to launch the CloudFormation stack and let it finish creating, without leaving a stale pending connection indefinitely signable.
+
+// Signs the short-lived "pending Storage Connection" token issued by POST
+// /api/storage-connections/launch and later redeemed by POST
+// /api/storage-connections (issue #150): rather than the User pasting any
+// of the bucket name/Role ARN/External ID back by hand, Pictacular itself
+// generates them, hands them to CloudFormation as pre-filled Launch Stack
+// URL parameters, and keeps its own record of what it expects to find via
+// this signed token. Also called directly by storage-connections.test.ts
+// to craft pending tokens for confirm-step edge cases (a role-not-
+// assumable/wrong-User token an unmodified launch call can't easily
+// produce), same "outside a live Nitro request" situation the old
+// key-pair flow's encodeAwsCredentials handled — hence the same
+// useRuntimeConfig()-or-env-var fallback.
+export function encodeStorageConnectionLaunch(payload: StorageConnectionLaunch) {
+  const privateKey = typeof useRuntimeConfig === 'function'
+    ? useRuntimeConfig().jwt.privateKey
+    : process.env.NUXT_JWT_PRIVATE_KEY as string
+
+  return jwt.sign(payload, privateKey, {
+    expiresIn: storageConnectionLaunchTtl,
     algorithm: 'RS256',
   })
 }
 
-export function decodeAwsCredentials(token: string) {
-  return verifyToken<AwsCredentialsTokens>(token)
+export function decodeStorageConnectionLaunch(token: string) {
+  return verifyToken<StorageConnectionLaunch>(token)
 }

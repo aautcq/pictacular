@@ -8,9 +8,8 @@ import selfsigned from 'selfsigned'
 import { afterAll, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import archivedPhotosScanTask from '../../server/tasks/archived-photos/scan'
-import { encodeAwsCredentials } from '../../server/utils/jwt'
 import { prisma } from '../../server/utils/prisma'
-import { startFakeS3Server } from './fake-s3-server'
+import { badRoleArn, startFakeS3Server, testExternalId, testRoleArn } from './fake-s3-server'
 
 // `web-push` always sends over `https` — see websocket.test.ts's own
 // identical setup comment for why this has to be set before `setup()`
@@ -75,7 +74,8 @@ describe('archived photos scan scheduled task', async () => {
       data: {
         bucket,
         region: 'eu-west-3',
-        tokens: encodeAwsCredentials({ access_key_id: 'AKIATEST', secret_access_key: 'test-secret' }),
+        role_arn: testRoleArn,
+        external_id: testExternalId,
         user: { connect: { id: user.id } },
       },
     })
@@ -223,7 +223,7 @@ describe('archived photos scan scheduled task', async () => {
     const broken = await createConnectedUser()
     await prisma.awsCredentials.update({
       where: { user_id: broken.id },
-      data: { tokens: encodeAwsCredentials({ access_key_id: 'BAD_ACCESS_KEY_ID', secret_access_key: 'test-secret' }) },
+      data: { role_arn: badRoleArn },
     })
     fakeS3.seedBucket(broken.bucket, [{ key: 'photo.jpg', storageClass: 'GLACIER' }])
     await createPhotoRow(broken.id, 'photo.jpg')

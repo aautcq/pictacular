@@ -100,9 +100,10 @@ model AwsCredentials {
   created_at DateTime   @default(now())
   updated_at DateTime   @updatedAt
 
-  bucket     String
-  region     String
-  tokens     String
+  bucket      String
+  region      String
+  role_arn    String
+  external_id String
 
   // Resumable bucket import state (issue #54 follow-up): a "many many
   // photos" import can take well over 30 minutes, which is too long to

@@ -7,7 +7,7 @@ import WebSocket from 'ws'
 import { prisma } from '../../server/utils/prisma'
 import { EXIF_RANGE_BYTES } from '../../server/utils/storage'
 import { buildJpegWithDateTimeOriginal } from './exif-fixtures'
-import { startFakeS3Server } from './fake-s3-server'
+import { startFakeS3Server, testExternalId, testRoleArn } from './fake-s3-server'
 
 // Black-box HTTP tests for importing a User's pre-existing bucket
 // contents (issue #54): walks every page of the connected bucket, derives
@@ -70,10 +70,14 @@ describe('import bucket photos', async () => {
     const bucket = uniqueBucketName()
     fakeS3.seedBucket(bucket, keys)
 
-    await $fetch('/api/storage-connections', {
-      method: 'POST',
-      headers: { cookie: cookieHeader },
-      body: { mode: 'connect', access_key_id: 'AKIATEST', secret_access_key: 'test-secret', bucket },
+    await prisma.awsCredentials.create({
+      data: {
+        bucket,
+        region: 'eu-west-3',
+        role_arn: testRoleArn,
+        external_id: testExternalId,
+        user: { connect: { id: user.id } },
+      },
     })
 
     return { ...user, cookieHeader }

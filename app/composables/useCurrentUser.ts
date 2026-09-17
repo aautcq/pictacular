@@ -114,8 +114,12 @@ export function useCurrentUser() {
     user.value = null
   }
 
-  async function connectStorage(payload: { mode: 'create', access_key_id: string, secret_access_key: string } | { mode: 'connect', access_key_id: string, secret_access_key: string, bucket: string }) {
-    await $fetch('/api/storage-connections', { method: 'POST', body: payload })
+  async function launchStorageConnection(awsAccountId: string) {
+    return await $fetch<{ launch_url: string, pending_token: string }>('/api/storage-connections/launch', { method: 'POST', body: { aws_account_id: awsAccountId } })
+  }
+
+  async function confirmStorageConnection(pendingToken: string) {
+    await $fetch('/api/storage-connections', { method: 'POST', body: { pending_token: pendingToken } })
     await fetchCurrentUser()
   }
 
@@ -139,7 +143,8 @@ export function useCurrentUser() {
     updateProfile,
     uploadAvatar,
     deleteAccount,
-    connectStorage,
+    launchStorageConnection,
+    confirmStorageConnection,
     checkBucket,
   }
 }

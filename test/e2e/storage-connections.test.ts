@@ -2,15 +2,23 @@ import type { FakeS3Server } from './fake-s3-server'
 import process from 'node:process'
 import { $fetch, fetch, setup } from '@nuxt/test-utils/e2e'
 import { afterAll, describe, expect, it } from 'vitest'
+import { encodeStorageConnectionLaunch } from '../../server/utils/jwt'
 import { prisma } from '../../server/utils/prisma'
-import { badAccessKeyId, startFakeS3Server } from './fake-s3-server'
+import { badRoleArn, startFakeS3Server, testExternalId, testRoleArn } from './fake-s3-server'
 
 // Black-box HTTP tests for the Storage Connection onboarding endpoints
-// (issue #49): a signed-in, verified User submits an AWS key pair and
-// either creates a new bucket or connects an existing one (CORS set up
-// either way), and can check whether a connected bucket already has
-// images. Real AWS is replaced by an in-process fake S3 double (see
-// fake-s3-server.ts) — no mocking of this app's own server/utils modules.
+// (issue #150): a signed-in, verified User supplies only their AWS
+// Account ID (POST .../launch), is handed a pre-filled CloudFormation
+// "Launch Stack" URL + a signed `pending_token` recording the bucket/
+// Role ARN/External ID Pictacular generated, and — once they say they've
+// run the stack — redeems that token (POST /api/storage-connections) to
+// have Pictacular verify the Role is really assumable and the bucket
+// really exists before persisting the connection. "Connect an existing
+// bucket" mode is deferred to issue #152 (see docs/adr/0006 and this
+// ticket's own "Blocked by" list), so this suite only exercises "create a
+// new bucket". Real AWS is replaced by an in-process fake S3 + STS double
+// (see fake-s3-server.ts) — no mocking of this app's own server/utils
+// modules.
 describe('storage connection onboarding', async () => {
   const fakeS3: FakeS3Server = await startFakeS3Server()
   process.env.AWS_S3_ENDPOINT = fakeS3.url
@@ -19,6 +27,7 @@ describe('storage connection onboarding', async () => {
 
   const emailPrefix = `storage-conn-${Date.now()}`
   const password = 'Str0ng!Pass'
+  const awsAccountId = '123456789012'
 
   function uniqueEmail() {
     return `${emailPrefix}-${Math.random().toString(36).slice(2)}@example.com`
@@ -44,7 +53,7 @@ describe('storage connection onboarding', async () => {
     const user = await prisma.user.findUniqueOrThrow({ where: { email } })
     await $fetch(`/api/auth/verify/${user.verification_token}`)
 
-    return email
+    return user
   }
 
   async function loginCookieHeader(email: string) {
@@ -76,143 +85,223 @@ describe('storage connection onboarding', async () => {
     return { id: user.id, email, cookieHeader }
   }
 
+  // The Launch Stack URL's own stack parameters live inside its URL
+  // fragment, not its top-level query string (see
+  // server/api/storage-connections/launch.post.ts) — this pulls a single
+  // `param_*` value back out for assertions/simulating CloudFormation.
+  function launchUrlParam(launchUrl: string, name: string) {
+    const query = launchUrl.split('#')[1]?.split('?')[1] ?? ''
+    return new URLSearchParams(query).get(name)
+  }
+
   afterAll(async () => {
     await prisma.user.deleteMany({ where: { email: { startsWith: emailPrefix } } })
     await fakeS3.close()
   })
 
-  describe('create a new bucket', () => {
-    it('persists a generated bucket + region and reports has_aws_credentials afterwards', async () => {
-      const email = await createVerifiedUser()
-      const cookieHeader = await loginCookieHeader(email)
+  describe('launch', () => {
+    it('generates a bucket/role/external id and returns a pre-filled Launch Stack URL + pending token', async () => {
+      const user = await createVerifiedUser()
+      const cookieHeader = await loginCookieHeader(user.email)
 
-      const response = await fetch('/api/storage-connections', {
+      const response = await $fetch<{ launch_url: string, pending_token: string }>('/api/storage-connections/launch', {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'cookie': cookieHeader },
-        body: JSON.stringify({ mode: 'create', access_key_id: 'AKIATEST', secret_access_key: 'test-secret' }),
+        headers: { cookie: cookieHeader },
+        body: { aws_account_id: awsAccountId },
       })
 
-      expect(response.status).toBe(204)
+      expect(response.launch_url).toContain('cloudformation')
+      expect(launchUrlParam(response.launch_url, 'param_BucketName')).toMatch(/^pictacular-/)
+      expect(launchUrlParam(response.launch_url, 'param_RoleName')).toMatch(/^pictacular-storage-/)
+      expect(launchUrlParam(response.launch_url, 'param_ExternalId')).toBeTruthy()
+      expect(response.pending_token).toBeTruthy()
 
-      const user = await prisma.user.findUniqueOrThrow({ where: { email }, include: { aws_credentials: true } })
-      expect(user.aws_credentials?.bucket).toMatch(/^pictacular-/)
-      expect(user.aws_credentials?.region).toBe('eu-west-3')
-
-      const me = await $fetch<{ has_aws_credentials: boolean }>('/api/users/me', { headers: { cookie: cookieHeader } })
-      expect(me.has_aws_credentials).toBe(true)
+      await expect(prisma.awsCredentials.findFirst({ where: { user_id: user.id } })).resolves.toBeNull()
     })
 
-    it('rejects an invalid AWS key pair with 401', async () => {
-      const email = await createVerifiedUser()
-      const cookieHeader = await loginCookieHeader(email)
+    it('rejects an AWS Account ID that is not exactly 12 digits', async () => {
+      const user = await createVerifiedUser()
+      const cookieHeader = await loginCookieHeader(user.email)
 
       await expect(
-        $fetch('/api/storage-connections', {
+        $fetch('/api/storage-connections/launch', {
           method: 'POST',
           headers: { cookie: cookieHeader },
-          body: { mode: 'create', access_key_id: badAccessKeyId, secret_access_key: 'test-secret' },
-        }),
-      ).rejects.toMatchObject({ statusCode: 401, statusMessage: 'storage.invalid_credentials' })
-
-      await expect(prisma.awsCredentials.findFirst({ where: { user: { email } } })).resolves.toBeNull()
-    })
-  })
-
-  describe('connect an existing bucket', () => {
-    it('persists the named bucket once it is verified reachable', async () => {
-      const email = await createVerifiedUser()
-      const cookieHeader = await loginCookieHeader(email)
-      const bucket = uniqueBucketName()
-      fakeS3.seedBucket(bucket)
-
-      const response = await fetch('/api/storage-connections', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'cookie': cookieHeader },
-        body: JSON.stringify({ mode: 'connect', access_key_id: 'AKIATEST', secret_access_key: 'test-secret', bucket }),
-      })
-
-      expect(response.status).toBe(204)
-
-      const user = await prisma.user.findUniqueOrThrow({ where: { email }, include: { aws_credentials: true } })
-      expect(user.aws_credentials?.bucket).toBe(bucket)
-    })
-
-    it('rejects a bucket that does not exist / is not accessible with 404', async () => {
-      const email = await createVerifiedUser()
-      const cookieHeader = await loginCookieHeader(email)
-
-      await expect(
-        $fetch('/api/storage-connections', {
-          method: 'POST',
-          headers: { cookie: cookieHeader },
-          body: { mode: 'connect', access_key_id: 'AKIATEST', secret_access_key: 'test-secret', bucket: uniqueBucketName() },
-        }),
-      ).rejects.toMatchObject({ statusCode: 404, statusMessage: 'storage.bucket_not_found' })
-    })
-
-    it('rejects an invalid AWS key pair with 401', async () => {
-      const email = await createVerifiedUser()
-      const cookieHeader = await loginCookieHeader(email)
-      const bucket = uniqueBucketName()
-      fakeS3.seedBucket(bucket)
-
-      await expect(
-        $fetch('/api/storage-connections', {
-          method: 'POST',
-          headers: { cookie: cookieHeader },
-          body: { mode: 'connect', access_key_id: badAccessKeyId, secret_access_key: 'test-secret', bucket },
-        }),
-      ).rejects.toMatchObject({ statusCode: 401, statusMessage: 'storage.invalid_credentials' })
-    })
-  })
-
-  describe('validation and access control', () => {
-    it('rejects an invalid payload', async () => {
-      const email = await createVerifiedUser()
-      const cookieHeader = await loginCookieHeader(email)
-
-      await expect(
-        $fetch('/api/storage-connections', {
-          method: 'POST',
-          headers: { cookie: cookieHeader },
-          body: { mode: 'connect', access_key_id: 'AKIATEST', secret_access_key: 'test-secret' },
+          body: { aws_account_id: '123' },
         }),
       ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'validation.invalid_payload' })
     })
 
-    it('rejects a second connection attempt for a User who already has one', async () => {
-      const email = await createVerifiedUser()
-      const cookieHeader = await loginCookieHeader(email)
-
-      await $fetch('/api/storage-connections', {
-        method: 'POST',
-        headers: { cookie: cookieHeader },
-        body: { mode: 'create', access_key_id: 'AKIATEST', secret_access_key: 'test-secret' },
+    it('rejects a second launch for a User who already has a Storage Connection', async () => {
+      const user = await createVerifiedUser()
+      const cookieHeader = await loginCookieHeader(user.email)
+      const bucket = uniqueBucketName()
+      fakeS3.seedBucket(bucket)
+      await prisma.awsCredentials.create({
+        data: { bucket, region: 'eu-west-3', role_arn: testRoleArn, external_id: testExternalId, user: { connect: { id: user.id } } },
       })
 
       await expect(
-        $fetch('/api/storage-connections', {
+        $fetch('/api/storage-connections/launch', {
           method: 'POST',
           headers: { cookie: cookieHeader },
-          body: { mode: 'create', access_key_id: 'AKIATEST', secret_access_key: 'test-secret' },
+          body: { aws_account_id: awsAccountId },
         }),
       ).rejects.toMatchObject({ statusCode: 409, statusMessage: 'storage.already_connected' })
     })
 
     it('rejects an unauthenticated request with 401', async () => {
       await expect(
+        $fetch('/api/storage-connections/launch', { method: 'POST', body: { aws_account_id: awsAccountId } }),
+      ).rejects.toMatchObject({ statusCode: 401 })
+    })
+  })
+
+  describe('confirm', () => {
+    it('persists the generated bucket/role/external id once the Role is assumable and the bucket exists', async () => {
+      const user = await createVerifiedUser()
+      const cookieHeader = await loginCookieHeader(user.email)
+
+      const { launch_url: launchUrl, pending_token: pendingToken } = await $fetch<{ launch_url: string, pending_token: string }>('/api/storage-connections/launch', {
+        method: 'POST',
+        headers: { cookie: cookieHeader },
+        body: { aws_account_id: awsAccountId },
+      })
+      const bucket = launchUrlParam(launchUrl, 'param_BucketName')!
+      // Simulates the CloudFormation stack the User launched having
+      // finished creating the bucket (and Role, which the fake STS double
+      // accepts AssumeRole for regardless of ARN unless it's the
+      // badRoleArn sentinel — see fake-s3-server.ts).
+      fakeS3.seedBucket(bucket)
+
+      const response = await fetch('/api/storage-connections', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'cookie': cookieHeader },
+        body: JSON.stringify({ pending_token: pendingToken }),
+      })
+
+      expect(response.status).toBe(204)
+
+      const persisted = await prisma.user.findUniqueOrThrow({ where: { id: user.id }, include: { aws_credentials: true } })
+      expect(persisted.aws_credentials?.bucket).toBe(bucket)
+      expect(persisted.aws_credentials?.role_arn).toBe(`arn:aws:iam::${awsAccountId}:role/${launchUrlParam(launchUrl, 'param_RoleName')}`)
+      expect(persisted.aws_credentials?.region).toBe('eu-west-3')
+
+      const me = await $fetch<{ has_aws_credentials: boolean }>('/api/users/me', { headers: { cookie: cookieHeader } })
+      expect(me.has_aws_credentials).toBe(true)
+    })
+
+    it('rejects with 502 when the stack has not finished creating the bucket yet', async () => {
+      const user = await createVerifiedUser()
+      const cookieHeader = await loginCookieHeader(user.email)
+
+      const { pending_token: pendingToken } = await $fetch<{ pending_token: string }>('/api/storage-connections/launch', {
+        method: 'POST',
+        headers: { cookie: cookieHeader },
+        body: { aws_account_id: awsAccountId },
+      })
+      // Bucket deliberately never seeded — the stack "hasn't finished yet".
+
+      await expect(
         $fetch('/api/storage-connections', {
           method: 'POST',
-          body: { mode: 'create', access_key_id: 'AKIATEST', secret_access_key: 'test-secret' },
+          headers: { cookie: cookieHeader },
+          body: { pending_token: pendingToken },
         }),
+      ).rejects.toMatchObject({ statusCode: 502, statusMessage: 'storage.bucket_not_ready' })
+    })
+
+    it('rejects with 401 when the generated Role is not assumable', async () => {
+      const user = await createVerifiedUser()
+      const cookieHeader = await loginCookieHeader(user.email)
+      const bucket = uniqueBucketName()
+      fakeS3.seedBucket(bucket)
+      const pendingToken = encodeStorageConnectionLaunch({ user_id: user.id, external_id: testExternalId, bucket, role_arn: badRoleArn })
+
+      await expect(
+        $fetch('/api/storage-connections', {
+          method: 'POST',
+          headers: { cookie: cookieHeader },
+          body: { pending_token: pendingToken },
+        }),
+      ).rejects.toMatchObject({ statusCode: 401, statusMessage: 'storage.invalid_role' })
+    })
+
+    it('rejects an invalid/tampered pending token with 400', async () => {
+      const user = await createVerifiedUser()
+      const cookieHeader = await loginCookieHeader(user.email)
+
+      await expect(
+        $fetch('/api/storage-connections', {
+          method: 'POST',
+          headers: { cookie: cookieHeader },
+          body: { pending_token: 'not-a-real-token' },
+        }),
+      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'storage.invalid_pending_token' })
+    })
+
+    it('rejects a pending token issued for a different User with 400', async () => {
+      const user = await createVerifiedUser()
+      const otherUser = await createVerifiedUser()
+      const cookieHeader = await loginCookieHeader(user.email)
+      const bucket = uniqueBucketName()
+      fakeS3.seedBucket(bucket)
+      const pendingToken = encodeStorageConnectionLaunch({ user_id: otherUser.id, external_id: testExternalId, bucket, role_arn: testRoleArn })
+
+      await expect(
+        $fetch('/api/storage-connections', {
+          method: 'POST',
+          headers: { cookie: cookieHeader },
+          body: { pending_token: pendingToken },
+        }),
+      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'storage.invalid_pending_token' })
+    })
+
+    it('rejects a second connection attempt for a User who already has one', async () => {
+      const user = await createVerifiedUser()
+      const cookieHeader = await loginCookieHeader(user.email)
+      const bucket = uniqueBucketName()
+      fakeS3.seedBucket(bucket)
+      await prisma.awsCredentials.create({
+        data: { bucket, region: 'eu-west-3', role_arn: testRoleArn, external_id: testExternalId, user: { connect: { id: user.id } } },
+      })
+      const secondBucket = uniqueBucketName()
+      fakeS3.seedBucket(secondBucket)
+      const pendingToken = encodeStorageConnectionLaunch({ user_id: user.id, external_id: testExternalId, bucket: secondBucket, role_arn: testRoleArn })
+
+      await expect(
+        $fetch('/api/storage-connections', {
+          method: 'POST',
+          headers: { cookie: cookieHeader },
+          body: { pending_token: pendingToken },
+        }),
+      ).rejects.toMatchObject({ statusCode: 409, statusMessage: 'storage.already_connected' })
+    })
+
+    it('rejects an invalid payload', async () => {
+      const user = await createVerifiedUser()
+      const cookieHeader = await loginCookieHeader(user.email)
+
+      await expect(
+        $fetch('/api/storage-connections', {
+          method: 'POST',
+          headers: { cookie: cookieHeader },
+          body: {},
+        }),
+      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'validation.invalid_payload' })
+    })
+
+    it('rejects an unauthenticated request with 401', async () => {
+      await expect(
+        $fetch('/api/storage-connections', { method: 'POST', body: { pending_token: 'whatever' } }),
       ).rejects.toMatchObject({ statusCode: 401 })
     })
   })
 
   describe('check-bucket', () => {
     it('rejects when the User has no Storage Connection yet', async () => {
-      const email = await createVerifiedUser()
-      const cookieHeader = await loginCookieHeader(email)
+      const user = await createVerifiedUser()
+      const cookieHeader = await loginCookieHeader(user.email)
 
       await expect(
         $fetch('/api/storage-connections/check-bucket', { headers: { cookie: cookieHeader } }),
@@ -220,15 +309,12 @@ describe('storage connection onboarding', async () => {
     })
 
     it('reports has_photos: false for an empty connected bucket', async () => {
-      const email = await createVerifiedUser()
-      const cookieHeader = await loginCookieHeader(email)
+      const user = await createVerifiedUser()
+      const cookieHeader = await loginCookieHeader(user.email)
       const bucket = uniqueBucketName()
       fakeS3.seedBucket(bucket)
-
-      await $fetch('/api/storage-connections', {
-        method: 'POST',
-        headers: { cookie: cookieHeader },
-        body: { mode: 'connect', access_key_id: 'AKIATEST', secret_access_key: 'test-secret', bucket },
+      await prisma.awsCredentials.create({
+        data: { bucket, region: 'eu-west-3', role_arn: testRoleArn, external_id: testExternalId, user: { connect: { id: user.id } } },
       })
 
       const response = await $fetch<{ has_photos: boolean, import_in_progress: boolean, import_completed: boolean }>('/api/storage-connections/check-bucket', {
@@ -241,15 +327,12 @@ describe('storage connection onboarding', async () => {
     })
 
     it('reports has_photos: true when the connected bucket already contains image files', async () => {
-      const email = await createVerifiedUser()
-      const cookieHeader = await loginCookieHeader(email)
+      const user = await createVerifiedUser()
+      const cookieHeader = await loginCookieHeader(user.email)
       const bucket = uniqueBucketName()
       fakeS3.seedBucket(bucket, ['holiday/beach.jpg', 'notes.txt'])
-
-      await $fetch('/api/storage-connections', {
-        method: 'POST',
-        headers: { cookie: cookieHeader },
-        body: { mode: 'connect', access_key_id: 'AKIATEST', secret_access_key: 'test-secret', bucket },
+      await prisma.awsCredentials.create({
+        data: { bucket, region: 'eu-west-3', role_arn: testRoleArn, external_id: testExternalId, user: { connect: { id: user.id } } },
       })
 
       const response = await $fetch<{ has_photos: boolean, import_in_progress: boolean, import_completed: boolean }>('/api/storage-connections/check-bucket', {

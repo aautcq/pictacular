@@ -1,20 +1,18 @@
 <script setup lang="ts">
 definePageMeta({ middleware: 'auth' })
 
-const { connectStorage, checkBucket, user } = useCurrentUser()
+const { launchStorageConnection, confirmStorageConnection, checkBucket, user } = useCurrentUser()
 const { importing, progress, result, etaSeconds, importPhotos } = useBucketImport()
 const toast = useToast()
 const { translateError, getFieldErrors } = useErrorMessage()
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
 
 const form = useTemplateRef('form')
-const mode = shallowRef<'create' | 'connect' | null>(null)
-const state = reactive({
-  bucket: '',
-  access_key_id: '',
-  secret_access_key: '',
-})
-const loading = shallowRef(false)
+const state = reactive({ aws_account_id: '' })
+const launching = shallowRef(false)
+const confirming = shallowRef(false)
+const launchUrl = shallowRef<string | null>(null)
+const pendingToken = shallowRef<string | null>(null)
 const connected = shallowRef(user.value?.has_aws_credentials ?? false)
 const importSkipped = shallowRef(false)
 
@@ -47,10 +45,6 @@ watchEffect(() => {
     startImport()
 })
 
-function selectMode(value: 'create' | 'connect') {
-  mode.value = value
-}
-
 async function startImport() {
   try {
     await importPhotos()
@@ -64,27 +58,37 @@ function skipImport() {
   importSkipped.value = true
 }
 
-async function submit() {
-  if (!mode.value)
-    return
-
-  loading.value = true
+async function launch() {
+  launching.value = true
   try {
-    await connectStorage(
-      mode.value === 'create'
-        ? { mode: 'create', access_key_id: state.access_key_id, secret_access_key: state.secret_access_key }
-        : { mode: 'connect', access_key_id: state.access_key_id, secret_access_key: state.secret_access_key, bucket: state.bucket },
-    )
-
-    connected.value = true
-    bucketStatus.value = mode.value === 'connect' ? await checkBucket() : noImportStatus
+    const response = await launchStorageConnection(state.aws_account_id)
+    launchUrl.value = response.launch_url
+    pendingToken.value = response.pending_token
   }
   catch (error) {
     form.value?.setErrors(getFieldErrors(error))
     toast.add({ title: translateError(error), color: 'error' })
   }
   finally {
-    loading.value = false
+    launching.value = false
+  }
+}
+
+async function confirm() {
+  if (!pendingToken.value)
+    return
+
+  confirming.value = true
+  try {
+    await confirmStorageConnection(pendingToken.value)
+    connected.value = true
+    bucketStatus.value = noImportStatus
+  }
+  catch (error) {
+    toast.add({ title: translateError(error), color: 'error' })
+  }
+  finally {
+    confirming.value = false
   }
 }
 
@@ -178,76 +182,55 @@ const etaLabel = computed(() => {
         </p>
       </div>
 
-      <div class="flex justify-center gap-x-4">
-        <UButton
-          type="button"
-          :active="mode === 'create'"
-          variant="soft"
-          active-variant="solid"
-          color="neutral"
-          active-color="success"
-          :label="t('createBucket')"
-          @click="selectMode('create')"
-        />
-        <UButton
-          type="button"
-          :active="mode === 'connect'"
-          variant="soft"
-          active-variant="solid"
-          color="neutral"
-          active-color="success"
-          :label="t('connectBucket')"
-          @click="selectMode('connect')"
-        />
+      <div v-if="!launchUrl" class="flex flex-col gap-y-4">
+        <UForm
+          ref="form"
+          class="space-y-4"
+          :schema="storageConnectionLaunchSchema"
+          :state="state"
+          @submit.prevent="launch"
+        >
+          <UFormField :label="t('accountIdLabel')" name="aws_account_id">
+            <UInput
+              v-model="state.aws_account_id"
+              type="text"
+              inputmode="numeric"
+              autocomplete="off"
+              autofocus
+              required
+              :placeholder="t('accountIdPlaceholder')"
+              class="w-full"
+            />
+          </UFormField>
+
+          <UButton
+            type="submit"
+            :loading="launching"
+            :label="launching ? t('launching') : t('launchStack')"
+            block
+          />
+        </UForm>
       </div>
 
-      <UForm
-        v-if="mode"
-        ref="form"
-        class="space-y-4"
-        :schema="storageConnectionSchema"
-        :state="{ mode, ...state }"
-        @submit.prevent="submit"
-      >
-        <UFormField v-if="mode === 'connect'" :label="t('bucketNameLabel')" name="bucket">
-          <UInput
-            v-model="state.bucket"
-            type="text"
-            autocomplete="off"
-            autofocus
-            required
-            :placeholder="t('bucketPlaceholder')"
-            class="w-full"
-          />
-        </UFormField>
-
-        <UFormField :label="t('accessKeyLabel')" name="access_key_id">
-          <BasePasswordInput
-            v-model="state.access_key_id"
-            autocomplete="off"
-            required
-            :placeholder="t('accessKeyPlaceholder')"
-            class="w-full"
-          />
-        </UFormField>
-
-        <UFormField :label="t('secretKeyLabel')" name="secret_access_key">
-          <BasePasswordInput
-            v-model="state.secret_access_key"
-            autocomplete="off"
-            required
-            :placeholder="t('secretKeyPlaceholder')"
-            class="w-full"
-          />
-        </UFormField>
+      <div v-else class="flex flex-col gap-y-4 items-center text-center">
+        <p>
+          {{ t('launchInstructions') }}
+        </p>
 
         <UButton
-          type="submit"
-          :loading="loading"
-          :label="loading ? t('connecting') : t('connect')"
-          block
+          :label="t('openConsole')"
+          :to="launchUrl"
+          target="_blank"
+          variant="soft"
         />
-      </UForm>
+
+        <UButton
+          type="button"
+          :loading="confirming"
+          :label="confirming ? t('confirming') : t('confirmLaunched')"
+          @click="confirm"
+        />
+      </div>
     </div>
   </AuthCard>
 </template>
@@ -268,17 +251,15 @@ const etaLabel = computed(() => {
     "importResult": "Imported {photoCount} into {albumCount}.",
     "connectionReady": "Your storage connection is ready.",
     "continue": "Continue",
-    "description": "Pictacular stores your photos in your own AWS S3 bucket. Provide an AWS access key + secret key, then either create a new bucket for Pictacular or connect one you already have.",
-    "createBucket": "Create a new bucket for me",
-    "connectBucket": "I already have a bucket",
-    "bucketNameLabel": "Bucket name",
-    "bucketPlaceholder": "Enter your bucket name",
-    "accessKeyLabel": "Access key ID",
-    "accessKeyPlaceholder": "Enter your access key ID",
-    "secretKeyLabel": "Secret access key",
-    "secretKeyPlaceholder": "Enter your secret access key",
-    "connecting": "Connecting…",
-    "connect": "Connect"
+    "description": "Pictacular stores your photos in your own AWS S3 bucket. Enter your AWS Account ID, then launch a CloudFormation stack that creates a bucket and a Role Pictacular can use — no AWS keys are ever shared with Pictacular.",
+    "accountIdLabel": "AWS Account ID",
+    "accountIdPlaceholder": "12-digit AWS Account ID",
+    "launchStack": "Launch Stack",
+    "launching": "Preparing…",
+    "launchInstructions": "A new tab opened the AWS CloudFormation Console with everything pre-filled — review and launch the stack there, then come back and confirm once it's finished.",
+    "openConsole": "Open AWS Console",
+    "confirmLaunched": "I've launched it, confirm connection",
+    "confirming": "Confirming…"
   }
 }
 </i18n>
