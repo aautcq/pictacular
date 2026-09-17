@@ -1,0 +1,34 @@
+name: CloudFormation Lint
+
+on:
+  pull_request:
+    paths:
+      - 'cloudformation/**'
+  push:
+    branches: [main]
+    paths:
+      - 'cloudformation/**'
+
+permissions: {}
+
+jobs:
+  cfn-lint:
+    runs-on: ubuntu-latest
+    name: cfn-lint
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install cfn-lint
+        run: pip install cfn-lint
+
+      - name: Lint CloudFormation templates
+        # A `**` glob needs bash's globstar, which isn't on by default —
+        # this repo has no template subdirectories today, so a flat glob
+        # is enough (revisit if that changes).
+        run: cfn-lint cloudformation/*.yaml
