@@ -1,18 +1,21 @@
 import { Prisma } from '#server/generated/prisma/client'
-import { encodeAwsCredentials } from '#server/utils/jwt'
+import { decodeStorageConnectionLaunch } from '#server/utils/jwt'
 import { prisma } from '#server/utils/prisma'
-import { connectExistingBucket, createBucket } from '#server/utils/storage'
+import { confirmStorageConnection } from '#server/utils/storage'
 
-// Storage Connection onboarding endpoint (issue #49): a signed-in, verified
-// User submits their own AWS key pair and either has Pictacular create a
-// new bucket for them or names an existing one to connect (CORS is set up
-// either way), then the connection is persisted as their (one-per-user)
-// AwsCredentials row.
+// Confirms a "create a new bucket" Storage Connection (issue #150) after
+// the User has launched (and, they assert, finished) the CloudFormation
+// stack POST /api/storage-connections/launch handed them: redeems the
+// signed `pending_token` from that step for the Role ARN/bucket/External
+// ID Pictacular generated, assumes the Role to verify the stack really
+// has finished creating it (AssumeRole itself is the "is it ready?" check
+// — see server/utils/storage.ts#confirmStorageConnection), and persists
+// the connection as the User's (one-per-user) AwsCredentials row.
 export default defineEventHandler(async (event) => {
   const { user } = requireAuth(event)
 
   const body = await readBody(event)
-  const result = storageConnectionSchema.safeParse(body)
+  const result = storageConnectionConfirmSchema.safeParse(body)
 
   if (!result.success) {
     throw createError({
@@ -35,20 +38,23 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const { mode, access_key_id, secret_access_key } = result.data
-  const tokens = encodeAwsCredentials({ access_key_id, secret_access_key })
-  const allowedOrigin = getRequestURL(event).origin
+  const pending = decodeStorageConnectionLaunch(result.data.pending_token)
+  if (!pending || pending.user_id !== user.id) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'storage.invalid_pending_token',
+    })
+  }
 
-  const { bucket, region } = mode === 'create'
-    ? await createBucket(tokens, allowedOrigin)
-    : await connectExistingBucket(tokens, result.data.bucket, allowedOrigin)
+  const { bucket, region } = await confirmStorageConnection(pending.role_arn, pending.external_id, pending.bucket)
 
   try {
     await prisma.awsCredentials.create({
       data: {
         bucket,
         region,
-        tokens,
+        role_arn: pending.role_arn,
+        external_id: pending.external_id,
         user: { connect: { id: user.id } },
       },
     })

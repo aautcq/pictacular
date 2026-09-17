@@ -2,9 +2,8 @@ import type { FakeS3Server } from './fake-s3-server'
 import process from 'node:process'
 import { $fetch, fetch, setup } from '@nuxt/test-utils/e2e'
 import { afterAll, describe, expect, it } from 'vitest'
-import { encodeAwsCredentials } from '../../server/utils/jwt'
 import { prisma } from '../../server/utils/prisma'
-import { startFakeS3Server } from './fake-s3-server'
+import { badRoleArn, startFakeS3Server, testExternalId, testRoleArn } from './fake-s3-server'
 
 // Black-box HTTP tests for restoring Archived Photos (issue #145):
 // `POST /api/photos/:id/restore` (single) and `POST /api/photos/restore`
@@ -68,10 +67,14 @@ describe('archived photo restore', async () => {
     const bucket = uniqueBucketName()
     fakeS3.seedBucket(bucket)
 
-    await $fetch('/api/storage-connections', {
-      method: 'POST',
-      headers: { cookie: cookieHeader },
-      body: { mode: 'connect', access_key_id: 'AKIATEST', secret_access_key: 'test-secret', bucket },
+    await prisma.awsCredentials.create({
+      data: {
+        bucket,
+        region: 'eu-west-3',
+        role_arn: testRoleArn,
+        external_id: testExternalId,
+        user: { connect: { id: user.id } },
+      },
     })
 
     return { ...user, cookieHeader, bucket }
@@ -189,7 +192,7 @@ describe('archived photo restore', async () => {
       // id with InvalidAccessKeyId (see fake-s3-server.ts).
       await prisma.awsCredentials.update({
         where: { user_id: userId },
-        data: { tokens: encodeAwsCredentials({ access_key_id: 'BAD_ACCESS_KEY_ID', secret_access_key: 'test-secret' }) },
+        data: { role_arn: badRoleArn },
       })
 
       await expect(

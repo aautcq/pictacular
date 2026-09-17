@@ -6,7 +6,7 @@ Description: >-
   account so its server can call sts:AssumeRole and operate on this bucket
   without ever handling a long-lived access key. Launched once per Storage
   Connection via Pictacular's "Connect your storage" onboarding, which
-  pre-fills both parameters below through the Launch Stack URL's query
+  pre-fills every parameter below through the Launch Stack URL's query
   string — nothing needs to be typed by hand.
 
 Parameters:
@@ -25,6 +25,22 @@ Parameters:
       Pictacular's own origin (e.g. https://pictacular.app), pre-filled by
       Pictacular, so the created bucket's CORS rule allows the app to load
       images directly from it.
+  BucketName:
+    Type: String
+    MinLength: 1
+    Description: >-
+      Globally-unique bucket name generated and pre-filled by Pictacular
+      (rather than left to CloudFormation's own auto-naming) — Pictacular
+      needs to know this name upfront to confirm the connection afterwards
+      without asking the User to paste anything back.
+  RoleName:
+    Type: String
+    MinLength: 1
+    Description: >-
+      Role name generated and pre-filled by Pictacular, for the same
+      reason as BucketName above: Pictacular combines this with the AWS
+      Account ID the User supplies before launching to predict the
+      resulting Role's ARN ahead of time.
 
 Resources:
   StorageConnectionBucket:
@@ -35,9 +51,7 @@ Resources:
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
-      # No BucketName: letting CloudFormation generate a globally-unique
-      # name avoids collisions across every User's own "create a new
-      # bucket" stack.
+      BucketName: !Ref BucketName
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -55,8 +69,7 @@ Resources:
   StorageConnectionRole:
     Type: AWS::IAM::Role
     Properties:
-      # No RoleName: avoids name collisions across every User's stack, same
-      # rationale as the bucket above.
+      RoleName: !Ref RoleName
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:

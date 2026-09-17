@@ -3,9 +3,8 @@ import process from 'node:process'
 import { createPage, setup, url } from '@nuxt/test-utils/e2e'
 import { afterAll, describe, expect, it } from 'vitest'
 import { hashPassword } from '../../server/utils/crypto'
-import { encodeAwsCredentials } from '../../server/utils/jwt'
 import { prisma } from '../../server/utils/prisma'
-import { startFakeS3Server } from './fake-s3-server'
+import { startFakeS3Server, testExternalId, testRoleArn } from './fake-s3-server'
 
 // Browser-driven test (issue #145): a signed-in User with an Archived
 // Photo already in their library sees a clear "Archived" placeholder
@@ -48,7 +47,8 @@ describe('archived photo restore journey', async () => {
       data: {
         bucket,
         region: 'eu-west-3',
-        tokens: encodeAwsCredentials({ access_key_id: 'AKIATEST', secret_access_key: 'test-secret' }),
+        role_arn: testRoleArn,
+        external_id: testExternalId,
         user: { connect: { id: user.id } },
       },
     })

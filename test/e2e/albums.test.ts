@@ -3,7 +3,7 @@ import process from 'node:process'
 import { $fetch, fetch, setup } from '@nuxt/test-utils/e2e'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../../server/utils/prisma'
-import { startFakeS3Server } from './fake-s3-server'
+import { startFakeS3Server, testExternalId, testRoleArn } from './fake-s3-server'
 
 // Black-box HTTP tests for the Album core endpoints (issue #51): create,
 // list (paginated), search, full show, lightweight show, update,
@@ -76,10 +76,14 @@ describe('albums core', async () => {
     const bucket = uniqueBucketName(label)
     fakeS3.seedBucket(bucket)
 
-    await $fetch('/api/storage-connections', {
-      method: 'POST',
-      headers: { cookie: cookieHeader },
-      body: { mode: 'connect', access_key_id: 'AKIATEST', secret_access_key: 'test-secret', bucket },
+    await prisma.awsCredentials.create({
+      data: {
+        bucket,
+        region: 'eu-west-3',
+        role_arn: testRoleArn,
+        external_id: testExternalId,
+        user: { connect: { id: user.id } },
+      },
     })
 
     return { ...user, cookieHeader }
@@ -196,10 +200,14 @@ describe('albums core', async () => {
         // on `owner` still having one aren't affected.
         const restoredBucket = uniqueBucketName('owner-restored')
         fakeS3.seedBucket(restoredBucket)
-        await $fetch('/api/storage-connections', {
-          method: 'POST',
-          headers: { cookie: owner.cookieHeader },
-          body: { mode: 'connect', access_key_id: 'AKIATEST', secret_access_key: 'test-secret', bucket: restoredBucket },
+        await prisma.awsCredentials.create({
+          data: {
+            bucket: restoredBucket,
+            region: 'eu-west-3',
+            role_arn: testRoleArn,
+            external_id: testExternalId,
+            user: { connect: { id: owner.id } },
+          },
         })
       }
     })

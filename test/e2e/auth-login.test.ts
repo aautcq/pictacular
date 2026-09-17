@@ -1,8 +1,10 @@
+import type { FakeS3Server } from './fake-s3-server'
+import process from 'node:process'
 import { $fetch, fetch, setup } from '@nuxt/test-utils/e2e'
 import { afterAll, describe, expect, it, vi } from 'vitest'
 import { accessTokenCookieName, refreshTokenCookieName } from '../../server/utils/cookies'
-import { encodeAwsCredentials } from '../../server/utils/jwt'
 import { prisma } from '../../server/utils/prisma'
+import { startFakeS3Server, testExternalId, testRoleArn } from './fake-s3-server'
 
 // Black-box HTTP tests for login + logout + session lifecycle + lockout
 // (issue #30): 5 incorrect passwords lock the account and trigger a
@@ -11,6 +13,11 @@ import { prisma } from '../../server/utils/prisma'
 // avatar URL when applicable; logout deactivates the session and clears
 // the cookies.
 describe('login + logout + session lifecycle + lockout', async () => {
+  // See user-profile.test.ts's own fake STS/S3 double for why this suite
+  // needs one despite never asserting on bucket contents itself.
+  const fakeS3: FakeS3Server = await startFakeS3Server()
+  process.env.AWS_S3_ENDPOINT = fakeS3.url
+
   await setup()
 
   const emailPrefix = `john-${Date.now()}`
@@ -63,6 +70,7 @@ describe('login + logout + session lifecycle + lockout', async () => {
   afterAll(async () => {
     await prisma.emailOutbox.deleteMany({ where: { recipient_email: { startsWith: emailPrefix } } })
     await prisma.user.deleteMany({ where: { email: { startsWith: emailPrefix } } })
+    await fakeS3.close()
   })
 
   it('rejects login with a wrong password and increments the failed-attempt counter', async () => {
@@ -238,7 +246,8 @@ describe('login + logout + session lifecycle + lockout', async () => {
       data: {
         bucket: 'pictacular-test-bucket',
         region: 'eu-west-3',
-        tokens: encodeAwsCredentials({ access_key_id: 'AKIATEST', secret_access_key: 'test-secret' }),
+        role_arn: testRoleArn,
+        external_id: testExternalId,
         user: { connect: { id: user.id } },
       },
     })
@@ -249,7 +258,7 @@ describe('login + logout + session lifecycle + lockout', async () => {
     )
 
     expect(response.has_aws_credentials).toBe(true)
-    expect(response.avatar_url).toMatch(/^https:\/\/pictacular-test-bucket\.s3\./)
+    expect(response.avatar_url).toContain('pictacular-test-bucket')
   })
 
   it('logs out an authenticated session, deactivating it and clearing both cookies', async () => {
