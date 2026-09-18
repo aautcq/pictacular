@@ -34,13 +34,22 @@ Parameters:
       value not pre-filled, since Pictacular has no way to know it ahead
       of time. Must already exist in this AWS account and be reachable
       from the region this stack is launched in.
+  RoleName:
+    Type: String
+    MinLength: 1
+    Description: >-
+      Role name generated and pre-filled by Pictacular (same rationale as
+      create-bucket.yaml's own RoleName parameter): Pictacular combines
+      this with the AWS Account ID the User supplies before launching to
+      predict the resulting Role's ARN ahead of time, so it can confirm
+      the connection afterwards (issue #152) without asking the User to
+      paste anything back or polling this stack's own Outputs.
 
 Resources:
   StorageConnectionRole:
     Type: AWS::IAM::Role
     Properties:
-      # No RoleName: avoids name collisions across every User's stack,
-      # same rationale as create-bucket.yaml's own Role/bucket.
+      RoleName: !Ref RoleName
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -137,7 +146,6 @@ Resources:
           # other rule already on the bucket.
           RULE_ID = 'pictacular-cors'
 
-
           def merged_rules(s3, bucket, allowed_origin):
               try:
                   existing = s3.get_bucket_cors(Bucket=bucket)['CORSRules']
@@ -155,7 +163,6 @@ Resources:
                   'MaxAgeSeconds': 3000,
               }
               return other_rules + [pictacular_rule]
-
 
           def handler(event, context):
               status, reason = 'SUCCESS', 'ok'
@@ -185,7 +192,6 @@ Resources:
                       status, reason = 'FAILED', str(error)
 
               send(event, status, reason, physical_id)
-
 
           def send(event, status, reason, physical_id):
               body = json.dumps({

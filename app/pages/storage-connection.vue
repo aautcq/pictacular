@@ -8,13 +8,26 @@ const { translateError, getFieldErrors } = useErrorMessage()
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
 
 const form = useTemplateRef('form')
-const state = reactive({ aws_account_id: '' })
+const state = reactive({ mode: 'create' as 'create' | 'connect', aws_account_id: '', bucket: '' })
 const launching = shallowRef(false)
 const confirming = shallowRef(false)
 const launchUrl = shallowRef<string | null>(null)
 const pendingToken = shallowRef<string | null>(null)
 const connected = shallowRef(user.value?.has_aws_credentials ?? false)
 const importSkipped = shallowRef(false)
+
+// Radio options for the two onboarding modes (issue #152): switching mode
+// clears any bucket name already typed, so a User who starts naming a
+// bucket then switches back to "create a new bucket" doesn't silently
+// submit a stale, unused value.
+const modeItems = [
+  { label: t('modeCreate'), value: 'create' as const },
+  { label: t('modeConnect'), value: 'connect' as const },
+]
+
+watch(() => state.mode, () => {
+  state.bucket = ''
+})
 
 const { data: hasPhotos } = useAsyncData(async () => {
   if (connected.value && !importSkipped.value) {
@@ -39,7 +52,10 @@ function skipImport() {
 async function launch() {
   launching.value = true
   try {
-    const response = await launchStorageConnection(state.aws_account_id)
+    const payload = state.mode === 'create'
+      ? { mode: 'create' as const, aws_account_id: state.aws_account_id }
+      : { mode: 'connect' as const, aws_account_id: state.aws_account_id, bucket: state.bucket }
+    const response = await launchStorageConnection(payload)
     launchUrl.value = response.launch_url
     pendingToken.value = response.pending_token
   }
@@ -60,7 +76,11 @@ async function confirm() {
   try {
     await confirmStorageConnection(pendingToken.value)
     connected.value = true
-    hasPhotos.value = false
+    // A freshly created bucket (mode "create") can never already contain
+    // photos, so skip the round trip; a connected *existing* bucket
+    // (mode "connect", issue #152) might, so it needs the real
+    // `check-bucket` lookup to decide whether to offer the import step.
+    hasPhotos.value = state.mode === 'connect' ? await checkBucket() : false
   }
   catch (error) {
     toast.add({ title: translateError(error), color: 'error' })
@@ -168,6 +188,10 @@ const etaLabel = computed(() => {
           :state="state"
           @submit.prevent="launch"
         >
+          <UFormField :label="t('modeLabel')" name="mode">
+            <URadioGroup v-model="state.mode" :items="modeItems" />
+          </UFormField>
+
           <UFormField :label="t('accountIdLabel')" name="aws_account_id">
             <UInput
               v-model="state.aws_account_id"
@@ -177,6 +201,17 @@ const etaLabel = computed(() => {
               autofocus
               required
               :placeholder="t('accountIdPlaceholder')"
+              class="w-full"
+            />
+          </UFormField>
+
+          <UFormField v-if="state.mode === 'connect'" :label="t('bucketNameLabel')" name="bucket">
+            <UInput
+              v-model="state.bucket"
+              type="text"
+              autocomplete="off"
+              required
+              :placeholder="t('bucketNamePlaceholder')"
               class="w-full"
             />
           </UFormField>
@@ -229,9 +264,14 @@ const etaLabel = computed(() => {
     "importResult": "Imported {photoCount} into {albumCount}.",
     "connectionReady": "Your storage connection is ready.",
     "continue": "Continue",
-    "description": "Pictacular stores your photos in your own AWS S3 bucket. Enter your AWS Account ID, then launch a CloudFormation stack that creates a bucket and a Role Pictacular can use — no AWS keys are ever shared with Pictacular.",
+    "description": "Pictacular stores your photos in your own AWS S3 bucket. Choose whether to create a new bucket or connect one you already own, enter your AWS Account ID, then launch a CloudFormation stack that sets up a Role Pictacular can use — no AWS keys are ever shared with Pictacular.",
+    "modeLabel": "Bucket",
+    "modeCreate": "Create a new bucket for me",
+    "modeConnect": "Connect an existing bucket",
     "accountIdLabel": "AWS Account ID",
     "accountIdPlaceholder": "12-digit AWS Account ID",
+    "bucketNameLabel": "Bucket name",
+    "bucketNamePlaceholder": "Name of your existing bucket",
     "launchStack": "Launch Stack",
     "launching": "Preparing…",
     "launchInstructions": "A new tab opened the AWS CloudFormation Console with everything pre-filled — review and launch the stack there, then come back and confirm once it's finished.",

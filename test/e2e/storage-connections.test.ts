@@ -7,16 +7,15 @@ import { prisma } from '../../server/utils/prisma'
 import { badRoleArn, startFakeS3Server, testExternalId, testRoleArn } from './fake-s3-server'
 
 // Black-box HTTP tests for the Storage Connection onboarding endpoints
-// (issue #150): a signed-in, verified User supplies only their AWS
-// Account ID (POST .../launch), is handed a pre-filled CloudFormation
-// "Launch Stack" URL + a signed `pending_token` recording the bucket/
-// Role ARN/External ID Pictacular generated, and — once they say they've
-// run the stack — redeems that token (POST /api/storage-connections) to
-// have Pictacular verify the Role is really assumable and the bucket
-// really exists before persisting the connection. "Connect an existing
-// bucket" mode is deferred to issue #152 (see docs/adr/0006 and this
-// ticket's own "Blocked by" list), so this suite only exercises "create a
-// new bucket". Real AWS is replaced by an in-process fake S3 + STS double
+// (issues #150/#152): a signed-in, verified User supplies their AWS
+// Account ID (POST .../launch) — plus, for "connect an existing bucket"
+// mode, that bucket's own name — and is handed a pre-filled
+// CloudFormation "Launch Stack" URL + a signed `pending_token` recording
+// the bucket/Role ARN/External ID/mode Pictacular generated. Once they
+// say they've run the stack, they redeem that token (POST
+// /api/storage-connections) to have Pictacular verify the Role is really
+// assumable and the bucket really exists before persisting the
+// connection. Real AWS is replaced by an in-process fake S3 + STS double
 // (see fake-s3-server.ts) — no mocking of this app's own server/utils
 // modules.
 describe('storage connection onboarding', async () => {
@@ -90,7 +89,7 @@ describe('storage connection onboarding', async () => {
       const response = await $fetch<{ launch_url: string, pending_token: string }>('/api/storage-connections/launch', {
         method: 'POST',
         headers: { cookie: cookieHeader },
-        body: { aws_account_id: awsAccountId },
+        body: { mode: 'create', aws_account_id: awsAccountId },
       })
 
       expect(response.launch_url).toContain('cloudformation')
@@ -110,7 +109,7 @@ describe('storage connection onboarding', async () => {
         $fetch('/api/storage-connections/launch', {
           method: 'POST',
           headers: { cookie: cookieHeader },
-          body: { aws_account_id: '123' },
+          body: { mode: 'create', aws_account_id: '123' },
         }),
       ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'validation.invalid_payload' })
     })
@@ -128,14 +127,14 @@ describe('storage connection onboarding', async () => {
         $fetch('/api/storage-connections/launch', {
           method: 'POST',
           headers: { cookie: cookieHeader },
-          body: { aws_account_id: awsAccountId },
+          body: { mode: 'create', aws_account_id: awsAccountId },
         }),
       ).rejects.toMatchObject({ statusCode: 409, statusMessage: 'storage.already_connected' })
     })
 
     it('rejects an unauthenticated request with 401', async () => {
       await expect(
-        $fetch('/api/storage-connections/launch', { method: 'POST', body: { aws_account_id: awsAccountId } }),
+        $fetch('/api/storage-connections/launch', { method: 'POST', body: { mode: 'create', aws_account_id: awsAccountId } }),
       ).rejects.toMatchObject({ statusCode: 401 })
     })
   })
@@ -148,7 +147,7 @@ describe('storage connection onboarding', async () => {
       const { launch_url: launchUrl, pending_token: pendingToken } = await $fetch<{ launch_url: string, pending_token: string }>('/api/storage-connections/launch', {
         method: 'POST',
         headers: { cookie: cookieHeader },
-        body: { aws_account_id: awsAccountId },
+        body: { mode: 'create', aws_account_id: awsAccountId },
       })
       const bucket = launchUrlParam(launchUrl, 'param_BucketName')!
       // Simulates the CloudFormation stack the User launched having
@@ -181,7 +180,7 @@ describe('storage connection onboarding', async () => {
       const { pending_token: pendingToken } = await $fetch<{ pending_token: string }>('/api/storage-connections/launch', {
         method: 'POST',
         headers: { cookie: cookieHeader },
-        body: { aws_account_id: awsAccountId },
+        body: { mode: 'create', aws_account_id: awsAccountId },
       })
       // Bucket deliberately never seeded — the stack "hasn't finished yet".
 
@@ -199,7 +198,7 @@ describe('storage connection onboarding', async () => {
       const cookieHeader = await loginCookieHeader(user.email)
       const bucket = uniqueBucketName()
       fakeS3.seedBucket(bucket)
-      const pendingToken = encodeStorageConnectionLaunch({ user_id: user.id, external_id: testExternalId, bucket, role_arn: badRoleArn })
+      const pendingToken = encodeStorageConnectionLaunch({ user_id: user.id, external_id: testExternalId, bucket, role_arn: badRoleArn, mode: 'create' })
 
       await expect(
         $fetch('/api/storage-connections', {
@@ -229,7 +228,7 @@ describe('storage connection onboarding', async () => {
       const cookieHeader = await loginCookieHeader(user.email)
       const bucket = uniqueBucketName()
       fakeS3.seedBucket(bucket)
-      const pendingToken = encodeStorageConnectionLaunch({ user_id: otherUser.id, external_id: testExternalId, bucket, role_arn: testRoleArn })
+      const pendingToken = encodeStorageConnectionLaunch({ user_id: otherUser.id, external_id: testExternalId, bucket, role_arn: testRoleArn, mode: 'create' })
 
       await expect(
         $fetch('/api/storage-connections', {
@@ -250,7 +249,7 @@ describe('storage connection onboarding', async () => {
       })
       const secondBucket = uniqueBucketName()
       fakeS3.seedBucket(secondBucket)
-      const pendingToken = encodeStorageConnectionLaunch({ user_id: user.id, external_id: testExternalId, bucket: secondBucket, role_arn: testRoleArn })
+      const pendingToken = encodeStorageConnectionLaunch({ user_id: user.id, external_id: testExternalId, bucket: secondBucket, role_arn: testRoleArn, mode: 'create' })
 
       await expect(
         $fetch('/api/storage-connections', {
@@ -327,6 +326,139 @@ describe('storage connection onboarding', async () => {
       await expect(
         $fetch('/api/storage-connections/check-bucket'),
       ).rejects.toMatchObject({ statusCode: 401 })
+    })
+  })
+
+  // "Connect an existing bucket" mode (issue #152): the User names their
+  // own bucket up front (POST .../launch's `bucket`), rather than
+  // Pictacular generating one, and CloudFormation's Role is scoped to
+  // that named bucket via connect-bucket.yaml (issue #151) instead of
+  // create-bucket.yaml. The confirm step's behavior differs from
+  // "create" in exactly the two ways this ticket calls out: an
+  // unreachable/nonexistent bucket is a 404 (the User named the wrong
+  // bucket) rather than a 502 "stack still creating", and the bucket's
+  // region is always looked up for real rather than assumed to be the
+  // stack's own launch region.
+  describe('connect an existing bucket', () => {
+    it('generates a role/external id (no bucket) and returns a pre-filled Launch Stack URL for the named bucket', async () => {
+      const user = await createVerifiedUser()
+      const cookieHeader = await loginCookieHeader(user.email)
+      const bucket = uniqueBucketName()
+
+      const response = await $fetch<{ launch_url: string, pending_token: string }>('/api/storage-connections/launch', {
+        method: 'POST',
+        headers: { cookie: cookieHeader },
+        body: { mode: 'connect', aws_account_id: awsAccountId, bucket },
+      })
+
+      expect(response.launch_url).toContain('cloudformation')
+      expect(launchUrlParam(response.launch_url, 'param_BucketName')).toBe(bucket)
+      expect(launchUrlParam(response.launch_url, 'param_RoleName')).toMatch(/^pictacular-storage-/)
+      expect(launchUrlParam(response.launch_url, 'param_ExternalId')).toBeTruthy()
+      expect(response.pending_token).toBeTruthy()
+    })
+
+    it('rejects a launch with no bucket name', async () => {
+      const user = await createVerifiedUser()
+      const cookieHeader = await loginCookieHeader(user.email)
+
+      await expect(
+        $fetch('/api/storage-connections/launch', {
+          method: 'POST',
+          headers: { cookie: cookieHeader },
+          body: { mode: 'connect', aws_account_id: awsAccountId, bucket: '' },
+        }),
+      ).rejects.toMatchObject({ statusCode: 400, statusMessage: 'validation.invalid_payload' })
+    })
+
+    it('persists the named bucket/role/external id and its real (non-launch-region) region once the Role is assumable and the bucket exists', async () => {
+      const user = await createVerifiedUser()
+      const cookieHeader = await loginCookieHeader(user.email)
+      const bucket = uniqueBucketName()
+      // Seeded region is 'eu-west-3' (see fake-s3-server.ts's GetBucketLocation
+      // handler), deliberately not CREATE_BUCKET_STACK_REGION ('us-east-1') —
+      // asserting on it distinguishes a real lookup from an assumed default.
+      fakeS3.seedBucket(bucket)
+
+      const { pending_token: pendingToken } = await $fetch<{ pending_token: string }>('/api/storage-connections/launch', {
+        method: 'POST',
+        headers: { cookie: cookieHeader },
+        body: { mode: 'connect', aws_account_id: awsAccountId, bucket },
+      })
+
+      const response = await fetch('/api/storage-connections', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'cookie': cookieHeader },
+        body: JSON.stringify({ pending_token: pendingToken }),
+      })
+
+      expect(response.status).toBe(204)
+
+      const persisted = await prisma.user.findUniqueOrThrow({ where: { id: user.id }, include: { aws_credentials: true } })
+      expect(persisted.aws_credentials?.bucket).toBe(bucket)
+      expect(persisted.aws_credentials?.region).toBe('eu-west-3')
+    })
+
+    it('rejects with 404 when the named bucket does not exist/is not reachable', async () => {
+      const user = await createVerifiedUser()
+      const cookieHeader = await loginCookieHeader(user.email)
+      const bucket = uniqueBucketName()
+      // Bucket deliberately never seeded — the User named a bucket Pictacular
+      // (via the assumed Role) can't actually reach.
+
+      const { pending_token: pendingToken } = await $fetch<{ pending_token: string }>('/api/storage-connections/launch', {
+        method: 'POST',
+        headers: { cookie: cookieHeader },
+        body: { mode: 'connect', aws_account_id: awsAccountId, bucket },
+      })
+
+      await expect(
+        $fetch('/api/storage-connections', {
+          method: 'POST',
+          headers: { cookie: cookieHeader },
+          body: { pending_token: pendingToken },
+        }),
+      ).rejects.toMatchObject({ statusCode: 404, statusMessage: 'storage.bucket_not_found' })
+    })
+
+    it('rejects with 401 when the generated Role is not assumable', async () => {
+      const user = await createVerifiedUser()
+      const cookieHeader = await loginCookieHeader(user.email)
+      const bucket = uniqueBucketName()
+      fakeS3.seedBucket(bucket)
+      const pendingToken = encodeStorageConnectionLaunch({ user_id: user.id, external_id: testExternalId, bucket, role_arn: badRoleArn, mode: 'connect' })
+
+      await expect(
+        $fetch('/api/storage-connections', {
+          method: 'POST',
+          headers: { cookie: cookieHeader },
+          body: { pending_token: pendingToken },
+        }),
+      ).rejects.toMatchObject({ statusCode: 401, statusMessage: 'storage.invalid_role' })
+    })
+
+    it('still detects existing photos and offers the import flow against the newly Role-based connection', async () => {
+      const user = await createVerifiedUser()
+      const cookieHeader = await loginCookieHeader(user.email)
+      const bucket = uniqueBucketName()
+      fakeS3.seedBucket(bucket, ['holiday/beach.jpg', 'notes.txt'])
+
+      const { pending_token: pendingToken } = await $fetch<{ pending_token: string }>('/api/storage-connections/launch', {
+        method: 'POST',
+        headers: { cookie: cookieHeader },
+        body: { mode: 'connect', aws_account_id: awsAccountId, bucket },
+      })
+      await $fetch('/api/storage-connections', {
+        method: 'POST',
+        headers: { cookie: cookieHeader },
+        body: { pending_token: pendingToken },
+      })
+
+      const response = await $fetch<{ has_photos: boolean }>('/api/storage-connections/check-bucket', {
+        headers: { cookie: cookieHeader },
+      })
+
+      expect(response.has_photos).toBe(true)
     })
   })
 })
