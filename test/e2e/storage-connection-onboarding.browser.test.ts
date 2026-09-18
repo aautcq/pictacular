@@ -6,13 +6,14 @@ import { hashPassword } from '../../server/utils/crypto'
 import { prisma } from '../../server/utils/prisma'
 import { startFakeS3Server } from './fake-s3-server'
 
-// Browser-driven test (issue #150): a signed-in, verified User without a
-// Storage Connection is redirected from the app's home page to the
-// onboarding screen (requiresStorageConnection guard), walks through the
-// Launch-Stack "create a new bucket" flow (AWS Account ID → launch →
-// confirm once CloudFormation has finished), and lands back on the app
-// once connected. Real AWS is replaced by the same in-process fake S3/STS
-// double used by storage-connections.test.ts's HTTP coverage.
+// Browser-driven tests (issues #150/#152): a signed-in, verified User
+// without a Storage Connection is redirected from the app's home page to
+// the onboarding screen (requiresStorageConnection guard), walks through
+// the Launch-Stack "create a new bucket" or "connect an existing bucket"
+// flow (mode → AWS Account ID [→ bucket name] → launch → confirm once
+// CloudFormation has finished), and lands back on the app once connected.
+// Real AWS is replaced by the same in-process fake S3/STS double used by
+// storage-connections.test.ts's HTTP coverage.
 describe('storage connection onboarding journey', async () => {
   const fakeS3: FakeS3Server = await startFakeS3Server()
   process.env.AWS_S3_ENDPOINT = fakeS3.url
@@ -80,16 +81,17 @@ describe('storage connection onboarding journey', async () => {
     await page.close()
   }, 60_000)
 
-  // Issue #54: connecting an existing bucket that `check-bucket` reports
-  // as already containing images offers this extra "import" step, with
-  // live progress (over the same WS infra photo-import.test.ts's HTTP
-  // coverage asserts on directly) and a completion state, before an
-  // Album derived from the seeded bucket's folder structure appears.
-  // TODO(#152): "connect an existing bucket" mode was removed from the
-  // Storage Connection schema/endpoints by issue #150 (AwsCredentials no
-  // longer stores an AWS key pair at all) and is rebuilt as its own,
-  // separately-authenticated flow there — re-enable this once that lands.
-  it.skip('offers an import step with live progress when connecting a bucket with existing images', async () => {
+  // Issue #54/#152: connecting an existing bucket that `check-bucket`
+  // reports as already containing images offers this extra "import" step,
+  // with live progress (over the same WS infra photo-import.test.ts's
+  // HTTP coverage asserts on directly) and a completion state, before an
+  // Album derived from the seeded bucket's folder structure appears — the
+  // same import offer the pre-#150 key-pair "connect" mode had, now
+  // triggered off the Role-based connection instead. Unlike the "create a
+  // new bucket" journey above, the bucket must already exist (and, here,
+  // already contain photos) *before* the stack is "launched" — the
+  // CloudFormation template never creates it in this mode.
+  it('walks through the Launch-Stack "connect an existing bucket" flow and offers an import step with live progress', async () => {
     const importEmail = `${emailPrefix}-import@example.com`
     await prisma.user.create({
       data: {
@@ -111,11 +113,26 @@ describe('storage connection onboarding journey', async () => {
     await page.getByRole('button', { name: 'Sign in', exact: true }).click()
 
     await page.waitForURL('**/storage-connection')
-    await page.getByRole('button', { name: 'I already have a bucket' }).click()
+    await page.getByText('Connect your storage').waitFor()
+
+    // URadioGroup's underlying radio button sets its own `aria-label` to
+    // the item's raw `value` (overriding the associated <label>'s visible
+    // text as its accessible name), so this locates it by that raw value
+    // ("connect") rather than by the "Connect an existing bucket" label
+    // text a User actually sees.
+    await page.getByRole('radio', { name: 'connect' }).click()
+    await page.getByLabel('AWS Account ID').fill('123456789012')
     await page.getByLabel('Bucket name').fill(bucket)
-    await page.getByLabel('Access key ID').fill('AKIATEST')
-    await page.getByLabel('Secret access key').fill('test-secret')
-    await page.getByRole('button', { name: 'Connect' }).click()
+    await Promise.all([
+      page.waitForResponse(response => response.url().includes('/api/storage-connections/launch') && response.ok()),
+      page.getByRole('button', { name: 'Launch Stack' }).click(),
+    ])
+    // Simulates the CloudFormation stack the User "launched" (in a real
+    // browser this opens a new AWS Console tab, not exercised here) having
+    // finished creating the Role scoped to the already-existing bucket
+    // named above.
+
+    await page.getByRole('button', { name: 'I\'ve launched it, confirm connection' }).click()
 
     await page.getByText('It looks like your bucket already has some image files in it.').waitFor()
     await page.getByRole('button', { name: 'Import my existing photos' }).click()
@@ -166,11 +183,14 @@ describe('storage connection onboarding journey', async () => {
     await page.getByRole('button', { name: 'Sign in', exact: true }).click()
 
     await page.waitForURL('**/storage-connection')
-    await page.getByRole('button', { name: 'I already have a bucket' }).click()
+    await page.getByRole('radio', { name: 'connect' }).click()
+    await page.getByLabel('AWS Account ID').fill('123456789012')
     await page.getByLabel('Bucket name').fill(bucket)
-    await page.getByLabel('Access key ID').fill('AKIATEST')
-    await page.getByLabel('Secret access key').fill('test-secret')
-    await page.getByRole('button', { name: 'Connect' }).click()
+    await Promise.all([
+      page.waitForResponse(response => response.url().includes('/api/storage-connections/launch') && response.ok()),
+      page.getByRole('button', { name: 'Launch Stack' }).click(),
+    ])
+    await page.getByRole('button', { name: 'I\'ve launched it, confirm connection' }).click()
 
     await page.getByText('It looks like your bucket already has some image files in it.').waitFor()
     await page.getByRole('button', { name: 'Import my existing photos' }).click()

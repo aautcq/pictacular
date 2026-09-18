@@ -114,8 +114,8 @@ export function useCurrentUser() {
     user.value = null
   }
 
-  async function launchStorageConnection(awsAccountId: string) {
-    return await $fetch<{ launch_url: string, pending_token: string }>('/api/storage-connections/launch', { method: 'POST', body: { aws_account_id: awsAccountId } })
+  async function launchStorageConnection(payload: StorageConnectionLaunchInput) {
+    return await $fetch<{ launch_url: string, pending_token: string }>('/api/storage-connections/launch', { method: 'POST', body: payload })
   }
 
   async function confirmStorageConnection(pendingToken: string) {

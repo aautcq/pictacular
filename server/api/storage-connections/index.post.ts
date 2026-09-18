@@ -3,14 +3,15 @@ import { decodeStorageConnectionLaunch } from '#server/utils/jwt'
 import { prisma } from '#server/utils/prisma'
 import { confirmStorageConnection } from '#server/utils/storage'
 
-// Confirms a "create a new bucket" Storage Connection (issue #150) after
-// the User has launched (and, they assert, finished) the CloudFormation
-// stack POST /api/storage-connections/launch handed them: redeems the
-// signed `pending_token` from that step for the Role ARN/bucket/External
-// ID Pictacular generated, assumes the Role to verify the stack really
-// has finished creating it (AssumeRole itself is the "is it ready?" check
-// — see server/utils/storage.ts#confirmStorageConnection), and persists
-// the connection as the User's (one-per-user) AwsCredentials row.
+// Confirms a Storage Connection — either "create a new bucket" (issue
+// #150) or "connect an existing bucket" (issue #152) — after the User has
+// launched (and, they assert, finished) the CloudFormation stack POST
+// /api/storage-connections/launch handed them: redeems the signed
+// `pending_token` from that step for the Role ARN/bucket/External ID/mode
+// Pictacular generated, assumes the Role to verify the stack really has
+// finished creating it (AssumeRole itself is the "is it ready?" check —
+// see server/utils/storage.ts#confirmStorageConnection), and persists the
+// connection as the User's (one-per-user) AwsCredentials row.
 export default defineEventHandler(async (event) => {
   const { user } = requireAuth(event)
 
@@ -46,7 +47,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const { bucket, region } = await confirmStorageConnection(pending.role_arn, pending.external_id, pending.bucket)
+  const { bucket, region } = await confirmStorageConnection(pending.role_arn, pending.external_id, pending.bucket, pending.mode)
 
   try {
     await prisma.awsCredentials.create({

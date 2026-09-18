@@ -3,24 +3,31 @@ import { encodeStorageConnectionLaunch } from '#server/utils/jwt'
 import { prisma } from '#server/utils/prisma'
 import { CREATE_BUCKET_STACK_REGION } from '#server/utils/storage'
 
-// GitHub raw URL for the CloudFormation template CloudFormation itself
-// fetches when a User clicks "Launch Stack" (issue #149's template) — this
-// only resolves once that template is actually merged to `main`, a
-// deployment-order dependency called out in this ticket's PR description.
-const cfnTemplateUrl = 'https://raw.githubusercontent.com/aautcq/pictacular/main/cloudformation/create-bucket.yaml'
+// GitHub raw URLs for the CloudFormation templates CloudFormation itself
+// fetches when a User clicks "Launch Stack" (issue #149/#151's templates)
+// — these only resolve once the respective template is actually merged to
+// `main`, a deployment-order dependency called out in each ticket's PR
+// description.
+const cfnTemplateUrls = {
+  create: 'https://raw.githubusercontent.com/aautcq/pictacular/main/cloudformation/create-bucket.yaml',
+  connect: 'https://raw.githubusercontent.com/aautcq/pictacular/main/cloudformation/connect-bucket.yaml',
+}
 
 function randomSuffix() {
   return randomBytes(8).toString('hex')
 }
 
-// Starts a "create a new bucket" Storage Connection (issue #150) by
-// generating every value CloudFormation's stack needs up front —
-// Pictacular can't learn a bucket name or Role ARN back out of a
-// CloudFormation stack it doesn't own/query, and the User is never asked
-// to paste either back in, so both are generated here, pre-filled into
-// the Launch Stack URL as parameters, and remembered via the signed
-// `pending_token` returned alongside it for the later confirm step (POST
-// /api/storage-connections) to redeem.
+// Starts a Storage Connection, either "create a new bucket" (issue #150)
+// or "connect an existing bucket" (issue #152), by generating every value
+// CloudFormation's stack needs up front (except, for "connect" mode, the
+// bucket name itself, which only the User can supply — Pictacular has no
+// way to know it ahead of time) — Pictacular can't learn a Role ARN back
+// out of a CloudFormation stack it doesn't own/query, and the User is
+// never asked to paste it back in, so it's predicted here (from the
+// User's AWS Account ID plus a generated Role name, pre-filled as a stack
+// parameter either template accepts), pre-filled into the Launch Stack
+// URL, and remembered via the signed `pending_token` returned alongside it
+// for the later confirm step (POST /api/storage-connections) to redeem.
 export default defineEventHandler(async (event) => {
   const { user } = requireAuth(event)
 
@@ -48,10 +55,13 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const { aws_account_id } = result.data
+  const { mode, aws_account_id } = result.data
   const suffix = randomSuffix()
   const externalId = randomUUID()
-  const bucket = `pictacular-${suffix}`
+  // "Create" mode generates its own bucket name (Pictacular owns it
+  // outright); "connect" mode uses the bucket the User already named —
+  // the one value this endpoint can't generate on their behalf.
+  const bucket = mode === 'create' ? `pictacular-${suffix}` : result.data.bucket
   const roleName = `pictacular-storage-${suffix}`
   const roleArn = `arn:aws:iam::${aws_account_id}:role/${roleName}`
   const allowedOrigin = getRequestURL(event).origin
@@ -61,10 +71,11 @@ export default defineEventHandler(async (event) => {
     external_id: externalId,
     bucket,
     role_arn: roleArn,
+    mode,
   })
 
   const stackParams = new URLSearchParams({
-    templateURL: cfnTemplateUrl,
+    templateURL: cfnTemplateUrls[mode],
     stackName: 'pictacular-storage-connection',
     param_ExternalId: externalId,
     param_BucketName: bucket,
@@ -75,7 +86,9 @@ export default defineEventHandler(async (event) => {
   // single-page app, so everything past `/stacks/create/review?` — the
   // template URL and every stack parameter — lives inside the URL
   // fragment (`#...`), not as this URL's own top-level query string
-  // (which only ever carries `region`).
+  // (which only ever carries `region`). The `region` here only picks
+  // which Console region opens (IAM Roles are global, and "connect" mode
+  // never creates a bucket), so it's the same fixed region for both modes.
   const launchUrl = `https://console.aws.amazon.com/cloudformation/home?region=${CREATE_BUCKET_STACK_REGION}#/stacks/create/review?${stackParams.toString()}`
 
   return {

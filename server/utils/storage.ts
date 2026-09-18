@@ -61,35 +61,54 @@ const imageExtensionPattern = /\.(?:jpe?g|png|gif|webp|heic|heif|bmp|tiff?)$/i
 // server/utils/sts.ts's own in-memory session cache, which is what keeps
 // this from costing a fresh AssumeRole round trip on every single call
 // below).
-async function createClient(awsCredentials: AwsCredentials) {
+async function createClient(awsCredentials: AwsCredentials, options: { followRegionRedirects?: boolean } = {}) {
   const { accessKeyId, secretAccessKey, sessionToken } = await assumeRole(awsCredentials.role_arn, awsCredentials.external_id)
   const endpoint = process.env.AWS_S3_ENDPOINT
 
   return new S3Client({
     region: awsCredentials.region,
     credentials: { accessKeyId, secretAccessKey, sessionToken },
+    ...(options.followRegionRedirects && { followRegionRedirects: true }),
     ...(endpoint && { endpoint, forcePathStyle: true }),
   })
 }
 
-// Confirms a launched "create new bucket" CloudFormation stack has
-// actually finished (issue #150): assumes the generated Role (the same
-// AssumeRole call every other S3 operation below makes, but here it's the
-// very first thing that can succeed at all — a stack still mid-create
-// hasn't finished creating the Role yet, so this call itself is the
-// "is it ready?" check, no CloudFormation Outputs/DescribeStacks polling
-// needed) and looks up the bucket's own region (mirroring the legacy
-// StorageUtility#getRegion the former "connect existing bucket" mode
-// used), rather than trusting a value Pictacular itself already knows the
-// stack was asked to use.
-export async function confirmStorageConnection(roleArn: string, externalId: string, bucket: string) {
-  const client = await createClient({ bucket, region: CREATE_BUCKET_STACK_REGION, role_arn: roleArn, external_id: externalId })
+// Confirms a launched CloudFormation stack has actually finished (issues
+// #150/#152): assumes the generated Role (the same AssumeRole call every
+// other S3 operation below makes, but here it's the very first thing
+// that can succeed at all — a stack still mid-create hasn't finished
+// creating the Role yet, so this call itself is the "is it ready?" check,
+// no CloudFormation Outputs/DescribeStacks polling needed), then verifies
+// the bucket and looks up its own region — behaving differently per mode
+// since a "create new bucket" stack's HeadBucket failure just means the
+// stack (bucket included) hasn't finished creating yet (502, still worth
+// falling back to the launch region on a location-lookup hiccup, since a
+// freshly-created bucket's region is already known), whereas a "connect
+// an existing bucket" stack's HeadBucket failure means the User named a
+// bucket that doesn't exist/isn't reachable (404, mirroring the legacy
+// StorageUtility#getBucket the former "connect existing bucket" mode
+// used) and its region can never be assumed to be the stack's own launch
+// region (an existing bucket may live anywhere), so it's always looked
+// up for real rather than silently falling back to a guessed default.
+// `followRegionRedirects` is enabled unconditionally (not just for
+// "connect") since a "create" mode bucket is always actually in
+// CREATE_BUCKET_STACK_REGION, so it never triggers a redirect there
+// anyway — but it's essential for "connect": an initial client always has
+// to guess *some* signing region before a bucket's real one is known, and
+// a real S3 bucket outside that guessed region rejects a mismatched
+// SigV4-signed request outright (unlike the in-process fake double,
+// which never validates signing region) rather than just failing to
+// find it.
+export async function confirmStorageConnection(roleArn: string, externalId: string, bucket: string, mode: 'create' | 'connect') {
+  const client = await createClient({ bucket, region: CREATE_BUCKET_STACK_REGION, role_arn: roleArn, external_id: externalId }, { followRegionRedirects: true })
 
   try {
     await client.send(new HeadBucketCommand({ Bucket: bucket }))
   }
   catch (error) {
-    throw createError({ statusCode: 502, statusMessage: 'storage.bucket_not_ready', cause: error })
+    throw mode === 'connect'
+      ? createError({ statusCode: 404, statusMessage: 'storage.bucket_not_found', cause: error })
+      : createError({ statusCode: 502, statusMessage: 'storage.bucket_not_ready', cause: error })
   }
 
   let region = CREATE_BUCKET_STACK_REGION
@@ -100,9 +119,15 @@ export async function confirmStorageConnection(roleArn: string, externalId: stri
     // omitting/erroring — that's a *successful* lookup, not a fallback case.
     region = location.LocationConstraint || CREATE_BUCKET_STACK_REGION
   }
-  catch {
-    // Fall back to the default region when the location lookup isn't
-    // permitted by the generated Role's policy.
+  catch (error) {
+    // "Connect" mode has no safe default to fall back to (unlike
+    // "create", where the bucket was just created in
+    // CREATE_BUCKET_STACK_REGION), so a lookup failure there is a real,
+    // surfaced error rather than a silent guess — connect-bucket.yaml's
+    // Role is granted GetBucketLocation, so this only fails for a
+    // genuinely broken connection.
+    if (mode === 'connect')
+      throw createError({ statusCode: 502, statusMessage: 'storage.bucket_region_lookup_failed', cause: error })
   }
 
   return { bucket, region }
