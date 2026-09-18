@@ -1,5 +1,5 @@
 import { photoArchiveState } from '#server/utils/archived-photo'
-import { requirePhotoIdParam } from '#server/utils/photo-guards'
+import { requirePhotoIdParam, withStorageConnectionGuard } from '#server/utils/photo-guards'
 import { requirePhotoImageAccess } from '#server/utils/photo-image-access'
 import { parsePhotoImageResizeParams, resizePhotoImage } from '#server/utils/photo-image-resize'
 import { fetchPhotoObject } from '#server/utils/storage'
@@ -37,7 +37,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const object = await fetchPhotoObject(access.awsCredentials, access.key)
+  const object = await withStorageConnectionGuard(access.ownerId, () => fetchPhotoObject(access.awsCredentials, access.key))
   const resizeParams = parsePhotoImageResizeParams(getQuery(event))
   const { stream, contentType } = await resizePhotoImage(object.Body as any, object.ContentType ?? access.mime_type, resizeParams)
 

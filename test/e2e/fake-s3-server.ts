@@ -29,6 +29,13 @@ export const testExternalId = 'test-external-id'
 // AssumeRole failure — the same error surface a real revoked Role now
 // fails at, rather than the old bad-access-key-id S3-level failure.
 export const badRoleArn = 'arn:aws:iam::111111111111:role/revoked-role'
+// A Role ARN sentinel the fake STS double always fails `AssumeRole` for
+// with a genuine-but-transient STS error (`ThrottlingException`, never
+// `AccessDenied`) — standing in for a network blip/service hiccup rather
+// than a Role that can no longer be assumed, so specs can prove issue
+// #153's broken-connection detection never fires for this kind of
+// failure (see server/utils/sts.ts#assumeRole's `errorName` check).
+export const throttledRoleArn = 'arn:aws:iam::111111111111:role/throttled-role'
 
 // Per-object storage-class + Restore Request status (issue #145),
 // separate from the actual uploaded bytes in `objects` below: a seeded
@@ -141,6 +148,11 @@ export async function startFakeS3Server(): Promise<FakeS3Server> {
         if (roleArn === badRoleArn) {
           res.writeHead(403, { 'Content-Type': 'application/xml' })
           res.end('<?xml version="1.0" encoding="UTF-8"?><ErrorResponse><Error><Type>Sender</Type><Code>AccessDenied</Code><Message>User is not authorized to perform sts:AssumeRole</Message></Error><RequestId>fake-sts</RequestId></ErrorResponse>')
+          return
+        }
+        if (roleArn === throttledRoleArn) {
+          res.writeHead(400, { 'Content-Type': 'application/xml' })
+          res.end('<?xml version="1.0" encoding="UTF-8"?><ErrorResponse><Error><Type>Sender</Type><Code>ThrottlingException</Code><Message>Rate exceeded</Message></Error><RequestId>fake-sts</RequestId></ErrorResponse>')
           return
         }
 

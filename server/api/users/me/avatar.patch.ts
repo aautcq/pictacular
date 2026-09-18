@@ -1,3 +1,4 @@
+import { storageConnectionBrokenError, withStorageConnectionGuard } from '#server/utils/photo-guards'
 import { prisma } from '#server/utils/prisma'
 import { serializeUser } from '#server/utils/serialize-user'
 import { uploadAvatarObject } from '#server/utils/storage'
@@ -40,8 +41,15 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  // Same app-wide hard block every other photo-related action already
+  // enforces (issue #153) — an avatar is uploaded to this same Storage
+  // Connection bucket, so a broken one blocks it exactly the same way.
+  if (account.aws_credentials.broken) {
+    throw createError(storageConnectionBrokenError)
+  }
+
   const { mime_type, base64 } = result.data
-  const key = await uploadAvatarObject(account.aws_credentials, account.id, mime_type, base64)
+  const key = await withStorageConnectionGuard(account.id, () => uploadAvatarObject(account.aws_credentials!, account.id, mime_type, base64))
 
   const updated = await prisma.user.update({
     where: { id: account.id },

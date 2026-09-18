@@ -5,6 +5,7 @@ export interface CurrentUser {
   last_name: string
   avatar_url: string | null
   has_aws_credentials: boolean
+  storage_connection_broken: boolean
   created_at: string
   last_sign_in_at: string | null
 }

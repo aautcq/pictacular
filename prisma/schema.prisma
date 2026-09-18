@@ -104,6 +104,15 @@ model AwsCredentials {
   region      String
   role_arn    String
   external_id String
+  // Set the first time an S3/STS operation against this connection fails
+  // because its Role has become unassumable (issue #153) — e.g. the User
+  // deleted the CloudFormation stack that created it. Once true, every
+  // photo-related action for this connection's owner is hard-blocked
+  // until they relaunch the stack and reconnect (a fresh Role/External Id,
+  // never a repair of this row in place). Never set proactively by a
+  // scheduled job — only ever flipped as the side effect of a real,
+  // already-happening operation hitting the failure.
+  broken      Boolean @default(false)
 
   // Resumable bucket import state (issue #54 follow-up): a "many many
   // photos" import can take well over 30 minutes, which is too long to

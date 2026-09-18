@@ -1,7 +1,9 @@
 import type { AwsCredentials } from './storage'
+import { storageConnectionBrokenError } from './photo-guards'
 import { prisma } from './prisma'
 
 export interface PhotoImageAccess {
+  ownerId: number
   key: string
   mime_type: string
   storage_class: string | null
@@ -10,11 +12,19 @@ export interface PhotoImageAccess {
   awsCredentials: AwsCredentials
 }
 
-function toAccess(photo: { key: string, mime_type: string, storage_class: string | null, restore_ongoing: boolean, restore_expires_at: Date | null, user: { aws_credentials: AwsCredentials | null } }): PhotoImageAccess | null {
+function toAccess(photo: { key: string, mime_type: string, storage_class: string | null, restore_ongoing: boolean, restore_expires_at: Date | null, user_id: number, user: { aws_credentials: (AwsCredentials & { broken: boolean }) | null } }): PhotoImageAccess | null {
   if (!photo.user.aws_credentials)
     return null
 
+  // A Photo whose owner's Storage Connection is already known to be
+  // broken (issue #153) can never actually be fetched from S3 either way
+  // — blocked with the same app-wide error every other photo action uses,
+  // rather than only discovering this once the AWS call below fails.
+  if (photo.user.aws_credentials.broken)
+    throw createError(storageConnectionBrokenError)
+
   return {
+    ownerId: photo.user_id,
     key: photo.key,
     mime_type: photo.mime_type,
     storage_class: photo.storage_class,

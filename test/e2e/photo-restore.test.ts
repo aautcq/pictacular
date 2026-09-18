@@ -180,16 +180,17 @@ describe('archived photo restore', async () => {
       ).rejects.toMatchObject({ statusCode: 401 })
     })
 
-    it('surfaces an AWS-level failure as a clear error rather than failing silently', async () => {
+    it('marks the Storage Connection broken (issue #153) and blocks the request, rather than surfacing an unrelated 502', async () => {
       const { id: userId, cookieHeader, bucket } = await createConnectedUser()
       fakeS3.seedBucket(bucket, [{ key: 'photo.jpg', storageClass: 'GLACIER' }])
       const photo = await createPhotoRow(userId, 'photo.jpg', 'GLACIER')
 
-      // Revoking the Storage Connection's own AWS credentials after the
-      // fact (rather than at connect time) simulates a User's key pair
-      // being rotated/revoked directly in AWS between connecting and
-      // restoring — the fake S3 double rejects this sentinel access key
-      // id with InvalidAccessKeyId (see fake-s3-server.ts).
+      // Revoking the Storage Connection's Role after the fact (rather
+      // than at connect time) simulates a User deleting/breaking the
+      // CloudFormation stack that created it — the fake STS double
+      // rejects AssumeRole for this sentinel Role ARN (see
+      // fake-s3-server.ts), the same AssumeRole failure a real revoked
+      // Role now produces.
       await prisma.awsCredentials.update({
         where: { user_id: userId },
         data: { role_arn: badRoleArn },
@@ -197,7 +198,10 @@ describe('archived photo restore', async () => {
 
       await expect(
         $fetch(`/api/photos/${photo.id}/restore`, { method: 'POST', headers: { cookie: cookieHeader } }),
-      ).rejects.toMatchObject({ statusCode: 502, statusMessage: 'photos.restore_failed' })
+      ).rejects.toMatchObject({ statusCode: 403, statusMessage: 'storage.connection_broken' })
+
+      const connection = await prisma.awsCredentials.findUniqueOrThrow({ where: { user_id: userId } })
+      expect(connection.broken).toBe(true)
     })
   })
 

@@ -84,6 +84,7 @@ describe('user profile self-service', async () => {
         first_name: user.first_name,
         last_name: user.last_name,
         has_aws_credentials: false,
+        storage_connection_broken: false,
         avatar_url: null,
         created_at: user.created_at.toISOString(),
         last_sign_in_at: user.last_sign_in_at?.toISOString(),

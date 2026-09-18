@@ -32,7 +32,12 @@ export default defineEventHandler(async (event) => {
   }
 
   const existing = await prisma.awsCredentials.findUnique({ where: { user_id: user.id } })
-  if (existing) {
+  // A connection already known broken (issue #153) is the one case this
+  // otherwise rejects as "already connected" — reconnecting always
+  // replaces its Role/External Id/bucket in place with a fresh one below,
+  // never repairs the old row, matching the same "always a fresh
+  // Role/External Id" guarantee a brand-new connection gets.
+  if (existing && !existing.broken) {
     throw createError({
       statusCode: 409,
       statusMessage: 'storage.already_connected',
@@ -50,15 +55,23 @@ export default defineEventHandler(async (event) => {
   const { bucket, region } = await confirmStorageConnection(pending.role_arn, pending.external_id, pending.bucket, pending.mode)
 
   try {
-    await prisma.awsCredentials.create({
-      data: {
-        bucket,
-        region,
-        role_arn: pending.role_arn,
-        external_id: pending.external_id,
-        user: { connect: { id: user.id } },
-      },
-    })
+    if (existing) {
+      await prisma.awsCredentials.update({
+        where: { user_id: user.id },
+        data: { bucket, region, role_arn: pending.role_arn, external_id: pending.external_id, broken: false },
+      })
+    }
+    else {
+      await prisma.awsCredentials.create({
+        data: {
+          bucket,
+          region,
+          role_arn: pending.role_arn,
+          external_id: pending.external_id,
+          user: { connect: { id: user.id } },
+        },
+      })
+    }
   }
   catch (error) {
     // user_id is a unique column: the upfront findUnique check above is

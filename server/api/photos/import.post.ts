@@ -1,4 +1,4 @@
-import { requirePhotoStorageConnection } from '#server/utils/photo-guards'
+import { requirePhotoStorageConnection, withStorageConnectionGuard } from '#server/utils/photo-guards'
 import { prisma } from '#server/utils/prisma'
 import { serializePhoto } from '#server/utils/serialize-photo'
 import { fetchTakenAt, listAllBucketImages, listBucketImagePage, mimeTypeFromKey } from '#server/utils/storage'
@@ -40,10 +40,10 @@ export default defineEventHandler(async (event) => {
   // of the same import reuses that persisted total instead of re-walking
   // the whole bucket again.
   const total = aws_credentials.import_cursor === null && aws_credentials.import_total === null
-    ? (await listAllBucketImages(aws_credentials)).length
+    ? (await withStorageConnectionGuard(account.id, () => listAllBucketImages(aws_credentials))).length
     : aws_credentials.import_total!
 
-  const { images, nextContinuationToken } = await listBucketImagePage(aws_credentials, aws_credentials.import_cursor ?? undefined)
+  const { images, nextContinuationToken } = await withStorageConnectionGuard(account.id, () => listBucketImagePage(aws_credentials, aws_credentials.import_cursor ?? undefined))
   const albumIdsByTitle = new Map<string, number>()
   const albumIds = new Set(aws_credentials.import_album_ids)
   let imported = aws_credentials.import_imported

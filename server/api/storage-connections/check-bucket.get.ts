@@ -1,3 +1,4 @@
+import { storageConnectionBrokenError, withStorageConnectionGuard } from '#server/utils/photo-guards'
 import { prisma } from '#server/utils/prisma'
 import { bucketHasImages } from '#server/utils/storage'
 
@@ -26,7 +27,10 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const has_photos = await bucketHasImages(account.aws_credentials)
+  if (account.aws_credentials.broken)
+    throw createError(storageConnectionBrokenError)
+
+  const has_photos = await withStorageConnectionGuard(user.id, () => bucketHasImages(account.aws_credentials!))
 
   return {
     has_photos,

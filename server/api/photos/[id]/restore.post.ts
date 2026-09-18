@@ -1,4 +1,4 @@
-import { requirePhotoIdParam, requirePhotoStorageConnection } from '#server/utils/photo-guards'
+import { requirePhotoIdParam, requirePhotoStorageConnection, withStorageConnectionGuard } from '#server/utils/photo-guards'
 import { requestPhotoRestore } from '#server/utils/photo-restore'
 import { prisma } from '#server/utils/prisma'
 import { serializePhoto } from '#server/utils/serialize-photo'
@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const updated = await requestPhotoRestore(photo, account.aws_credentials)
+  const updated = await withStorageConnectionGuard(account.id, () => requestPhotoRestore(photo, account.aws_credentials))
 
   return serializePhoto(updated, user.id)
 })
