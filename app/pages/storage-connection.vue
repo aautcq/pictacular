@@ -4,7 +4,7 @@ definePageMeta({ middleware: 'auth' })
 const { launchStorageConnection, confirmStorageConnection, checkBucket, user } = useCurrentUser()
 const { importing, progress, result, etaSeconds, importPhotos } = useBucketImport()
 const toast = useToast()
-const { translateError, getFieldErrors } = useErrorMessage()
+const { translateError, translateErrorCode, getFieldErrors } = useErrorMessage()
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
 
 const form = useTemplateRef('form')
@@ -234,6 +234,12 @@ const etaLabel = computed(() => {
               :placeholder="t('accountIdPlaceholder')"
               class="w-full"
             />
+
+            <template #error="{ error }">
+              <template v-if="typeof error === 'string'">
+                {{ translateErrorCode(error) }}
+              </template>
+            </template>
           </UFormField>
 
           <UFormField v-if="state.mode === 'connect'" :label="t('bucketNameLabel')" name="bucket">
@@ -245,6 +251,12 @@ const etaLabel = computed(() => {
               :placeholder="t('bucketNamePlaceholder')"
               class="w-full"
             />
+
+            <template #error="{ error }">
+              <template v-if="typeof error === 'string'">
+                {{ translateErrorCode(error) }}
+              </template>
+            </template>
           </UFormField>
 
           <UButton
