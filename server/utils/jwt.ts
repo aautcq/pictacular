@@ -76,6 +76,14 @@ export interface StorageConnectionLaunch {
   external_id: string
   bucket: string
   role_arn: string
+  // Which onboarding mode generated this pending connection (issue #152):
+  // the confirm step (server/utils/storage.ts#confirmStorageConnection)
+  // needs this to know whether a HeadBucket failure means "stack hasn't
+  // finished creating the bucket yet" (create) vs. "named an
+  // unreachable/nonexistent bucket" (connect), and whether the bucket's
+  // region can be assumed to be the stack's own launch region at all
+  // (never true for connect, since that bucket already existed).
+  mode: 'create' | 'connect'
 }
 
 export const storageConnectionLaunchTtl = 60 * 60 // In seconds (1 hour) — long enough to launch the CloudFormation stack and let it finish creating, without leaving a stale pending connection indefinitely signable.
