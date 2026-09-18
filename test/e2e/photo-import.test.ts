@@ -119,12 +119,12 @@ describe('import bucket photos', async () => {
     await waitForOpen(socket)
     const messages = collectMessages(socket)
 
-    const response = await $fetch<{ imported: number, albums: number }>('/api/photos/import', {
+    const response = await $fetch<{ imported: number, albums: number, done: boolean }>('/api/photos/import', {
       method: 'POST',
       headers: { cookie: cookieHeader },
     })
 
-    expect(response).toEqual({ imported: 3, albums: 1 })
+    expect(response).toEqual({ imported: 3, albums: 1, done: true })
 
     const photos = await prisma.photo.findMany({ where: { user_id: userId } })
     expect(photos).toHaveLength(3)
@@ -161,12 +161,12 @@ describe('import bucket photos', async () => {
       body: { title: 'holiday' },
     })
 
-    const response = await $fetch<{ imported: number, albums: number }>('/api/photos/import', {
+    const response = await $fetch<{ imported: number, albums: number, done: boolean }>('/api/photos/import', {
       method: 'POST',
       headers: { cookie: cookieHeader },
     })
 
-    expect(response).toEqual({ imported: 1, albums: 1 })
+    expect(response).toEqual({ imported: 1, albums: 1, done: true })
 
     const albums = await prisma.album.findMany({ where: { admin_id: userId, title: 'holiday' } })
     expect(albums).toHaveLength(1)
@@ -176,12 +176,12 @@ describe('import bucket photos', async () => {
     const { id: userId, cookieHeader } = await createConnectedUser(['holiday/beach.jpg', 'root.png'])
 
     await $fetch('/api/photos/import', { method: 'POST', headers: { cookie: cookieHeader } })
-    const response = await $fetch<{ imported: number, albums: number }>('/api/photos/import', {
+    const response = await $fetch<{ imported: number, albums: number, done: boolean }>('/api/photos/import', {
       method: 'POST',
       headers: { cookie: cookieHeader },
     })
 
-    expect(response).toEqual({ imported: 2, albums: 1 })
+    expect(response).toEqual({ imported: 2, albums: 1, done: true })
 
     const photos = await prisma.photo.findMany({ where: { user_id: userId } })
     expect(photos).toHaveLength(2)
@@ -247,15 +247,65 @@ describe('import bucket photos', async () => {
     })
   })
 
+  // Guards against the exact regression this chunking was built to fix
+  // (see server/api/photos/import.post.ts's own doc comment): a "many many
+  // photos" bucket must never depend on a single request surviving the
+  // whole import, so progress is persisted (`import_cursor`/`import_total`/
+  // `import_imported`/`import_album_ids`) after every page and a later
+  // request resumes from exactly that point instead of re-walking (and
+  // re-importing) objects an earlier, interrupted request already handled.
+  describe('resumable import (chunked pages)', () => {
+    it('resumes from a persisted cursor rather than re-walking objects an earlier request already processed', async () => {
+      const { id: userId, cookieHeader } = await createConnectedUser([
+        'one.jpg',
+        'two.jpg',
+        'three.jpg',
+      ])
+
+      // Simulates a prior request having already walked the fake S3
+      // double's first page (just `one.jpg`, whose extension-matching
+      // ListObjectsV2 index is `1` in this fixture's insertion order —
+      // see fake-s3-server.ts's index-based continuation token) before
+      // getting interrupted (a dropped connection, a proxy timeout, ...)
+      // partway through the import — exactly the scenario this chunking
+      // exists to survive.
+      await prisma.awsCredentials.updateMany({
+        where: { user_id: userId },
+        data: { import_cursor: '1', import_total: 3, import_imported: 1, import_album_ids: [] },
+      })
+
+      const response = await $fetch<{ imported: number, albums: number, done: boolean }>('/api/photos/import', {
+        method: 'POST',
+        headers: { cookie: cookieHeader },
+      })
+
+      // The resumed request finishes the remaining two objects on top of
+      // the one already-persisted `import_imported` count, without ever
+      // re-processing `one.jpg`.
+      expect(response).toEqual({ imported: 3, albums: 0, done: true })
+
+      const photos = await prisma.photo.findMany({ where: { user_id: userId } })
+      expect(photos.map(photo => photo.key).sort()).toEqual(['three.jpg', 'two.jpg'])
+
+      // Completion resets the persisted cursor/counters, so a later,
+      // separate import starts clean rather than inheriting this one's.
+      const accountAfterCompletion = await prisma.awsCredentials.findFirstOrThrow({ where: { user_id: userId } })
+      expect(accountAfterCompletion.import_cursor).toBeNull()
+      expect(accountAfterCompletion.import_total).toBeNull()
+      expect(accountAfterCompletion.import_imported).toBe(0)
+      expect(accountAfterCompletion.import_album_ids).toEqual([])
+    })
+  })
+
   it('imports nothing from an empty bucket', async () => {
     const { cookieHeader } = await createConnectedUser()
 
-    const response = await $fetch<{ imported: number, albums: number }>('/api/photos/import', {
+    const response = await $fetch<{ imported: number, albums: number, done: boolean }>('/api/photos/import', {
       method: 'POST',
       headers: { cookie: cookieHeader },
     })
 
-    expect(response).toEqual({ imported: 0, albums: 0 })
+    expect(response).toEqual({ imported: 0, albums: 0, done: true })
   })
 
   it('rejects a User without a Storage Connection', async () => {

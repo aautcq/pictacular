@@ -263,14 +263,28 @@ export async function startFakeS3Server(): Promise<FakeS3Server> {
     }
 
     if (req.method === 'GET' && bucketName && url.searchParams.get('list-type') === '2') {
-      const contents = (bucket?.keys ?? [])
+      // Paginates by plain numeric index (the "continuation token" is just
+      // that index as a string) rather than anything resembling real S3's
+      // opaque token — this fake only needs to prove the resumable import
+      // (server/api/photos/import.post.ts) round-trips whatever token it's
+      // given back to the next request, not to reproduce AWS's own token
+      // format.
+      const allKeys = bucket?.keys ?? []
+      const maxKeys = Number(url.searchParams.get('max-keys')) || allKeys.length
+      const startIndex = Number(url.searchParams.get('continuation-token')) || 0
+      const pageKeys = allKeys.slice(startIndex, startIndex + maxKeys)
+      const nextIndex = startIndex + pageKeys.length
+      const isTruncated = nextIndex < allKeys.length
+
+      const contents = pageKeys
         .map((objectKey) => {
           const storageClass = bucket?.metadata.get(objectKey)?.storageClass ?? 'STANDARD'
           return `<Contents><Key>${objectKey}</Key><LastModified>2024-01-01T00:00:00.000Z</LastModified><Size>1</Size><StorageClass>${storageClass}</StorageClass></Contents>`
         })
         .join('')
+      const nextToken = isTruncated ? `<NextContinuationToken>${nextIndex}</NextContinuationToken>` : ''
       res.writeHead(200, { 'Content-Type': 'application/xml' })
-      res.end(`<?xml version="1.0" encoding="UTF-8"?><ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>${bucketName}</Name><IsTruncated>false</IsTruncated>${contents}</ListBucketResult>`)
+      res.end(`<?xml version="1.0" encoding="UTF-8"?><ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>${bucketName}</Name><IsTruncated>${isTruncated}</IsTruncated>${nextToken}${contents}</ListBucketResult>`)
       return
     }
 

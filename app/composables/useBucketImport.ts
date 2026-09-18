@@ -8,6 +8,13 @@ export interface ImportSummary {
   albums: number
 }
 
+// The shape POST /api/photos/import actually responds with — one
+// `ListObjectsV2` page's worth of progress (see import.post.ts) plus
+// whether the whole bucket has now been walked.
+interface ImportChunkResult extends ImportSummary {
+  done: boolean
+}
+
 // No timing data travels over the wire (see import.post.ts) — the ETA is
 // derived purely from wall-clock time between when the client kicked off
 // the import and when it received each `import:progress` event.
@@ -55,7 +62,20 @@ export function useBucketImport() {
     })
 
     try {
-      result.value = await $fetch<ImportSummary>('/api/photos/import', { method: 'POST' })
+      // The server processes one bucket page (up to 1000 objects) per
+      // request rather than the whole import in one long-lived
+      // connection (see import.post.ts) — so a "many many photos" import
+      // stays resumable instead of relying on a single HTTP request to
+      // survive uninterrupted for 30+ minutes. Keep calling it until it
+      // reports the whole bucket has been walked; `result` is only ever
+      // set once that's true, so the progress UI (driven by the
+      // `import:progress` WS events above) stays up throughout.
+      let chunk: ImportChunkResult
+      do {
+        chunk = await $fetch<ImportChunkResult>('/api/photos/import', { method: 'POST' })
+      } while (!chunk.done)
+
+      result.value = { imported: chunk.imported, albums: chunk.albums }
       return result.value
     }
     finally {

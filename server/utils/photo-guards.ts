@@ -1,5 +1,4 @@
 import type { H3Event } from 'h3'
-import type { AwsCredentials } from './storage'
 import { prisma } from './prisma'
 
 // Shared guard for every Photo endpoint (issue #50): loads the
@@ -7,8 +6,12 @@ import { prisma } from './prisma'
 // same `photos.storage_connection_required` error every one of them needs
 // — collapsing what used to be an identical
 // `findUniqueOrThrow` + `if (!aws_credentials) throw ...` block repeated in
-// each route file.
-export async function requirePhotoStorageConnection(userId: number): Promise<{ id: number, aws_credentials: AwsCredentials }> {
+// each route file. Left un-annotated (rather than pinned to the narrower
+// `storage.ts` `AwsCredentials` shape) so callers that also need its
+// resumable-import fields (`import_cursor`/`import_imported`/
+// `import_album_ids`, see server/api/photos/import.post.ts) get them
+// without a second round trip.
+export async function requirePhotoStorageConnection(userId: number) {
   const account = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
     include: { aws_credentials: true },

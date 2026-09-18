@@ -1,28 +1,52 @@
 import { requirePhotoStorageConnection } from '#server/utils/photo-guards'
 import { prisma } from '#server/utils/prisma'
 import { serializePhoto } from '#server/utils/serialize-photo'
-import { fetchTakenAt, listAllBucketImages, mimeTypeFromKey } from '#server/utils/storage'
+import { fetchTakenAt, listAllBucketImages, listBucketImagePage, mimeTypeFromKey } from '#server/utils/storage'
 import { sendMessageToUser } from '#server/utils/websocket'
 
 // Imports the authenticated User's pre-existing bucket contents into
-// Pictacular (issue #54): walks every page of the connected bucket,
-// derives an Album title from each image's top-level folder prefix
-// (creating one Album per User + title, reusing an existing one if the
-// User already has an Album with that title), creates a Photo row for
-// every image found, links it into its derived Album, and reports
-// progress over the existing WS infra (server/utils/websocket.ts) as it
-// goes — so the Storage Connection onboarding screen's import step can
-// show live progress instead of one opaque wait. Runs to completion
-// within the request (unlike the legacy Express usecase's fire-and-forget
-// promise) since this app's WS layer is only used to notify already-open
-// tabs, not to signal HTTP completion.
+// Pictacular (issue #54): derives an Album title from each image's
+// top-level folder prefix (creating one Album per User + title, reusing
+// an existing one if the User already has an Album with that title),
+// creates a Photo row for every image found, links it into its derived
+// Album, and reports progress over the existing WS infra
+// (server/utils/websocket.ts) as it goes — so the Storage Connection
+// onboarding screen's import step can show live progress instead of one
+// opaque wait.
+//
+// Processes exactly one `ListObjectsV2` page (up to 1000 objects) per
+// request rather than the whole bucket in one go: a "many many photos"
+// bucket can take well over 30 minutes to walk end-to-end (per-image EXIF
+// reads + DB writes, not just listing), which is too long to trust a
+// single HTTP request/connection to survive uninterrupted (proxy/idle
+// timeouts, a dropped client, ...). The client (useBucketImport) is
+// expected to keep calling this endpoint until the response's `done` is
+// true; progress across those separate requests is persisted on the
+// Storage Connection itself (`import_cursor`/`import_total`/
+// `import_imported`/`import_album_ids`) so a request that never lands
+// still leaves the import resumable from exactly where it left off, with
+// no re-scanned or duplicated Photos (re-running any page is already
+// idempotent via the existing-Photo lookup below).
 export default defineEventHandler(async (event) => {
   const { user } = requireAuth(event)
   const account = await requirePhotoStorageConnection(user.id)
+  const { aws_credentials } = account
 
-  const images = await listAllBucketImages(account.aws_credentials)
+  // A fresh start (no cursor persisted yet, i.e. either the very first
+  // page of a new import, or resuming one that was already fully
+  // consumed and reset below) needs its total image count computed once,
+  // up front, via a fast list-only pass (no per-object round trip — see
+  // listAllBucketImages) purely for progress reporting; every later page
+  // of the same import reuses that persisted total instead of re-walking
+  // the whole bucket again.
+  const total = aws_credentials.import_cursor === null && aws_credentials.import_total === null
+    ? (await listAllBucketImages(aws_credentials)).length
+    : aws_credentials.import_total!
+
+  const { images, nextContinuationToken } = await listBucketImagePage(aws_credentials, aws_credentials.import_cursor ?? undefined)
   const albumIdsByTitle = new Map<string, number>()
-  let imported = 0
+  const albumIds = new Set(aws_credentials.import_album_ids)
+  let imported = aws_credentials.import_imported
 
   for (const image of images) {
     const [firstSegment, ...rest] = image.key.split('/')
@@ -43,6 +67,7 @@ export default defineEventHandler(async (event) => {
         albumId = album.id
         albumIdsByTitle.set(albumTitle, albumId)
       }
+      albumIds.add(albumId)
     }
 
     // Re-running an import (a retried request, or re-connecting the same
@@ -57,7 +82,7 @@ export default defineEventHandler(async (event) => {
     // import against an already-imported object never re-fetches its
     // Taken At (issue #162 is forward-only, no backfill of pre-existing
     // Photos).
-    const taken_at = existingPhoto ? undefined : await fetchTakenAt(account.aws_credentials, image.key)
+    const taken_at = existingPhoto ? undefined : await fetchTakenAt(aws_credentials, image.key)
 
     const photo = existingPhoto ?? await prisma.photo.create({
       data: {
@@ -87,11 +112,27 @@ export default defineEventHandler(async (event) => {
     imported += 1
 
     const serialized = serializePhoto(photo, user.id)
-    sendMessageToUser(user.id, 'import:progress', { imported, total: images.length, photo: serialized })
+    sendMessageToUser(user.id, 'import:progress', { imported, total, photo: serialized })
   }
 
-  const summary = { imported, albums: albumIdsByTitle.size }
-  sendMessageToUser(user.id, 'import:completed', summary)
+  const done = !nextContinuationToken
 
-  return summary
+  // Persist this page's progress before returning: either as the
+  // resumption point for the next request (still in progress), or reset
+  // back to a clean slate so a later, separate import (e.g. re-connecting
+  // a different bucket) starts from scratch rather than inheriting a
+  // finished one's counters.
+  await prisma.awsCredentials.update({
+    where: { id: aws_credentials.id },
+    data: done
+      ? { import_cursor: null, import_total: null, import_imported: 0, import_album_ids: [] }
+      : { import_cursor: nextContinuationToken, import_total: total, import_imported: imported, import_album_ids: [...albumIds] },
+  })
+
+  const summary = { imported, albums: albumIds.size }
+
+  if (done)
+    sendMessageToUser(user.id, 'import:completed', summary)
+
+  return { ...summary, done }
 })

@@ -104,6 +104,22 @@ model AwsCredentials {
   region     String
   tokens     String
 
+  // Resumable bucket import state (issue #54 follow-up): a "many many
+  // photos" import can take well over 30 minutes, which is too long to
+  // trust a single HTTP request/connection to survive end-to-end — so
+  // POST /api/photos/import processes one S3 ListObjectsV2 page per
+  // request instead, persisting just enough state here to pick back up
+  // where it left off if a request is interrupted, rather than either
+  // restarting the whole bucket walk or losing all progress reporting.
+  // `import_cursor` is the S3 ContinuationToken to resume listing from
+  // (null before the first page and again once the import completes),
+  // `import_imported`/`import_album_ids` are the running counts persisted
+  // across those requests to report an accurate final summary.
+  import_cursor    String?
+  import_total     Int?
+  import_imported  Int      @default(0)
+  import_album_ids Int[]    @default([])
+
   user_id Int  @unique
   user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
