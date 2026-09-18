@@ -3,14 +3,17 @@ import { encodeStorageConnectionLaunch } from '#server/utils/jwt'
 import { prisma } from '#server/utils/prisma'
 import { CREATE_BUCKET_STACK_REGION } from '#server/utils/storage'
 
-// GitHub raw URLs for the CloudFormation templates CloudFormation itself
-// fetches when a User clicks "Launch Stack" (issue #149/#151's templates)
-// — these only resolve once the respective template is actually merged to
-// `main`, a deployment-order dependency called out in each ticket's PR
-// description.
-const cfnTemplateUrls = {
-  create: 'https://raw.githubusercontent.com/aautcq/pictacular/main/cloudformation/create-bucket.yaml',
-  connect: 'https://raw.githubusercontent.com/aautcq/pictacular/main/cloudformation/connect-bucket.yaml',
+// CloudFormation's own CreateStack API only accepts a TemplateURL that
+// points at an object in Amazon S3 (or an SSM document) — never an
+// arbitrary HTTPS host such as raw.githubusercontent.com, which it rejects
+// with "TemplateURL must be a supported URL" — so the version-controlled
+// templates under cloudformation/*.yaml (issue #149/#151) are mirrored to
+// a Pictacular-owned S3 bucket (see cloudformation/README.md) and this
+// only builds URLs against that bucket's base URL, read from config.
+function cfnTemplateUrl(mode: 'create' | 'connect') {
+  const { cfnTemplatesBaseUrl } = useRuntimeConfig().aws
+  const filename = mode === 'create' ? 'create-bucket.yaml' : 'connect-bucket.yaml'
+  return `${cfnTemplatesBaseUrl}/${filename}`
 }
 
 function randomSuffix() {
@@ -75,7 +78,7 @@ export default defineEventHandler(async (event) => {
   })
 
   const stackParams = new URLSearchParams({
-    templateURL: cfnTemplateUrls[mode],
+    templateURL: cfnTemplateUrl(mode),
     stackName: 'pictacular-storage-connection',
     param_ExternalId: externalId,
     param_BucketName: bucket,

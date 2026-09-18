@@ -32,3 +32,17 @@ Linted in CI (`.github/workflows/cfn-lint.yml`) with
 directory. Template *contents* aren't exercised by this app's Vitest suite (a Vitest black-box
 test can't meaningfully assert on CloudFormation resources/policies) — `cfn-lint` plus a manual
 launch in a real/sandbox AWS account is the validation path instead.
+
+## Hosting (`NUXT_AWS_CFN_TEMPLATES_BASE_URL`)
+
+CloudFormation's own `CreateStack`/Console "Launch Stack" flow only accepts a `TemplateURL`
+pointing at an object stored in Amazon S3 (or an SSM document) — it rejects any other HTTPS
+host (including `raw.githubusercontent.com`) with `ValidationError: TemplateURL must be a
+supported URL`. These two `.yaml` files are therefore mirrored, byte-for-byte, to a
+Pictacular-owned public-read S3 bucket after every change lands on `main`; `server/api/
+storage-connections/launch.post.ts` builds each Launch Stack URL's `templateURL` param as
+`${NUXT_AWS_CFN_TEMPLATES_BASE_URL}/create-bucket.yaml` (or `connect-bucket.yaml`), so that env
+var must point at the bucket's base URL (e.g.
+`https://pictacular-cfn-templates.s3.eu-west-1.amazonaws.com`) for Launch Stack links to
+resolve at all, in every environment including local dev. See `docs/aws-account-setup.md` for
+how the bucket itself is provisioned.

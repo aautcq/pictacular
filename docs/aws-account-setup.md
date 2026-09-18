@@ -19,3 +19,14 @@ Rotate the access key periodically via IAM → Users → pictacular-server →
 Security credentials; update `NUXT_AWS_ACCESS_KEY_ID` /
 `NUXT_AWS_SECRET_ACCESS_KEY` in `.env` (and any deploy secret store)
 afterwards.
+
+## CloudFormation template hosting
+
+CloudFormation's Launch Stack flow requires `TemplateURL` to point at an S3
+object (see `cloudformation/README.md`), so a public-read S3 bucket in this
+same account mirrors `cloudformation/create-bucket.yaml` and
+`connect-bucket.yaml`. Its base URL is the `NUXT_AWS_CFN_TEMPLATES_BASE_URL`
+env var (see `.env.example`) — set this up with
+`scripts/setup-cfn-templates-bucket.sh` (a `/wizard`-generated one-off
+script; delete it once the bucket is provisioned and the two templates are
+uploaded, re-running it after any template change in the meantime).
