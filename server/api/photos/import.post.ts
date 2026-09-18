@@ -1,4 +1,4 @@
-import { requirePhotoStorageConnection } from '#server/utils/photo-guards'
+import { requirePhotoStorageConnection, withStorageConnectionGuard } from '#server/utils/photo-guards'
 import { prisma } from '#server/utils/prisma'
 import { serializePhoto } from '#server/utils/serialize-photo'
 import { fetchTakenAt, listAllBucketImages, mimeTypeFromKey } from '#server/utils/storage'
@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
   const { user } = requireAuth(event)
   const account = await requirePhotoStorageConnection(user.id)
 
-  const images = await listAllBucketImages(account.aws_credentials)
+  const images = await withStorageConnectionGuard(account.id, () => listAllBucketImages(account.aws_credentials))
   const albumIdsByTitle = new Map<string, number>()
   let imported = 0
 

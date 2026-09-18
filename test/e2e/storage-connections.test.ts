@@ -260,6 +260,30 @@ describe('storage connection onboarding', async () => {
       ).rejects.toMatchObject({ statusCode: 409, statusMessage: 'storage.already_connected' })
     })
 
+    it('replaces a broken connection\'s Role/External Id/bucket in place instead of rejecting it as already connected (issue #153)', async () => {
+      const user = await createVerifiedUser()
+      const cookieHeader = await loginCookieHeader(user.email)
+      const brokenBucket = uniqueBucketName()
+      fakeS3.seedBucket(brokenBucket)
+      await prisma.awsCredentials.create({
+        data: { bucket: brokenBucket, region: 'eu-west-3', role_arn: badRoleArn, external_id: testExternalId, broken: true, user: { connect: { id: user.id } } },
+      })
+      const freshBucket = uniqueBucketName()
+      fakeS3.seedBucket(freshBucket)
+      const pendingToken = encodeStorageConnectionLaunch({ user_id: user.id, external_id: testExternalId, bucket: freshBucket, role_arn: testRoleArn, mode: 'create' })
+
+      await $fetch('/api/storage-connections', {
+        method: 'POST',
+        headers: { cookie: cookieHeader },
+        body: { pending_token: pendingToken },
+      })
+
+      const connection = await prisma.awsCredentials.findUniqueOrThrow({ where: { user_id: user.id } })
+      expect(connection.broken).toBe(false)
+      expect(connection.bucket).toBe(freshBucket)
+      expect(connection.role_arn).toBe(testRoleArn)
+    })
+
     it('rejects an invalid payload', async () => {
       const user = await createVerifiedUser()
       const cookieHeader = await loginCookieHeader(user.email)

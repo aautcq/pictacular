@@ -1,5 +1,5 @@
 import { archivedStorageClasses } from '#server/utils/archived-photo'
-import { requirePhotoStorageConnection } from '#server/utils/photo-guards'
+import { requirePhotoStorageConnection, withStorageConnectionGuard } from '#server/utils/photo-guards'
 import { requestPhotoRestore } from '#server/utils/photo-restore'
 import { prisma } from '#server/utils/prisma'
 import { serializePhoto } from '#server/utils/serialize-photo'
@@ -37,7 +37,7 @@ export default defineEventHandler(async (event) => {
   // rejecting here would hide those already-successful outcomes from the
   // response.
   const settled = await Promise.allSettled(
-    archivedPhotos.map(photo => requestPhotoRestore(photo, account.aws_credentials)),
+    archivedPhotos.map(photo => withStorageConnectionGuard(account.id, () => requestPhotoRestore(photo, account.aws_credentials))),
   )
   const updated = settled
     .filter(result => result.status === 'fulfilled')

@@ -350,15 +350,28 @@ function parseRestoreHeader(header: string | undefined): { ongoing: boolean, exp
   }
 }
 
+// Already-namespaced errors this module's own `createClient`/`assumeRole`
+// can throw (e.g. `storage.invalid_role` when a Role can no longer be
+// assumed at all — see server/utils/sts.ts) carry both fields already, set
+// by createError itself — unlike a raw AWS SDK exception, which never has
+// a top-level `statusCode`/`statusMessage` of its own. Distinguishing the
+// two below (issue #153) is what lets a Role-unassumable failure bubble up
+// unchanged for photo-guards.ts's withStorageConnectionGuard to recognize
+// and turn into a single, connection-wide "broken" state, rather than
+// this function masking it as its own unrelated `photos.restore_failed`.
+function isNamespacedAwsError(error: unknown): boolean {
+  return !!error && typeof error === 'object' && 'statusCode' in error && 'statusMessage' in error
+}
+
 // Reads a single object's current storage class + Restore Request status
 // (issue #145) via `HeadObject` — only ever called for a Photo already
 // known to be archived from the free `ListObjectsV2` `StorageClass` field
 // (see listAllBucketImages above), never per-Photo on every scan/request.
-// Any AWS-level failure (bad/revoked credentials, permission error, ...)
-// is surfaced as the same namespaced error code `restoreObject` below
-// uses, rather than bubbling up as an unhandled 500 — this is the only
-// AWS call the restore endpoints make before deciding whether to issue a
-// `RestoreObjectCommand` at all.
+// Any other AWS-level failure (permission error, ...) is surfaced as the
+// same namespaced error code `restoreObject` below uses, rather than
+// bubbling up as an unhandled 500 — this is the only AWS call the restore
+// endpoints make before deciding whether to issue a `RestoreObjectCommand`
+// at all.
 export async function headObjectRestoreStatus(awsCredentials: AwsCredentials, key: string): Promise<RestoreStatus> {
   try {
     const client = await createClient(awsCredentials)
@@ -368,6 +381,9 @@ export async function headObjectRestoreStatus(awsCredentials: AwsCredentials, ke
     return { storage_class: response.StorageClass ?? 'STANDARD', ongoing, expires_at }
   }
   catch (error) {
+    if (isNamespacedAwsError(error))
+      throw error
+
     throw createError({
       statusCode: 502,
       statusMessage: 'photos.restore_failed',
@@ -407,6 +423,9 @@ export async function restoreObject(awsCredentials: AwsCredentials, key: string)
   catch (error) {
     if ((error as { name?: string } | null)?.name === 'RestoreAlreadyInProgress')
       return
+
+    if (isNamespacedAwsError(error))
+      throw error
 
     throw createError({
       statusCode: 502,

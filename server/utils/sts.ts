@@ -108,6 +108,21 @@ export async function assumeRole(roleArn: string, externalId: string): Promise<A
     if (error && typeof error === 'object' && 'statusCode' in error)
       throw error
 
+    // Only STS's own `AccessDenied` (the exact rejection its trust policy
+    // returns once a Role/stack has been deleted or its trust relationship
+    // revoked — see the fake STS double's `badRoleArn` sentinel in
+    // test/e2e/fake-s3-server.ts) means the Role genuinely can no longer
+    // be assumed. Every other STS failure — throttling, a transient
+    // service error, a raw network/timeout failure that never got a
+    // response at all — is left as a distinct, non-namespaced error;
+    // namespacing those as `storage.invalid_role` too would let issue
+    // #153's broken-connection detection (which watches specifically for
+    // this code) permanently mark a connection broken over a transient
+    // blip, exactly what it's required not to do.
+    const errorName = error && typeof error === 'object' && 'name' in error ? (error as { name?: unknown }).name : undefined
+    if (errorName !== 'AccessDenied' && errorName !== 'AccessDeniedException')
+      throw createError({ statusCode: 502, statusMessage: 'storage.connection_unavailable', cause: error })
+
     throw createError({ statusCode: 401, statusMessage: 'storage.invalid_role', cause: error })
   }
 }

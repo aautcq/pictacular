@@ -13,7 +13,13 @@ const launching = shallowRef(false)
 const confirming = shallowRef(false)
 const launchUrl = shallowRef<string | null>(null)
 const pendingToken = shallowRef<string | null>(null)
-const connected = shallowRef(user.value?.has_aws_credentials ?? false)
+// A broken connection (issue #153) is treated as "not connected" here —
+// the User is dropped straight back into the launch form to relaunch the
+// stack and reconnect (a fresh Role/External Id), never a repair of the
+// old one — but the explanatory banner below still needs to know it was
+// broken specifically, rather than never connected at all.
+const wasBroken = user.value?.storage_connection_broken ?? false
+const connected = shallowRef((user.value?.has_aws_credentials ?? false) && !wasBroken)
 const importSkipped = shallowRef(false)
 
 // Radio options for the two onboarding modes (issue #152): switching mode
@@ -175,6 +181,9 @@ const etaLabel = computed(() => {
 
     <div v-else class="flex flex-col gap-y-6">
       <div class="flex flex-col gap-y-3 text-sm text-gray-600 dark:text-gray-300">
+        <p v-if="wasBroken" class="text-red-600 dark:text-red-400">
+          {{ t('brokenExplanation') }}
+        </p>
         <p>
           {{ t('description') }}
         </p>
@@ -264,6 +273,7 @@ const etaLabel = computed(() => {
     "importResult": "Imported {photoCount} into {albumCount}.",
     "connectionReady": "Your storage connection is ready.",
     "continue": "Continue",
+    "brokenExplanation": "Your previous storage connection is broken (its AWS Role can no longer be assumed — for example, its CloudFormation stack may have been deleted). Relaunch a stack below to reconnect with a fresh Role.",
     "description": "Pictacular stores your photos in your own AWS S3 bucket. Choose whether to create a new bucket or connect one you already own, enter your AWS Account ID, then launch a CloudFormation stack that sets up a Role Pictacular can use — no AWS keys are ever shared with Pictacular.",
     "modeLabel": "Bucket",
     "modeCreate": "Create a new bucket for me",
