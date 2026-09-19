@@ -1,4 +1,7 @@
+import process from 'node:process'
 import { defineConfig } from 'vitest/config'
+import { toTestDatabaseUrl } from './scripts/test-database-url.mjs'
+import 'dotenv/config'
 
 // Plain Vitest config (not `defineVitestConfig`, which now targets Nuxt's
 // client "nuxt" test environment): every spec here uses `@nuxt/test-utils`'s
@@ -27,6 +30,13 @@ export default defineConfig({
       // local .env (a real key there is what got this account blocked for
       // hard bounces against test fixtures' @example.com addresses).
       NUXT_BREVO_API_KEY: 'test-invalid-key',
+      // Isolates test runs to their own database (see
+      // scripts/test-database-url.mjs and the `pretest` npm script that
+      // keeps its schema in sync): specs create real EmailOutbox rows as a
+      // side effect of exercising the app over HTTP, and those rows
+      // previously landed in the dev database, where a later `npm run dev`
+      // would have Nitro's scheduled email-outbox task send them for real.
+      NUXT_DATABASE_URL: toTestDatabaseUrl(process.env.NUXT_DATABASE_URL),
     },
     alias: {
       '#server/': new URL('./server/', import.meta.url).pathname,
