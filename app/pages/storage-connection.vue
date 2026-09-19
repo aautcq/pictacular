@@ -18,11 +18,33 @@ const loading = shallowRef(false)
 const connected = shallowRef(user.value?.has_aws_credentials ?? false)
 const importSkipped = shallowRef(false)
 
-const { data: hasPhotos } = useAsyncData(async () => {
+const noImportStatus: BucketStatus = { has_photos: false, import_in_progress: false, import_completed: false, imported: 0, albums: 0 }
+
+const { data: bucketStatus } = useAsyncData(async () => {
   if (connected.value && !importSkipped.value) {
     return await checkBucket()
   }
-  return false
+  return noImportStatus
+})
+
+// Restores the right screen state from the server on every mount: this
+// composable's own progress/result refs are ephemeral (lost on any
+// reload — e.g. this tab being suspended across a laptop going to sleep
+// during a long import — even though the import itself keeps running
+// server-side), so a reload mid-import silently resumes it in place
+// instead of abandoning it, and a reload after a completed import
+// restores its summary instead of re-offering an import that already
+// finished (bucketStatus.import_completed/import_in_progress + its last
+// result are read straight from the same AwsCredentials row
+// server/api/photos/import.post.ts persists to).
+watchEffect(() => {
+  if (!bucketStatus.value || result.value)
+    return
+
+  if (bucketStatus.value.import_completed)
+    result.value = { imported: bucketStatus.value.imported, albums: bucketStatus.value.albums }
+  else if (bucketStatus.value.import_in_progress && !importing.value)
+    startImport()
 })
 
 function selectMode(value: 'create' | 'connect') {
@@ -55,7 +77,7 @@ async function submit() {
     )
 
     connected.value = true
-    hasPhotos.value = mode.value === 'connect' ? await checkBucket() : false
+    bucketStatus.value = mode.value === 'connect' ? await checkBucket() : noImportStatus
   }
   catch (error) {
     form.value?.setErrors(getFieldErrors(error))
@@ -98,7 +120,7 @@ const etaLabel = computed(() => {
     </template>
 
     <div v-if="connected" class="flex flex-col items-center gap-y-6 text-center">
-      <template v-if="hasPhotos && !importSkipped && !result">
+      <template v-if="bucketStatus?.has_photos && !importSkipped && !result">
         <p>
           {{ t('importPrompt') }}
         </p>
@@ -119,7 +141,7 @@ const etaLabel = computed(() => {
             {{ etaLabel }}
           </p>
         </div>
-        <div v-else class="flex justify-center gap-x-4">
+        <div v-else-if="!bucketStatus?.import_in_progress" class="flex justify-center gap-x-4">
           <UButton
             type="button"
             :label="t('importButton')"

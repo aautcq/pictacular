@@ -111,14 +111,31 @@ model AwsCredentials {
   // request instead, persisting just enough state here to pick back up
   // where it left off if a request is interrupted, rather than either
   // restarting the whole bucket walk or losing all progress reporting.
-  // `import_cursor` is the S3 ContinuationToken to resume listing from
-  // (null before the first page and again once the import completes),
-  // `import_imported`/`import_album_ids` are the running counts persisted
-  // across those requests to report an accurate final summary.
+  // `import_cursor` is the S3 ContinuationToken to resume listing from;
+  // `import_total`/`import_imported`/`import_album_ids` are progress
+  // counters kept across requests while an import is in flight. All four
+  // are reset back to "nothing in progress" once the import completes —
+  // matching the same idempotent-rerun contract this app already had
+  // before chunking (re-running a finished import starts its own counters
+  // fresh, rather than accumulating on top of a previous run's).
   import_cursor    String?
   import_total     Int?
   import_imported  Int      @default(0)
   import_album_ids Int[]    @default([])
+
+  // A separate, permanent snapshot of an import's last completed result
+  // (as opposed to the working counters above, which reset on
+  // completion): GET /api/storage-connections/check-bucket reads these —
+  // alongside `import_cursor` to tell "in progress" apart from "not
+  // started"/"completed" — so a page reload mid- or post-import (e.g. the
+  // Storage Connection onboarding screen remounting after the laptop went
+  // to sleep across a long import, dropping its own ephemeral
+  // progress/result state) can restore the right screen instead of
+  // re-offering an import that's already done or silently resuming one
+  // that's still in flight.
+  import_completed_at  DateTime?
+  import_last_imported Int?
+  import_last_albums   Int?
 
   user_id Int  @unique
   user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)

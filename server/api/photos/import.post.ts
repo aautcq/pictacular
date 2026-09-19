@@ -117,16 +117,34 @@ export default defineEventHandler(async (event) => {
 
   const done = !nextContinuationToken
 
-  // Persist this page's progress before returning: either as the
-  // resumption point for the next request (still in progress), or reset
-  // back to a clean slate so a later, separate import (e.g. re-connecting
-  // a different bucket) starts from scratch rather than inheriting a
-  // finished one's counters.
+  // Persist this page's progress before returning: while still in
+  // progress, as the resumption point for the next request. Once done,
+  // the working counters reset back to a blank slate (matching this
+  // endpoint's pre-chunking idempotent-rerun contract: re-running an
+  // already-finished import starts its own count fresh rather than
+  // accumulating on top of a previous run's), while `import_completed_at`
+  // + `import_last_imported`/`import_last_albums` separately snapshot
+  // this run's final result permanently — see the schema comment on
+  // AwsCredentials for why check-bucket.get.ts needs that separate,
+  // non-resetting snapshot.
   await prisma.awsCredentials.update({
     where: { id: aws_credentials.id },
     data: done
-      ? { import_cursor: null, import_total: null, import_imported: 0, import_album_ids: [] }
-      : { import_cursor: nextContinuationToken, import_total: total, import_imported: imported, import_album_ids: [...albumIds] },
+      ? {
+          import_cursor: null,
+          import_total: null,
+          import_imported: 0,
+          import_album_ids: [],
+          import_completed_at: new Date(),
+          import_last_imported: imported,
+          import_last_albums: albumIds.size,
+        }
+      : {
+          import_cursor: nextContinuationToken,
+          import_total: total,
+          import_imported: imported,
+          import_album_ids: [...albumIds],
+        },
   })
 
   const summary = { imported, albums: albumIds.size }

@@ -9,6 +9,22 @@ export interface CurrentUser {
   last_sign_in_at: string | null
 }
 
+// Reported by GET /api/storage-connections/check-bucket: whether the
+// connected bucket has any images at all, plus the persisted state of an
+// import against it (issue #54's chunked/resumable import — see
+// server/api/photos/import.post.ts) so a page reload/remount mid- or
+// post-import (e.g. a laptop going to sleep across a long import,
+// dropping this composable's own ephemeral `result`/`progress` refs) can
+// restore the right onboarding screen state from the server instead of
+// re-offering an import that's already done or in flight.
+export interface BucketStatus {
+  has_photos: boolean
+  import_in_progress: boolean
+  import_completed: boolean
+  imported: number
+  albums: number
+}
+
 // Current-User session state (issue #48), ported from the legacy
 // currentUser Pinia store as a Nuxt composable backed by useState: every
 // auth screen (register/verify/login/reset-password/profile) reads and
@@ -104,8 +120,7 @@ export function useCurrentUser() {
   }
 
   async function checkBucket() {
-    const { has_photos } = await useRequestFetch()<{ has_photos: boolean }>('/api/storage-connections/check-bucket')
-    return has_photos
+    return useRequestFetch()<BucketStatus>('/api/storage-connections/check-bucket')
   }
 
   return {
