@@ -70,7 +70,7 @@ describe('import bucket photos', async () => {
     const bucket = uniqueBucketName()
     fakeS3.seedBucket(bucket, keys)
 
-    await prisma.awsCredentials.create({
+    await prisma.storageConnection.create({
       data: {
         bucket,
         region: 'eu-west-3',
@@ -273,7 +273,7 @@ describe('import bucket photos', async () => {
       // getting interrupted (a dropped connection, a proxy timeout, ...)
       // partway through the import — exactly the scenario this chunking
       // exists to survive.
-      await prisma.awsCredentials.updateMany({
+      await prisma.storageConnection.updateMany({
         where: { user_id: userId },
         data: { import_cursor: '1', import_total: 3, import_imported: 1, import_album_ids: [] },
       })
@@ -293,7 +293,7 @@ describe('import bucket photos', async () => {
 
       // Completion resets the persisted cursor/counters, so a later,
       // separate import starts clean rather than inheriting this one's.
-      const accountAfterCompletion = await prisma.awsCredentials.findFirstOrThrow({ where: { user_id: userId } })
+      const accountAfterCompletion = await prisma.storageConnection.findFirstOrThrow({ where: { user_id: userId } })
       expect(accountAfterCompletion.import_cursor).toBeNull()
       expect(accountAfterCompletion.import_total).toBeNull()
       expect(accountAfterCompletion.import_imported).toBe(0)

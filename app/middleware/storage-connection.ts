@@ -14,6 +14,6 @@ export default defineNuxtRouteMiddleware(async () => {
   if (!isAuthenticated.value)
     await fetchCurrentUser()
 
-  if (isAuthenticated.value && (!user.value?.has_aws_credentials || user.value?.storage_connection_broken))
+  if (isAuthenticated.value && (!user.value?.has_storage_connection || user.value?.storage_connection_broken))
     return navigateTo('/storage-connection')
 })

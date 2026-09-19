@@ -27,7 +27,7 @@ import { createError } from 'h3'
 import { extractTakenAt } from './exif'
 import { assumeRole } from './sts'
 
-export interface AwsCredentials {
+export interface StorageConnectionAccess {
   bucket: string
   region: string
   role_arn: string
@@ -61,12 +61,12 @@ const imageExtensionPattern = /\.(?:jpe?g|png|gif|webp|heic|heif|bmp|tiff?)$/i
 // server/utils/sts.ts's own in-memory session cache, which is what keeps
 // this from costing a fresh AssumeRole round trip on every single call
 // below).
-async function createClient(awsCredentials: AwsCredentials, options: { followRegionRedirects?: boolean } = {}) {
-  const { accessKeyId, secretAccessKey, sessionToken } = await assumeRole(awsCredentials.role_arn, awsCredentials.external_id)
+async function createClient(storageConnection: StorageConnectionAccess, options: { followRegionRedirects?: boolean } = {}) {
+  const { accessKeyId, secretAccessKey, sessionToken } = await assumeRole(storageConnection.role_arn, storageConnection.external_id)
   const endpoint = process.env.AWS_S3_ENDPOINT
 
   return new S3Client({
-    region: awsCredentials.region,
+    region: storageConnection.region,
     credentials: { accessKeyId, secretAccessKey, sessionToken },
     ...(options.followRegionRedirects && { followRegionRedirects: true }),
     ...(endpoint && { endpoint, forcePathStyle: true }),
@@ -136,9 +136,9 @@ export async function confirmStorageConnection(roleArn: string, externalId: stri
 // Reports whether a connected bucket already contains image files, so the
 // onboarding client can offer a later "import existing photos" step —
 // porting the checkBucket usecase's `has_photos` shape.
-export async function bucketHasImages(awsCredentials: AwsCredentials) {
-  const client = await createClient(awsCredentials)
-  const { Contents } = await client.send(new ListObjectsV2Command({ Bucket: awsCredentials.bucket, MaxKeys: 100 }))
+export async function bucketHasImages(storageConnection: StorageConnectionAccess) {
+  const client = await createClient(storageConnection)
+  const { Contents } = await client.send(new ListObjectsV2Command({ Bucket: storageConnection.bucket, MaxKeys: 100 }))
 
   return (Contents ?? []).some(({ Key }) => Key && imageExtensionPattern.test(Key))
 }
@@ -166,11 +166,11 @@ export interface BucketImagePage {
 // `nextContinuationToken` across requests instead, see
 // server/api/photos/import.post.ts) and its per-object mime-type lookup
 // (see mimeTypeFromKey below instead).
-export async function listBucketImagePage(awsCredentials: AwsCredentials, continuationToken?: string): Promise<BucketImagePage> {
-  const client = await createClient(awsCredentials)
+export async function listBucketImagePage(storageConnection: StorageConnectionAccess, continuationToken?: string): Promise<BucketImagePage> {
+  const client = await createClient(storageConnection)
 
   const { Contents, IsTruncated, NextContinuationToken } = await client.send(new ListObjectsV2Command({
-    Bucket: awsCredentials.bucket,
+    Bucket: storageConnection.bucket,
     MaxKeys: 1000,
     ContinuationToken: continuationToken,
   }))
@@ -190,12 +190,12 @@ export async function listBucketImagePage(awsCredentials: AwsCredentials, contin
 // HeadObject/GetObject round trip) to establish an import's total image
 // count for progress reporting (see server/api/photos/import.post.ts),
 // porting the legacy StorageUtility#listData loop's pagination.
-export async function listAllBucketImages(awsCredentials: AwsCredentials): Promise<BucketImageObject[]> {
+export async function listAllBucketImages(storageConnection: StorageConnectionAccess): Promise<BucketImageObject[]> {
   const images: BucketImageObject[] = []
   let continuationToken: string | undefined
 
   do {
-    const page = await listBucketImagePage(awsCredentials, continuationToken)
+    const page = await listBucketImagePage(storageConnection, continuationToken)
     images.push(...page.images)
     continuationToken = page.nextContinuationToken
   } while (continuationToken)
@@ -258,11 +258,11 @@ async function bodyToBuffer(body: NonNullable<GetObjectCommandOutput['Body']>): 
 // rather than surfaced — a Photo import/upload must never fail just
 // because its Taken At couldn't be determined; callers fall back to
 // `last_modified` themselves.
-export async function fetchTakenAt(awsCredentials: AwsCredentials, key: string): Promise<Date | null> {
+export async function fetchTakenAt(storageConnection: StorageConnectionAccess, key: string): Promise<Date | null> {
   try {
-    const client = await createClient(awsCredentials)
+    const client = await createClient(storageConnection)
     const rangeResponse = await client.send(new GetObjectCommand({
-      Bucket: awsCredentials.bucket,
+      Bucket: storageConnection.bucket,
       Key: key,
       Range: `bytes=0-${EXIF_RANGE_BYTES - 1}`,
     }))
@@ -273,7 +273,7 @@ export async function fetchTakenAt(awsCredentials: AwsCredentials, key: string):
     if (noExifContainerExtensions.has(extensionFromKey(key)))
       return null
 
-    const fullResponse = await client.send(new GetObjectCommand({ Bucket: awsCredentials.bucket, Key: key }))
+    const fullResponse = await client.send(new GetObjectCommand({ Bucket: storageConnection.bucket, Key: key }))
     return await extractTakenAt(await bodyToBuffer(fullResponse.Body!))
   }
   catch {
@@ -284,9 +284,9 @@ export async function fetchTakenAt(awsCredentials: AwsCredentials, key: string):
 // Generates a time-limited signed URL for any object in a User's own
 // bucket (avatars, Photos, ...) — generic over bucket + key, not
 // per-asset-type.
-export async function generateSecureObjectUrl(awsCredentials: AwsCredentials, key: string, expiresIn = 3600) {
-  const client = await createClient(awsCredentials)
-  const command = new GetObjectCommand({ Bucket: awsCredentials.bucket, Key: key })
+export async function generateSecureObjectUrl(storageConnection: StorageConnectionAccess, key: string, expiresIn = 3600) {
+  const client = await createClient(storageConnection)
+  const command = new GetObjectCommand({ Bucket: storageConnection.bucket, Key: key })
 
   return getSignedUrl(client, command, { expiresIn })
 }
@@ -297,22 +297,22 @@ export async function generateSecureObjectUrl(awsCredentials: AwsCredentials, ke
 // multi-MB original in memory (unlike bodyToBuffer above, which the
 // EXIF/Taken At read path needs a full in-memory Buffer for). The route
 // handler is responsible for streaming `Body` on to its own response.
-export async function fetchPhotoObject(awsCredentials: AwsCredentials, key: string) {
-  const client = await createClient(awsCredentials)
+export async function fetchPhotoObject(storageConnection: StorageConnectionAccess, key: string) {
+  const client = await createClient(storageConnection)
 
-  return client.send(new GetObjectCommand({ Bucket: awsCredentials.bucket, Key: key }))
+  return client.send(new GetObjectCommand({ Bucket: storageConnection.bucket, Key: key }))
 }
 
 // Uploads a User's avatar image (base64-in-JSON, per the legacy upload
 // contract preserved by this rebuild) to their own Storage Connection
 // bucket under a fixed per-user key, so re-uploading always replaces the
 // previous avatar object rather than accumulating orphaned ones.
-export async function uploadAvatarObject(awsCredentials: AwsCredentials, userId: number, mimeType: string, base64: string) {
-  const client = await createClient(awsCredentials)
+export async function uploadAvatarObject(storageConnection: StorageConnectionAccess, userId: number, mimeType: string, base64: string) {
+  const client = await createClient(storageConnection)
   const key = `avatars/${userId}`
 
   await client.send(new PutObjectCommand({
-    Bucket: awsCredentials.bucket,
+    Bucket: storageConnection.bucket,
     Key: key,
     Body: Buffer.from(base64, 'base64'),
     ContentType: mimeType,
@@ -326,13 +326,13 @@ export async function uploadAvatarObject(awsCredentials: AwsCredentials, userId:
 // collide with another upload (unlike avatars, a User may have any number
 // of Photos), returning the storage key + byte size persisted on the
 // Photo row.
-export async function uploadPhotoObject(awsCredentials: AwsCredentials, userId: number, filename: string, mimeType: string, base64: string) {
-  const client = await createClient(awsCredentials)
+export async function uploadPhotoObject(storageConnection: StorageConnectionAccess, userId: number, filename: string, mimeType: string, base64: string) {
+  const client = await createClient(storageConnection)
   const body = Buffer.from(base64, 'base64')
   const key = `photos/${userId}/${randomUUID()}-${filename}`
 
   await client.send(new PutObjectCommand({
-    Bucket: awsCredentials.bucket,
+    Bucket: storageConnection.bucket,
     Key: key,
     Body: body,
     ContentType: mimeType,
@@ -344,10 +344,10 @@ export async function uploadPhotoObject(awsCredentials: AwsCredentials, userId: 
 // Deletes a Photo's underlying bucket object (issue #50), used alongside
 // removing its Photo row so a deleted Photo never leaves an orphaned S3
 // object behind.
-export async function deletePhotoObject(awsCredentials: AwsCredentials, key: string) {
-  const client = await createClient(awsCredentials)
+export async function deletePhotoObject(storageConnection: StorageConnectionAccess, key: string) {
+  const client = await createClient(storageConnection)
 
-  await client.send(new DeleteObjectCommand({ Bucket: awsCredentials.bucket, Key: key }))
+  await client.send(new DeleteObjectCommand({ Bucket: storageConnection.bucket, Key: key }))
 }
 
 export interface RestoreStatus {
@@ -396,10 +396,10 @@ function isNamespacedAwsError(error: unknown): boolean {
 // bubbling up as an unhandled 500 — this is the only AWS call the restore
 // endpoints make before deciding whether to issue a `RestoreObjectCommand`
 // at all.
-export async function headObjectRestoreStatus(awsCredentials: AwsCredentials, key: string): Promise<RestoreStatus> {
+export async function headObjectRestoreStatus(storageConnection: StorageConnectionAccess, key: string): Promise<RestoreStatus> {
   try {
-    const client = await createClient(awsCredentials)
-    const response = await client.send(new HeadObjectCommand({ Bucket: awsCredentials.bucket, Key: key }))
+    const client = await createClient(storageConnection)
+    const response = await client.send(new HeadObjectCommand({ Bucket: storageConnection.bucket, Key: key }))
     const { ongoing, expires_at } = parseRestoreHeader(response.Restore)
 
     return { storage_class: response.StorageClass ?? 'STANDARD', ongoing, expires_at }
@@ -432,11 +432,11 @@ const RESTORE_REQUEST_DAYS = 7
 // with a 409 `RestoreAlreadyInProgress`; that's treated as a no-op success
 // rather than surfaced as a failure, since the end state — a restore is in
 // progress — is exactly what was being asked for.
-export async function restoreObject(awsCredentials: AwsCredentials, key: string): Promise<void> {
+export async function restoreObject(storageConnection: StorageConnectionAccess, key: string): Promise<void> {
   try {
-    const client = await createClient(awsCredentials)
+    const client = await createClient(storageConnection)
     await client.send(new RestoreObjectCommand({
-      Bucket: awsCredentials.bucket,
+      Bucket: storageConnection.bucket,
       Key: key,
       RestoreRequest: {
         Days: RESTORE_REQUEST_DAYS,

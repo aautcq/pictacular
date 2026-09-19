@@ -73,7 +73,7 @@ describe('storage connection onboarding', async () => {
     const bucket = uniqueBucketName()
     fakeS3.seedBucket(bucket, keys)
 
-    await prisma.awsCredentials.create({
+    await prisma.storageConnection.create({
       data: {
         bucket,
         region: 'eu-west-3',
@@ -117,7 +117,7 @@ describe('storage connection onboarding', async () => {
       expect(launchUrlParam(response.launch_url, 'param_ExternalId')).toBeTruthy()
       expect(response.pending_token).toBeTruthy()
 
-      await expect(prisma.awsCredentials.findFirst({ where: { user_id: user.id } })).resolves.toBeNull()
+      await expect(prisma.storageConnection.findFirst({ where: { user_id: user.id } })).resolves.toBeNull()
     })
 
     it('rejects an AWS Account ID that is not exactly 12 digits', async () => {
@@ -138,7 +138,7 @@ describe('storage connection onboarding', async () => {
       const cookieHeader = await loginCookieHeader(user.email)
       const bucket = uniqueBucketName()
       fakeS3.seedBucket(bucket)
-      await prisma.awsCredentials.create({
+      await prisma.storageConnection.create({
         data: { bucket, region: 'eu-west-3', role_arn: testRoleArn, external_id: testExternalId, user: { connect: { id: user.id } } },
       })
 
@@ -183,13 +183,13 @@ describe('storage connection onboarding', async () => {
 
       expect(response.status).toBe(204)
 
-      const persisted = await prisma.user.findUniqueOrThrow({ where: { id: user.id }, include: { aws_credentials: true } })
-      expect(persisted.aws_credentials?.bucket).toBe(bucket)
-      expect(persisted.aws_credentials?.role_arn).toBe(`arn:aws:iam::${awsAccountId}:role/${launchUrlParam(launchUrl, 'param_RoleName')}`)
-      expect(persisted.aws_credentials?.region).toBe('eu-west-3')
+      const persisted = await prisma.user.findUniqueOrThrow({ where: { id: user.id }, include: { storage_connection: true } })
+      expect(persisted.storage_connection?.bucket).toBe(bucket)
+      expect(persisted.storage_connection?.role_arn).toBe(`arn:aws:iam::${awsAccountId}:role/${launchUrlParam(launchUrl, 'param_RoleName')}`)
+      expect(persisted.storage_connection?.region).toBe('eu-west-3')
 
-      const me = await $fetch<{ has_aws_credentials: boolean }>('/api/users/me', { headers: { cookie: cookieHeader } })
-      expect(me.has_aws_credentials).toBe(true)
+      const me = await $fetch<{ has_storage_connection: boolean }>('/api/users/me', { headers: { cookie: cookieHeader } })
+      expect(me.has_storage_connection).toBe(true)
     })
 
     it('rejects with 502 when the stack has not finished creating the bucket yet', async () => {
@@ -263,7 +263,7 @@ describe('storage connection onboarding', async () => {
       const cookieHeader = await loginCookieHeader(user.email)
       const bucket = uniqueBucketName()
       fakeS3.seedBucket(bucket)
-      await prisma.awsCredentials.create({
+      await prisma.storageConnection.create({
         data: { bucket, region: 'eu-west-3', role_arn: testRoleArn, external_id: testExternalId, user: { connect: { id: user.id } } },
       })
       const secondBucket = uniqueBucketName()
@@ -284,7 +284,7 @@ describe('storage connection onboarding', async () => {
       const cookieHeader = await loginCookieHeader(user.email)
       const brokenBucket = uniqueBucketName()
       fakeS3.seedBucket(brokenBucket)
-      await prisma.awsCredentials.create({
+      await prisma.storageConnection.create({
         data: { bucket: brokenBucket, region: 'eu-west-3', role_arn: badRoleArn, external_id: testExternalId, broken: true, user: { connect: { id: user.id } } },
       })
       const freshBucket = uniqueBucketName()
@@ -297,7 +297,7 @@ describe('storage connection onboarding', async () => {
         body: { pending_token: pendingToken },
       })
 
-      const connection = await prisma.awsCredentials.findUniqueOrThrow({ where: { user_id: user.id } })
+      const connection = await prisma.storageConnection.findUniqueOrThrow({ where: { user_id: user.id } })
       expect(connection.broken).toBe(false)
       expect(connection.bucket).toBe(freshBucket)
       expect(connection.role_arn).toBe(testRoleArn)
@@ -338,7 +338,7 @@ describe('storage connection onboarding', async () => {
       const cookieHeader = await loginCookieHeader(user.email)
       const bucket = uniqueBucketName()
       fakeS3.seedBucket(bucket)
-      await prisma.awsCredentials.create({
+      await prisma.storageConnection.create({
         data: { bucket, region: 'eu-west-3', role_arn: testRoleArn, external_id: testExternalId, user: { connect: { id: user.id } } },
       })
 
@@ -356,7 +356,7 @@ describe('storage connection onboarding', async () => {
       const cookieHeader = await loginCookieHeader(user.email)
       const bucket = uniqueBucketName()
       fakeS3.seedBucket(bucket, ['holiday/beach.jpg', 'notes.txt'])
-      await prisma.awsCredentials.create({
+      await prisma.storageConnection.create({
         data: { bucket, region: 'eu-west-3', role_arn: testRoleArn, external_id: testExternalId, user: { connect: { id: user.id } } },
       })
 
@@ -372,7 +372,7 @@ describe('storage connection onboarding', async () => {
     // Issue #203: a "many many photos" import survives a page reload
     // partway through (e.g. the tab being suspended across a laptop going
     // to sleep) since check-bucket reports the persisted, in-flight state
-    // straight from the AwsCredentials row the resumable import itself
+    // straight from the StorageConnectionAccess row the resumable import itself
     // writes to (server/api/photos/import.post.ts) — not just whether the
     // bucket currently has images (always true mid- or post-import).
     it('reports import_in_progress: true while a chunked import is still resuming', async () => {
@@ -381,7 +381,7 @@ describe('storage connection onboarding', async () => {
       const bucket = uniqueBucketName()
       fakeS3.seedBucket(bucket, ['holiday/beach.jpg'])
 
-      await prisma.awsCredentials.create({
+      await prisma.storageConnection.create({
         data: {
           bucket,
           region: 'eu-west-3',
@@ -391,7 +391,7 @@ describe('storage connection onboarding', async () => {
         },
       })
 
-      await prisma.awsCredentials.updateMany({
+      await prisma.storageConnection.updateMany({
         where: { user_id: user.id },
         data: { import_cursor: 'some-continuation-token', import_total: 5, import_imported: 2 },
       })
@@ -423,7 +423,7 @@ describe('storage connection onboarding', async () => {
       expect(response.imported).toBe(2)
       expect(response.albums).toBe(1)
 
-      const account = await prisma.awsCredentials.findFirstOrThrow({ where: { user_id: userId } })
+      const account = await prisma.storageConnection.findFirstOrThrow({ where: { user_id: userId } })
       expect(account.import_cursor).toBeNull()
       expect(account.import_imported).toBe(0)
     })
@@ -500,9 +500,9 @@ describe('storage connection onboarding', async () => {
 
       expect(response.status).toBe(204)
 
-      const persisted = await prisma.user.findUniqueOrThrow({ where: { id: user.id }, include: { aws_credentials: true } })
-      expect(persisted.aws_credentials?.bucket).toBe(bucket)
-      expect(persisted.aws_credentials?.region).toBe('eu-west-3')
+      const persisted = await prisma.user.findUniqueOrThrow({ where: { id: user.id }, include: { storage_connection: true } })
+      expect(persisted.storage_connection?.bucket).toBe(bucket)
+      expect(persisted.storage_connection?.region).toBe('eu-west-3')
     })
 
     it('rejects with 404 when the named bucket does not exist/is not reachable', async () => {

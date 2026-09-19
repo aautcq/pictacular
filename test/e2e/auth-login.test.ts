@@ -214,7 +214,7 @@ describe('login + logout + session lifecycle + lockout', async () => {
     })
 
     expect(response.status).toBe(201)
-    await expect(response.json()).resolves.toMatchObject({ email, has_aws_credentials: false, avatar_url: null })
+    await expect(response.json()).resolves.toMatchObject({ email, has_storage_connection: false, avatar_url: null })
 
     const cookies = getCookies(response)
     expect(cookies.some(cookie => cookie.startsWith(`${accessTokenCookieName}=`))).toBe(true)
@@ -242,7 +242,7 @@ describe('login + logout + session lifecycle + lockout', async () => {
     const email = await createVerifiedUser({ avatar_url: 'avatar.jpg' })
     const user = await prisma.user.findUniqueOrThrow({ where: { email } })
 
-    await prisma.awsCredentials.create({
+    await prisma.storageConnection.create({
       data: {
         bucket: 'pictacular-test-bucket',
         region: 'eu-west-3',
@@ -252,12 +252,12 @@ describe('login + logout + session lifecycle + lockout', async () => {
       },
     })
 
-    const response = await $fetch<{ has_aws_credentials: boolean, avatar_url: string | null }>(
+    const response = await $fetch<{ has_storage_connection: boolean, avatar_url: string | null }>(
       '/api/auth/sessions',
       { method: 'POST', body: { email, password } },
     )
 
-    expect(response.has_aws_credentials).toBe(true)
+    expect(response.has_storage_connection).toBe(true)
     expect(response.avatar_url).toContain('pictacular-test-bucket')
   })
 

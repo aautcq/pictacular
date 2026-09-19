@@ -19,7 +19,7 @@ const pendingToken = shallowRef<string | null>(null)
 // old one — but the explanatory banner below still needs to know it was
 // broken specifically, rather than never connected at all.
 const wasBroken = user.value?.storage_connection_broken ?? false
-const connected = shallowRef((user.value?.has_aws_credentials ?? false) && !wasBroken)
+const connected = shallowRef((user.value?.has_storage_connection ?? false) && !wasBroken)
 const importSkipped = shallowRef(false)
 
 const noImportStatus: BucketStatus = { has_photos: false, import_in_progress: false, import_completed: false, imported: 0, albums: 0 }
@@ -52,7 +52,7 @@ const { data: bucketStatus } = useAsyncData(async () => {
 // instead of abandoning it, and a reload after a completed import
 // restores its summary instead of re-offering an import that already
 // finished (bucketStatus.import_completed/import_in_progress + its last
-// result are read straight from the same AwsCredentials row
+// result are read straight from the same StorageConnectionAccess row
 // server/api/photos/import.post.ts persists to).
 watchEffect(() => {
   if (!bucketStatus.value || result.value)

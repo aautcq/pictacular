@@ -31,10 +31,10 @@ export default defineEventHandler(async (event) => {
 
   const account = await prisma.user.findUniqueOrThrow({
     where: { id: user.id },
-    include: { aws_credentials: true },
+    include: { storage_connection: true },
   })
 
-  if (!account.aws_credentials) {
+  if (!account.storage_connection) {
     throw createError({
       statusCode: 400,
       statusMessage: 'users.storage_connection_required',
@@ -44,12 +44,12 @@ export default defineEventHandler(async (event) => {
   // Same app-wide hard block every other photo-related action already
   // enforces (issue #153) — an avatar is uploaded to this same Storage
   // Connection bucket, so a broken one blocks it exactly the same way.
-  if (account.aws_credentials.broken) {
+  if (account.storage_connection.broken) {
     throw createError(storageConnectionBrokenError)
   }
 
   const { mime_type, base64 } = result.data
-  const key = await withStorageConnectionGuard(account.id, () => uploadAvatarObject(account.aws_credentials!, account.id, mime_type, base64))
+  const key = await withStorageConnectionGuard(account.id, () => uploadAvatarObject(account.storage_connection!, account.id, mime_type, base64))
 
   const updated = await prisma.user.update({
     where: { id: account.id },
@@ -57,5 +57,5 @@ export default defineEventHandler(async (event) => {
     select: { id: true, email: true, first_name: true, last_name: true, created_at: true, last_sign_in_at: true },
   })
 
-  return serializeUser({ ...updated, avatar_url: key, aws_credentials: account.aws_credentials })
+  return serializeUser({ ...updated, avatar_url: key, storage_connection: account.storage_connection })
 })

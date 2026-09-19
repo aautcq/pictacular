@@ -1,5 +1,5 @@
 import type { AlbumMember } from './album-guards'
-import type { AwsCredentials } from './storage'
+import type { StorageConnectionAccess } from './storage'
 import { prisma } from './prisma'
 import { photoImageUrl, publicPhotoImageUrl } from './serialize-photo'
 
@@ -7,7 +7,7 @@ export interface AlbumCoverRow {
   album_id: number
   photo: {
     id: number
-    user: { aws_credentials: AwsCredentials | null }
+    user: { storage_connection: StorageConnectionAccess | null }
   }
 }
 
@@ -25,7 +25,7 @@ export interface AlbumSummarySource {
 // is given (serializeAlbumPublic), the session-authed variant otherwise.
 // Shared by every response shape that includes a cover.
 function resolveCoverUrl(cover: AlbumCoverRow | null, publicToken?: string): string | null {
-  if (!cover?.photo.user.aws_credentials)
+  if (!cover?.photo.user.storage_connection)
     return null
 
   return publicToken ? publicPhotoImageUrl(publicToken, cover.photo.id) : photoImageUrl(cover.photo.id)
@@ -76,7 +76,7 @@ export async function loadAlbumCover(albumId: number): Promise<AlbumCoverRow | n
   return prisma.albumsOnPhotos.findFirst({
     where: { album_id: albumId },
     orderBy: { assigned_at: 'desc' },
-    include: { photo: { include: { user: { include: { aws_credentials: true } } } } },
+    include: { photo: { include: { user: { include: { storage_connection: true } } } } },
   })
 }
 
@@ -107,7 +107,7 @@ export async function loadAlbumCovers(albumIds: number[]): Promise<AlbumCoversAn
   const rows = await prisma.albumsOnPhotos.findMany({
     where: { album_id: { in: albumIds } },
     orderBy: { assigned_at: 'desc' },
-    include: { photo: { include: { user: { include: { aws_credentials: true } } } } },
+    include: { photo: { include: { user: { include: { storage_connection: true } } } } },
   })
 
   const covers = new Map<number, AlbumCoverRow>()

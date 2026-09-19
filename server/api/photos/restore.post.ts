@@ -37,7 +37,7 @@ export default defineEventHandler(async (event) => {
   // rejecting here would hide those already-successful outcomes from the
   // response.
   const settled = await Promise.allSettled(
-    archivedPhotos.map(photo => withStorageConnectionGuard(account.id, () => requestPhotoRestore(photo, account.aws_credentials))),
+    archivedPhotos.map(photo => withStorageConnectionGuard(account.id, () => requestPhotoRestore(photo, account.storage_connection))),
   )
   const updated = settled
     .filter(result => result.status === 'fulfilled')

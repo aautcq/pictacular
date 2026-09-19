@@ -30,7 +30,7 @@ import { sendMessageToUser } from '#server/utils/websocket'
 export default defineEventHandler(async (event) => {
   const { user } = requireAuth(event)
   const account = await requirePhotoStorageConnection(user.id)
-  const { aws_credentials } = account
+  const { storage_connection } = account
 
   // A fresh start (no cursor persisted yet, i.e. either the very first
   // page of a new import, or resuming one that was already fully
@@ -39,14 +39,14 @@ export default defineEventHandler(async (event) => {
   // listAllBucketImages) purely for progress reporting; every later page
   // of the same import reuses that persisted total instead of re-walking
   // the whole bucket again.
-  const total = aws_credentials.import_cursor === null && aws_credentials.import_total === null
-    ? (await withStorageConnectionGuard(account.id, () => listAllBucketImages(aws_credentials))).length
-    : aws_credentials.import_total!
+  const total = storage_connection.import_cursor === null && storage_connection.import_total === null
+    ? (await withStorageConnectionGuard(account.id, () => listAllBucketImages(storage_connection))).length
+    : storage_connection.import_total!
 
-  const { images, nextContinuationToken } = await withStorageConnectionGuard(account.id, () => listBucketImagePage(aws_credentials, aws_credentials.import_cursor ?? undefined))
+  const { images, nextContinuationToken } = await withStorageConnectionGuard(account.id, () => listBucketImagePage(storage_connection, storage_connection.import_cursor ?? undefined))
   const albumIdsByTitle = new Map<string, number>()
-  const albumIds = new Set(aws_credentials.import_album_ids)
-  let imported = aws_credentials.import_imported
+  const albumIds = new Set(storage_connection.import_album_ids)
+  let imported = storage_connection.import_imported
 
   for (const image of images) {
     const [firstSegment, ...rest] = image.key.split('/')
@@ -82,7 +82,7 @@ export default defineEventHandler(async (event) => {
     // import against an already-imported object never re-fetches its
     // Taken At (issue #162 is forward-only, no backfill of pre-existing
     // Photos).
-    const taken_at = existingPhoto ? undefined : await fetchTakenAt(aws_credentials, image.key)
+    const taken_at = existingPhoto ? undefined : await fetchTakenAt(storage_connection, image.key)
 
     const photo = existingPhoto ?? await prisma.photo.create({
       data: {
@@ -125,10 +125,10 @@ export default defineEventHandler(async (event) => {
   // accumulating on top of a previous run's), while `import_completed_at`
   // + `import_last_imported`/`import_last_albums` separately snapshot
   // this run's final result permanently — see the schema comment on
-  // AwsCredentials for why check-bucket.get.ts needs that separate,
+  // StorageConnectionAccess for why check-bucket.get.ts needs that separate,
   // non-resetting snapshot.
-  await prisma.awsCredentials.update({
-    where: { id: aws_credentials.id },
+  await prisma.storageConnection.update({
+    where: { id: storage_connection.id },
     data: done
       ? {
           import_cursor: null,

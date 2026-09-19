@@ -43,7 +43,7 @@ describe('archived photo restore journey', async () => {
       },
     })
 
-    await prisma.awsCredentials.create({
+    await prisma.storageConnection.create({
       data: {
         bucket,
         region: 'eu-west-3',

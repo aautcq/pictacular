@@ -25,7 +25,7 @@ model User {
 
   pushSubscription    PushSubscription[]
   resetPasswordToken  ResetPasswordToken[]
-  aws_credentials     AwsCredentials?
+  storage_connection  StorageConnection?
   sessions            Session[]
   biometrics          Biometrics[]
   albums              Album[] @relation("Albums")
@@ -95,7 +95,7 @@ model ResetPasswordToken {
   @@map("reset_password_tokens")
 }
 
-model AwsCredentials {
+model StorageConnection {
   id         Int        @id @default(autoincrement())
   created_at DateTime   @default(now())
   updated_at DateTime   @updatedAt
@@ -150,7 +150,7 @@ model AwsCredentials {
   user_id Int  @unique
   user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  @@map("aws_credentials")
+  @@map("storage_connections")
 }
 
 model Photo {

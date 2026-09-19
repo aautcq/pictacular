@@ -16,7 +16,6 @@
     "auth.invalid_token": "This link is invalid or has expired.",
     "auth.invalid_aws_credentials": "Your storage connection credentials are invalid.",
     "users.storage_connection_required": "Connect a storage bucket before uploading an avatar.",
-    "storage.invalid_credentials": "Those AWS credentials were rejected. Double-check your access key and secret key.",
     "storage.bucket_not_found": "That bucket could not be found or is not accessible with these credentials.",
     "storage.bucket_not_ready": "That CloudFormation stack hasn't finished creating your bucket yet. Wait a moment and try confirming again.",
     "storage.bucket_region_lookup_failed": "Your bucket was reachable but its region could not be determined. Please try confirming again.",

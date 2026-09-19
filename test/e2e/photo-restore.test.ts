@@ -67,7 +67,7 @@ describe('archived photo restore', async () => {
     const bucket = uniqueBucketName()
     fakeS3.seedBucket(bucket)
 
-    await prisma.awsCredentials.create({
+    await prisma.storageConnection.create({
       data: {
         bucket,
         region: 'eu-west-3',
@@ -191,7 +191,7 @@ describe('archived photo restore', async () => {
       // rejects AssumeRole for this sentinel Role ARN (see
       // fake-s3-server.ts), the same AssumeRole failure a real revoked
       // Role now produces.
-      await prisma.awsCredentials.update({
+      await prisma.storageConnection.update({
         where: { user_id: userId },
         data: { role_arn: badRoleArn },
       })
@@ -200,7 +200,7 @@ describe('archived photo restore', async () => {
         $fetch(`/api/photos/${photo.id}/restore`, { method: 'POST', headers: { cookie: cookieHeader } }),
       ).rejects.toMatchObject({ statusCode: 403, statusMessage: 'storage.connection_broken' })
 
-      const connection = await prisma.awsCredentials.findUniqueOrThrow({ where: { user_id: userId } })
+      const connection = await prisma.storageConnection.findUniqueOrThrow({ where: { user_id: userId } })
       expect(connection.broken).toBe(true)
     })
   })

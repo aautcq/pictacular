@@ -43,7 +43,7 @@ export default defineEventHandler(async (event) => {
   const photosById = new Map(
     (await prisma.photo.findMany({
       where: { id: { in: ids } },
-      include: { user: { include: { aws_credentials: true } }, likes: { select: { id: true } } },
+      include: { user: { include: { storage_connection: true } }, likes: { select: { id: true } } },
     })).map(photo => [photo.id, photo]),
   )
 
@@ -53,7 +53,7 @@ export default defineEventHandler(async (event) => {
   // may belong to a different member than the requesting User.
   const photos = ids
     .map(id => photosById.get(id))
-    .filter(photo => photo !== undefined && photo.user.aws_credentials)
+    .filter(photo => photo !== undefined && photo.user.storage_connection)
     .map((photo) => {
       const { user: _user, ...rest } = photo!
       return serializePhoto(rest, user.id)

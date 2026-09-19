@@ -68,12 +68,12 @@ const archivedPhotosScanTask: Task = {
       // entirely rather than retried every scan cycle — its owner is
       // already hard-blocked and directed to reconnect, so retrying a
       // doomed AssumeRole here would only waste an STS round trip.
-      where: { aws_credentials: { isNot: null, is: { broken: false } } },
-      include: { aws_credentials: true },
+      where: { storage_connection: { isNot: null, is: { broken: false } } },
+      include: { storage_connection: true },
     })
 
     for (const account of accounts) {
-      const awsCredentials = account.aws_credentials!
+      const storageConnection = account.storage_connection!
 
       // One User's broken Storage Connection (revoked credentials, bucket
       // deleted, ...) must not abort the scan for every other User —
@@ -83,7 +83,7 @@ const archivedPhotosScanTask: Task = {
       // interactive routes, so a Role revoked since the last scan gets
       // marked broken here too instead of being retried forever.
       try {
-        const images = await withStorageConnectionGuard(account.id, () => listAllBucketImages(awsCredentials))
+        const images = await withStorageConnectionGuard(account.id, () => listAllBucketImages(storageConnection))
         if (images.length === 0)
           continue
 
@@ -127,7 +127,7 @@ const archivedPhotosScanTask: Task = {
         await mapWithConcurrency(archivedImages, 20, async (image) => {
           const photo = photoByKey.get(image.key)!
           const previousState = photoArchiveState(photo)
-          const status = await withStorageConnectionGuard(account.id, () => headObjectRestoreStatus(awsCredentials, image.key))
+          const status = await withStorageConnectionGuard(account.id, () => headObjectRestoreStatus(storageConnection, image.key))
 
           const updated = await prisma.photo.update({
             where: { id: photo.id },

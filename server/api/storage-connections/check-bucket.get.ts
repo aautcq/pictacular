@@ -17,26 +17,26 @@ export default defineEventHandler(async (event) => {
 
   const account = await prisma.user.findUniqueOrThrow({
     where: { id: user.id },
-    include: { aws_credentials: true },
+    include: { storage_connection: true },
   })
 
-  if (!account.aws_credentials) {
+  if (!account.storage_connection) {
     throw createError({
       statusCode: 400,
       statusMessage: 'storage.connection_required',
     })
   }
 
-  if (account.aws_credentials.broken)
+  if (account.storage_connection.broken)
     throw createError(storageConnectionBrokenError)
 
-  const has_photos = await withStorageConnectionGuard(user.id, () => bucketHasImages(account.aws_credentials!))
+  const has_photos = await withStorageConnectionGuard(user.id, () => bucketHasImages(account.storage_connection!))
 
   return {
     has_photos,
-    import_in_progress: account.aws_credentials.import_cursor !== null,
-    import_completed: account.aws_credentials.import_completed_at !== null,
-    imported: account.aws_credentials.import_last_imported ?? 0,
-    albums: account.aws_credentials.import_last_albums ?? 0,
+    import_in_progress: account.storage_connection.import_cursor !== null,
+    import_completed: account.storage_connection.import_completed_at !== null,
+    imported: account.storage_connection.import_last_imported ?? 0,
+    albums: account.storage_connection.import_last_albums ?? 0,
   }
 })

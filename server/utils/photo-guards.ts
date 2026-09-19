@@ -32,7 +32,7 @@ function isUnassumableRoleError(error: unknown): boolean {
 // safe to call even if it's already broken (e.g. a second action failing
 // before the User has had a chance to reconnect).
 async function markStorageConnectionBroken(ownerId: number): Promise<void> {
-  await prisma.awsCredentials.update({
+  await prisma.storageConnection.update({
     where: { user_id: ownerId },
     data: { broken: true },
   })
@@ -63,9 +63,9 @@ export async function withStorageConnectionGuard<T>(ownerId: number, operation: 
 // authenticated User's account with their Storage Connection, throwing the
 // same `photos.storage_connection_required` error every one of them needs
 // — collapsing what used to be an identical
-// `findUniqueOrThrow` + `if (!aws_credentials) throw ...` block repeated in
+// `findUniqueOrThrow` + `if (!storage_connection) throw ...` block repeated in
 // each route file. Left un-annotated (rather than pinned to the narrower
-// `storage.ts` `AwsCredentials` shape) so callers that also need its
+// `storage.ts` `StorageConnectionAccess` shape) so callers that also need its
 // resumable-import fields (`import_cursor`/`import_imported`/
 // `import_album_ids`, see server/api/photos/import.post.ts) get them
 // without a second round trip. Also hard-blocks (issue #153) a connection
@@ -74,21 +74,21 @@ export async function withStorageConnectionGuard<T>(ownerId: number, operation: 
 export async function requirePhotoStorageConnection(userId: number) {
   const account = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
-    include: { aws_credentials: true },
+    include: { storage_connection: true },
   })
 
-  if (!account.aws_credentials) {
+  if (!account.storage_connection) {
     throw createError({
       statusCode: 400,
       statusMessage: 'photos.storage_connection_required',
     })
   }
 
-  if (account.aws_credentials.broken) {
+  if (account.storage_connection.broken) {
     throw createError(storageConnectionBrokenError)
   }
 
-  return { id: account.id, aws_credentials: account.aws_credentials }
+  return { id: account.id, storage_connection: account.storage_connection }
 }
 
 // Parses and validates the `id` route param shared by every

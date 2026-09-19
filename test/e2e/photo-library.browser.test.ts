@@ -47,7 +47,7 @@ describe('personal photo library journey', async () => {
       },
     })
 
-    await prisma.awsCredentials.create({
+    await prisma.storageConnection.create({
       data: {
         bucket,
         region: 'eu-west-3',
@@ -123,7 +123,7 @@ describe('personal photo library journey', async () => {
       },
     })
 
-    await prisma.awsCredentials.create({
+    await prisma.storageConnection.create({
       data: {
         bucket: groupingBucket,
         region: 'eu-west-3',
@@ -199,7 +199,7 @@ describe('personal photo library journey', async () => {
       },
     })
 
-    await prisma.awsCredentials.create({
+    await prisma.storageConnection.create({
       data: {
         bucket: zoomBucket,
         region: 'eu-west-3',
@@ -300,7 +300,7 @@ describe('personal photo library journey', async () => {
       },
     })
 
-    await prisma.awsCredentials.create({
+    await prisma.storageConnection.create({
       data: {
         bucket: smallZoomBucket,
         region: 'eu-west-3',

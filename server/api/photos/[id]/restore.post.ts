@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const updated = await withStorageConnectionGuard(account.id, () => requestPhotoRestore(photo, account.aws_credentials))
+  const updated = await withStorageConnectionGuard(account.id, () => requestPhotoRestore(photo, account.storage_connection))
 
   return serializePhoto(updated, user.id)
 })

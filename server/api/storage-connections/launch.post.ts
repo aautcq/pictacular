@@ -50,7 +50,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const existing = await prisma.awsCredentials.findUnique({ where: { user_id: user.id } })
+  const existing = await prisma.storageConnection.findUnique({ where: { user_id: user.id } })
   if (existing) {
     throw createError({
       statusCode: 409,

@@ -76,7 +76,7 @@ describe('albums core', async () => {
     const bucket = uniqueBucketName(label)
     fakeS3.seedBucket(bucket)
 
-    await prisma.awsCredentials.create({
+    await prisma.storageConnection.create({
       data: {
         bucket,
         region: 'eu-west-3',
@@ -186,7 +186,7 @@ describe('albums core', async () => {
       const photo = await uploadPhoto(owner.cookieHeader)
       await $fetch(`/api/albums/${album.id}/photos/${photo.id}`, { method: 'POST', headers: { cookie: owner.cookieHeader } })
 
-      await prisma.awsCredentials.delete({ where: { user_id: owner.id } })
+      await prisma.storageConnection.delete({ where: { user_id: owner.id } })
 
       try {
         const response = await $fetch<{ albums: { id: number, photo_count: number }[] }>('/api/albums', {
@@ -200,7 +200,7 @@ describe('albums core', async () => {
         // on `owner` still having one aren't affected.
         const restoredBucket = uniqueBucketName('owner-restored')
         fakeS3.seedBucket(restoredBucket)
-        await prisma.awsCredentials.create({
+        await prisma.storageConnection.create({
           data: {
             bucket: restoredBucket,
             region: 'eu-west-3',

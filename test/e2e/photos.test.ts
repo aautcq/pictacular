@@ -69,7 +69,7 @@ describe('personal photo library', async () => {
     const bucket = uniqueBucketName()
     fakeS3.seedBucket(bucket)
 
-    await prisma.awsCredentials.create({
+    await prisma.storageConnection.create({
       data: {
         bucket,
         region: 'eu-west-3',

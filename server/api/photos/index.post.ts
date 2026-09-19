@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
 
   const { filename, mime_type, base64, last_modified } = result.data
   const { key, size } = await withStorageConnectionGuard(account.id, () =>
-    uploadPhotoObject(account.aws_credentials, account.id, filename, mime_type, base64))
+    uploadPhotoObject(account.storage_connection, account.id, filename, mime_type, base64))
 
   // Extracted directly from the already-in-memory uploaded bytes (issue
   // #162) — unlike import, upload never needs an extra S3 round trip to

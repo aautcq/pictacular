@@ -68,7 +68,7 @@ describe('album public share links', async () => {
     const bucket = uniqueBucketName(label)
     fakeS3.seedBucket(bucket)
 
-    await prisma.awsCredentials.create({
+    await prisma.storageConnection.create({
       data: {
         bucket,
         region: 'eu-west-3',

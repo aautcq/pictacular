@@ -71,7 +71,7 @@ describe('reactive broken Storage Connection detection', async () => {
     const bucket = uniqueBucketName()
     fakeS3.seedBucket(bucket)
 
-    await prisma.awsCredentials.create({
+    await prisma.storageConnection.create({
       data: {
         bucket,
         region: 'eu-west-3',
@@ -100,7 +100,7 @@ describe('reactive broken Storage Connection detection', async () => {
       }),
     ).rejects.toMatchObject({ statusCode: 403, statusMessage: 'storage.connection_broken' })
 
-    const connection = await prisma.awsCredentials.findUniqueOrThrow({ where: { user_id: userId } })
+    const connection = await prisma.storageConnection.findUniqueOrThrow({ where: { user_id: userId } })
     expect(connection.broken).toBe(true)
 
     // A second, unrelated photo action (listing, not uploading) is
@@ -124,13 +124,13 @@ describe('reactive broken Storage Connection detection', async () => {
       },
     })
 
-    await prisma.awsCredentials.update({ where: { user_id: userId }, data: { role_arn: badRoleArn } })
+    await prisma.storageConnection.update({ where: { user_id: userId }, data: { role_arn: badRoleArn } })
 
     await expect(
       $fetch(`/api/photos/${photo.id}/image`, { headers: { cookie: cookieHeader } }),
     ).rejects.toMatchObject({ statusCode: 403, statusMessage: 'storage.connection_broken' })
 
-    const connection = await prisma.awsCredentials.findUniqueOrThrow({ where: { user_id: userId } })
+    const connection = await prisma.storageConnection.findUniqueOrThrow({ where: { user_id: userId } })
     expect(connection.broken).toBe(true)
   })
 
@@ -144,7 +144,7 @@ describe('reactive broken Storage Connection detection', async () => {
       $fetch('/api/photos/999999999', { method: 'DELETE', headers: { cookie: cookieHeader } }),
     ).rejects.toMatchObject({ statusCode: 404, statusMessage: 'photos.not_found' })
 
-    const connection = await prisma.awsCredentials.findUniqueOrThrow({ where: { user_id: userId } })
+    const connection = await prisma.storageConnection.findUniqueOrThrow({ where: { user_id: userId } })
     expect(connection.broken).toBe(false)
   })
 
@@ -163,7 +163,7 @@ describe('reactive broken Storage Connection detection', async () => {
       }),
     ).rejects.toMatchObject({ statusCode: 502, statusMessage: 'storage.connection_unavailable' })
 
-    const connection = await prisma.awsCredentials.findUniqueOrThrow({ where: { user_id: userId } })
+    const connection = await prisma.storageConnection.findUniqueOrThrow({ where: { user_id: userId } })
     expect(connection.broken).toBe(false)
   })
 
@@ -182,11 +182,11 @@ describe('reactive broken Storage Connection detection', async () => {
       }),
     ).rejects.toThrow()
 
-    const me = await $fetch<{ has_aws_credentials: boolean, storage_connection_broken: boolean }>('/api/users/me', {
+    const me = await $fetch<{ has_storage_connection: boolean, storage_connection_broken: boolean }>('/api/users/me', {
       headers: { cookie: cookieHeader },
     })
 
-    expect(me.has_aws_credentials).toBe(true)
+    expect(me.has_storage_connection).toBe(true)
     expect(me.storage_connection_broken).toBe(true)
   })
 })

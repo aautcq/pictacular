@@ -70,7 +70,7 @@ describe('archived photos scan scheduled task', async () => {
     const bucket = uniqueBucketName()
     fakeS3.seedBucket(bucket)
 
-    await prisma.awsCredentials.create({
+    await prisma.storageConnection.create({
       data: {
         bucket,
         region: 'eu-west-3',
@@ -221,7 +221,7 @@ describe('archived photos scan scheduled task', async () => {
 
   it('does not throw when one User\'s Storage Connection fails, and still scans the others', async () => {
     const broken = await createConnectedUser()
-    await prisma.awsCredentials.update({
+    await prisma.storageConnection.update({
       where: { user_id: broken.id },
       data: { role_arn: badRoleArn },
     })

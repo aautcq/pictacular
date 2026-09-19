@@ -11,7 +11,7 @@ import { confirmStorageConnection } from '#server/utils/storage'
 // Pictacular generated, assumes the Role to verify the stack really has
 // finished creating it (AssumeRole itself is the "is it ready?" check —
 // see server/utils/storage.ts#confirmStorageConnection), and persists the
-// connection as the User's (one-per-user) AwsCredentials row.
+// connection as the User's (one-per-user) StorageConnectionAccess row.
 export default defineEventHandler(async (event) => {
   const { user } = requireAuth(event)
 
@@ -31,7 +31,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const existing = await prisma.awsCredentials.findUnique({ where: { user_id: user.id } })
+  const existing = await prisma.storageConnection.findUnique({ where: { user_id: user.id } })
   // A connection already known broken (issue #153) is the one case this
   // otherwise rejects as "already connected" — reconnecting always
   // replaces its Role/External Id/bucket in place with a fresh one below,
@@ -56,13 +56,13 @@ export default defineEventHandler(async (event) => {
 
   try {
     if (existing) {
-      await prisma.awsCredentials.update({
+      await prisma.storageConnection.update({
         where: { user_id: user.id },
         data: { bucket, region, role_arn: pending.role_arn, external_id: pending.external_id, broken: false },
       })
     }
     else {
-      await prisma.awsCredentials.create({
+      await prisma.storageConnection.create({
         data: {
           bucket,
           region,

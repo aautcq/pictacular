@@ -37,7 +37,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const object = await withStorageConnectionGuard(access.ownerId, () => fetchPhotoObject(access.awsCredentials, access.key))
+  const object = await withStorageConnectionGuard(access.ownerId, () => fetchPhotoObject(access.storageConnection, access.key))
   const resizeParams = parsePhotoImageResizeParams(getQuery(event))
   const { stream, contentType } = await resizePhotoImage(object.Body as any, object.ContentType ?? access.mime_type, resizeParams)
 

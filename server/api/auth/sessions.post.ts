@@ -40,7 +40,7 @@ export default defineEventHandler(async (event) => {
 
   const user = await prisma.user.findUnique({
     where: { email },
-    include: { aws_credentials: true },
+    include: { storage_connection: true },
   })
 
   const invalidCredentialsError = createError({
@@ -138,7 +138,7 @@ export default defineEventHandler(async (event) => {
     first_name: user.first_name,
     last_name: user.last_name,
     avatar_url: user.avatar_url,
-    aws_credentials: user.aws_credentials,
+    storage_connection: user.storage_connection,
     created_at: user.created_at,
     last_sign_in_at,
   })
