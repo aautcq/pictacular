@@ -192,30 +192,54 @@ export interface BucketImageObject {
   storage_class: string
 }
 
-// Walks every page of a connected bucket's contents (issue #54's Photo
-// import), collecting every object whose key looks like an image (the
-// same extension check bucketHasImages uses, no per-object HeadObject
-// round trip) across as many `ListObjectsV2` pages as the bucket has —
-// porting the legacy StorageUtility#listData loop's pagination, minus its
-// per-object mime-type lookup (see mimeTypeFromKey below instead).
-export async function listAllBucketImages(awsCredentials: AwsCredentials): Promise<BucketImageObject[]> {
+export interface BucketImagePage {
+  images: BucketImageObject[]
+  // S3's own ContinuationToken to pass back in to fetch the next page;
+  // undefined once the bucket has been fully walked.
+  nextContinuationToken: string | undefined
+}
+
+// Fetches a single `ListObjectsV2` page (issue #54's Photo import, made
+// resumable): collects every object on that one page whose key looks like
+// an image (the same extension check bucketHasImages uses, no
+// per-object HeadObject round trip), and reports whether another page
+// remains — porting the legacy StorageUtility#listData loop's per-page
+// shape, minus both its own looping (the caller persists
+// `nextContinuationToken` across requests instead, see
+// server/api/photos/import.post.ts) and its per-object mime-type lookup
+// (see mimeTypeFromKey below instead).
+export async function listBucketImagePage(awsCredentials: AwsCredentials, continuationToken?: string): Promise<BucketImagePage> {
   const client = createClient(awsCredentials)
+
+  const { Contents, IsTruncated, NextContinuationToken } = await client.send(new ListObjectsV2Command({
+    Bucket: awsCredentials.bucket,
+    MaxKeys: 1000,
+    ContinuationToken: continuationToken,
+  }))
+
+  const images: BucketImageObject[] = []
+  for (const { Key, Size, LastModified, StorageClass } of Contents ?? []) {
+    if (Key && imageExtensionPattern.test(Key))
+      images.push({ key: Key, size: Size ?? 0, last_modified: LastModified ?? new Date(), storage_class: StorageClass ?? 'STANDARD' })
+  }
+
+  return { images, nextContinuationToken: IsTruncated ? NextContinuationToken : undefined }
+}
+
+// Walks every page of a connected bucket's contents up front — only ever
+// used where the whole list is needed in memory at once (bucketHasImages'
+// single-page peek aside): a fast, list-only pass (no per-object
+// HeadObject/GetObject round trip) to establish an import's total image
+// count for progress reporting (see server/api/photos/import.post.ts),
+// porting the legacy StorageUtility#listData loop's pagination.
+export async function listAllBucketImages(awsCredentials: AwsCredentials): Promise<BucketImageObject[]> {
   const images: BucketImageObject[] = []
   let continuationToken: string | undefined
 
   do {
-    const { Contents, IsTruncated, NextContinuationToken } = await client.send(new ListObjectsV2Command({
-      Bucket: awsCredentials.bucket,
-      MaxKeys: 1000,
-      ContinuationToken: continuationToken,
-    }))
-
-    for (const { Key, Size, LastModified, StorageClass } of Contents ?? []) {
-      if (Key && imageExtensionPattern.test(Key))
-        images.push({ key: Key, size: Size ?? 0, last_modified: LastModified ?? new Date(), storage_class: StorageClass ?? 'STANDARD' })
-    }
-
-    continuationToken = IsTruncated ? NextContinuationToken : undefined
+    const page = await listBucketImagePage(awsCredentials, continuationToken)
+    images.push(...page.images)
+    continuationToken = page.nextContinuationToken
   } while (continuationToken)
 
   return images

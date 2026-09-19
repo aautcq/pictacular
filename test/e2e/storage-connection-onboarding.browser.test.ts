@@ -1,7 +1,7 @@
 import type { FakeS3Server } from './fake-s3-server'
 import process from 'node:process'
 import { createPage, setup, url } from '@nuxt/test-utils/e2e'
-import { afterAll, describe, it } from 'vitest'
+import { afterAll, describe, expect, it } from 'vitest'
 import { hashPassword } from '../../server/utils/crypto'
 import { prisma } from '../../server/utils/prisma'
 import { startFakeS3Server } from './fake-s3-server'
@@ -116,6 +116,63 @@ describe('storage connection onboarding journey', async () => {
 
     await page.goto(url('/albums'))
     await page.getByText('vacation').waitFor()
+
+    await page.close()
+  }, 60_000)
+
+  // Issue #203: a page reload after a completed import (e.g. the tab
+  // being suspended across a laptop going to sleep during a long import,
+  // then reloaded once the laptop wakes) used to lose this page's own
+  // ephemeral progress/result state and re-offer the already-finished
+  // import step, forcing the User to click "Skip for now" just to reach
+  // the app despite the import having already succeeded. check-bucket
+  // now reports the persisted, completed result (see
+  // server/api/storage-connections/check-bucket.get.ts) so a reload
+  // restores the same "Imported ..." summary directly, with no import
+  // prompt and no Skip button needed.
+  it('restores an already-completed import\'s result after a page reload, without re-offering the import step', async () => {
+    const reloadEmail = `${emailPrefix}-reload@example.com`
+    await prisma.user.create({
+      data: {
+        email: reloadEmail,
+        first_name: 'Reload',
+        last_name: 'Tester',
+        password: hashPassword(password),
+        is_verified: true,
+        verification_token: `token-${emailPrefix}-reload`,
+      },
+    })
+
+    const bucket = `reload-onboarding-${emailPrefix}`
+    fakeS3.seedBucket(bucket, ['vacation/photo1.jpg'])
+
+    const page = await createPage('/login')
+    await page.getByLabel('Email').fill(reloadEmail)
+    await page.getByLabel('Password').fill(password)
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+
+    await page.waitForURL('**/storage-connection')
+    await page.getByRole('button', { name: 'I already have a bucket' }).click()
+    await page.getByLabel('Bucket name').fill(bucket)
+    await page.getByLabel('Access key ID').fill('AKIATEST')
+    await page.getByLabel('Secret access key').fill('test-secret')
+    await page.getByRole('button', { name: 'Connect' }).click()
+
+    await page.getByText('It looks like your bucket already has some image files in it.').waitFor()
+    await page.getByRole('button', { name: 'Import my existing photos' }).click()
+
+    await page.getByText('Imported 1 photo into 1 album.').waitFor()
+
+    // Simulates the tab being reloaded fresh (as a browser may do after a
+    // suspended tab wakes from a laptop sleep) instead of navigating away
+    // via the Continue link — this page component's own `result` ref is
+    // gone, but the completed import's summary is still persisted
+    // server-side.
+    await page.reload()
+
+    await page.getByText('Imported 1 photo into 1 album.').waitFor()
+    expect(await page.getByRole('button', { name: 'Import my existing photos' }).count()).toBe(0)
+    expect(await page.getByRole('button', { name: 'Skip for now' }).count()).toBe(0)
 
     await page.close()
   }, 60_000)

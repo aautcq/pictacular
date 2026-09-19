@@ -59,6 +59,23 @@ describe('storage connection onboarding', async () => {
       .join('; ')
   }
 
+  async function createConnectedUser(keys: string[] = []) {
+    const email = await createVerifiedUser()
+    const cookieHeader = await loginCookieHeader(email)
+    const bucket = uniqueBucketName()
+    fakeS3.seedBucket(bucket, keys)
+
+    await $fetch('/api/storage-connections', {
+      method: 'POST',
+      headers: { cookie: cookieHeader },
+      body: { mode: 'connect', access_key_id: 'AKIATEST', secret_access_key: 'test-secret', bucket },
+    })
+
+    const user = await prisma.user.findUniqueOrThrow({ where: { email } })
+
+    return { id: user.id, email, cookieHeader }
+  }
+
   afterAll(async () => {
     await prisma.user.deleteMany({ where: { email: { startsWith: emailPrefix } } })
     await fakeS3.close()
@@ -214,11 +231,13 @@ describe('storage connection onboarding', async () => {
         body: { mode: 'connect', access_key_id: 'AKIATEST', secret_access_key: 'test-secret', bucket },
       })
 
-      const response = await $fetch<{ has_photos: boolean }>('/api/storage-connections/check-bucket', {
+      const response = await $fetch<{ has_photos: boolean, import_in_progress: boolean, import_completed: boolean }>('/api/storage-connections/check-bucket', {
         headers: { cookie: cookieHeader },
       })
 
       expect(response.has_photos).toBe(false)
+      expect(response.import_in_progress).toBe(false)
+      expect(response.import_completed).toBe(false)
     })
 
     it('reports has_photos: true when the connected bucket already contains image files', async () => {
@@ -233,11 +252,69 @@ describe('storage connection onboarding', async () => {
         body: { mode: 'connect', access_key_id: 'AKIATEST', secret_access_key: 'test-secret', bucket },
       })
 
-      const response = await $fetch<{ has_photos: boolean }>('/api/storage-connections/check-bucket', {
+      const response = await $fetch<{ has_photos: boolean, import_in_progress: boolean, import_completed: boolean }>('/api/storage-connections/check-bucket', {
         headers: { cookie: cookieHeader },
       })
 
       expect(response.has_photos).toBe(true)
+      expect(response.import_in_progress).toBe(false)
+      expect(response.import_completed).toBe(false)
+    })
+
+    // Issue #203: a "many many photos" import survives a page reload
+    // partway through (e.g. the tab being suspended across a laptop going
+    // to sleep) since check-bucket reports the persisted, in-flight state
+    // straight from the AwsCredentials row the resumable import itself
+    // writes to (server/api/photos/import.post.ts) — not just whether the
+    // bucket currently has images (always true mid- or post-import).
+    it('reports import_in_progress: true while a chunked import is still resuming', async () => {
+      const email = await createVerifiedUser()
+      const cookieHeader = await loginCookieHeader(email)
+      const bucket = uniqueBucketName()
+      fakeS3.seedBucket(bucket, ['holiday/beach.jpg'])
+
+      await $fetch('/api/storage-connections', {
+        method: 'POST',
+        headers: { cookie: cookieHeader },
+        body: { mode: 'connect', access_key_id: 'AKIATEST', secret_access_key: 'test-secret', bucket },
+      })
+
+      const user = await prisma.user.findUniqueOrThrow({ where: { email } })
+      await prisma.awsCredentials.updateMany({
+        where: { user_id: user.id },
+        data: { import_cursor: 'some-continuation-token', import_total: 5, import_imported: 2 },
+      })
+
+      const response = await $fetch<{ import_in_progress: boolean, import_completed: boolean }>('/api/storage-connections/check-bucket', {
+        headers: { cookie: cookieHeader },
+      })
+
+      expect(response.import_in_progress).toBe(true)
+      expect(response.import_completed).toBe(false)
+    })
+
+    // Issue #203: once a chunked import finishes, its result is snapshotted
+    // permanently (import_completed_at/import_last_imported/
+    // import_last_albums — distinct from the working counters, which reset
+    // on completion) so a page reload after completion restores the same
+    // "already imported" summary instead of re-offering the import step.
+    it('reports import_completed: true with the last completed result, after a chunked import finishes', async () => {
+      const { id: userId, cookieHeader } = await createConnectedUser(['holiday/beach.jpg', 'holiday/sunset.png'])
+
+      await $fetch('/api/photos/import', { method: 'POST', headers: { cookie: cookieHeader } })
+
+      const response = await $fetch<{ import_in_progress: boolean, import_completed: boolean, imported: number, albums: number }>('/api/storage-connections/check-bucket', {
+        headers: { cookie: cookieHeader },
+      })
+
+      expect(response.import_in_progress).toBe(false)
+      expect(response.import_completed).toBe(true)
+      expect(response.imported).toBe(2)
+      expect(response.albums).toBe(1)
+
+      const account = await prisma.awsCredentials.findFirstOrThrow({ where: { user_id: userId } })
+      expect(account.import_cursor).toBeNull()
+      expect(account.import_imported).toBe(0)
     })
 
     it('rejects an unauthenticated request with 401', async () => {
