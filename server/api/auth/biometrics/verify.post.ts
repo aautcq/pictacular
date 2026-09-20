@@ -1,13 +1,8 @@
 import {
-  accessTokenCookieName,
-  accessTokenCookieOptions,
-  refreshTokenCookieName,
-  refreshTokenCookieOptions,
   webauthnChallengeCookieName,
   webauthnChallengeCookieOptions,
 } from '#server/utils/cookies'
-import { hashToken } from '#server/utils/crypto'
-import { createTokens } from '#server/utils/jwt'
+import { issueSession } from '#server/utils/issue-session'
 import { prisma } from '#server/utils/prisma'
 import { serializeUser } from '#server/utils/serialize-user'
 import { verifyAssertion } from '#server/utils/webauthn'
@@ -65,39 +60,7 @@ export default defineEventHandler(async (event) => {
     data: { counter: assertion.newCounter },
   })
 
-  const session = await prisma.session.create({
-    data: {
-      active: true,
-      user_agent: getHeader(event, 'user-agent'),
-      user: { connect: { id: user.id } },
-    },
-  })
-
-  await prisma.session.updateMany({
-    where: {
-      user_id: user.id,
-      active: true,
-      NOT: { id: session.id },
-    },
-    data: { active: false, refresh_token: null },
-  })
-
-  const { last_sign_in_at } = await prisma.user.update({
-    where: { id: user.id },
-    data: { last_sign_in_at: new Date() },
-  })
-
-  const { accessToken, refreshToken } = createTokens(user, session)
-
-  // See hashToken (server/utils/crypto.ts) for why refresh tokens use a
-  // SHA-256 digest rather than bcrypt hashPassword.
-  await prisma.session.update({
-    where: { id: session.id },
-    data: { refresh_token: hashToken(refreshToken) },
-  })
-
-  setCookie(event, accessTokenCookieName, accessToken, accessTokenCookieOptions)
-  setCookie(event, refreshTokenCookieName, refreshToken, refreshTokenCookieOptions)
+  const last_sign_in_at = await issueSession(event, user)
 
   setResponseStatus(event, 201)
 

@@ -29,6 +29,18 @@ export default defineEventHandler(async (event) => {
 
   if (password !== undefined) {
     const account = await prisma.user.findUniqueOrThrow({ where: { id: user.id } })
+
+    // Issue #157: a Google-only account has no current password to verify
+    // — reject with the same distinct auth.password_not_set code the
+    // login endpoint uses, rather than crashing comparePassword against a
+    // null hash.
+    if (!account.password) {
+      throw createError({
+        statusCode: 401,
+        statusMessage: 'auth.password_not_set',
+      })
+    }
+
     if (!comparePassword(current_password!, account.password)) {
       throw createError({
         statusCode: 401,

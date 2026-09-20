@@ -1,12 +1,6 @@
-import {
-  accessTokenCookieName,
-  accessTokenCookieOptions,
-  refreshTokenCookieName,
-  refreshTokenCookieOptions,
-} from '#server/utils/cookies'
-import { burnPasswordCompareTime, comparePassword, hashToken } from '#server/utils/crypto'
+import { burnPasswordCompareTime, comparePassword } from '#server/utils/crypto'
 import { issuePasswordResetEmail } from '#server/utils/issue-password-reset-email'
-import { createTokens } from '#server/utils/jwt'
+import { issueSession } from '#server/utils/issue-session'
 import { prisma } from '#server/utils/prisma'
 import { serializeUser } from '#server/utils/serialize-user'
 
@@ -57,6 +51,20 @@ export default defineEventHandler(async (event) => {
     throw invalidCredentialsError
   }
 
+  // Issue #157: a User who signed up exclusively via an OAuth Account
+  // (e.g. Google) has no password to compare against at all. This is a
+  // distinct rejection from invalid_credentials on purpose — that code
+  // implies a password exists to guess, which would be misleading UX for
+  // an account that simply never had one; the response already reveals
+  // this account exists, but so does redirecting a would-be Google user
+  // through a "wrong password" message that can never succeed.
+  if (!user.password) {
+    throw createError({
+      statusCode: 401,
+      statusMessage: 'auth.password_not_set',
+    })
+  }
+
   // Already locked out from a previous attempt: keep rejecting, but don't
   // resend the reset email — that's a one-time side effect of the failure
   // that trips the lock (below), not of every subsequent locked attempt,
@@ -96,39 +104,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const session = await prisma.session.create({
-    data: {
-      active: true,
-      user_agent: getHeader(event, 'user-agent'),
-      user: { connect: { id: user.id } },
-    },
-  })
-
-  await prisma.session.updateMany({
-    where: {
-      user_id: user.id,
-      active: true,
-      NOT: { id: session.id },
-    },
-    data: { active: false, refresh_token: null },
-  })
-
-  const { last_sign_in_at } = await prisma.user.update({
-    where: { id: user.id },
-    data: { last_sign_in_at: new Date() },
-  })
-
-  const { accessToken, refreshToken } = createTokens(user, session)
-
-  // See hashToken (server/utils/crypto.ts) for why refresh tokens use a
-  // SHA-256 digest rather than bcrypt hashPassword.
-  await prisma.session.update({
-    where: { id: session.id },
-    data: { refresh_token: hashToken(refreshToken) },
-  })
-
-  setCookie(event, accessTokenCookieName, accessToken, accessTokenCookieOptions)
-  setCookie(event, refreshTokenCookieName, refreshToken, refreshTokenCookieOptions)
+  const last_sign_in_at = await issueSession(event, user)
 
   setResponseStatus(event, 201)
 

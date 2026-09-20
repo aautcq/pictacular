@@ -308,6 +308,13 @@ export default defineNuxtConfig({
       publicKey: '',
       privateKey: '',
     },
+    // Issue #157: hand-rolled Google OAuth 2.0 authorization-code flow
+    // (server/utils/google-oauth.ts) — Google Cloud Console-issued Web
+    // application OAuth client credentials.
+    google: {
+      clientId: '',
+      clientSecret: '',
+    },
     aws: {
       accessKeyId: '',
       secretAccessKey: '',

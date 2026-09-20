@@ -39,3 +39,15 @@ export const webauthnChallengeCookieOptions: CookieSerializeOptions = {
   ...genericCookieOptions,
   maxAge: 5 * 60,
 }
+
+// Short-lived cookie bridging GET /api/auth/google to its callback (issue
+// #157): stores the CSRF `state` value Google is asked to echo back
+// unchanged, so the callback can reject a request whose `state` doesn't
+// match this cookie (a forged/replayed callback, or one started from a
+// different browser) before ever exchanging the authorization `code`.
+export const oauthStateCookieName = 'pictacularOauthState'
+
+export const oauthStateCookieOptions: CookieSerializeOptions = {
+  ...genericCookieOptions,
+  maxAge: 5 * 60,
+}
