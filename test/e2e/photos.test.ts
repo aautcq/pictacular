@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import { prisma } from '../../server/utils/prisma'
 import { buildJpegWithDateTimeOriginal } from './exif-fixtures'
-import { startFakeS3Server } from './fake-s3-server'
+import { startFakeS3Server, testExternalId, testRoleArn } from './fake-s3-server'
 
 // Black-box HTTP tests for the personal photo library endpoints (issue
 // #50): list (paginated)/create/delete/like/unlike a Photo, each scoped to
@@ -69,10 +69,14 @@ describe('personal photo library', async () => {
     const bucket = uniqueBucketName()
     fakeS3.seedBucket(bucket)
 
-    await $fetch('/api/storage-connections', {
-      method: 'POST',
-      headers: { cookie: cookieHeader },
-      body: { mode: 'connect', access_key_id: 'AKIATEST', secret_access_key: 'test-secret', bucket },
+    await prisma.storageConnection.create({
+      data: {
+        bucket,
+        region: 'eu-west-3',
+        role_arn: testRoleArn,
+        external_id: testExternalId,
+        user: { connect: { id: user.id } },
+      },
     })
 
     return { ...user, cookieHeader, bucket }

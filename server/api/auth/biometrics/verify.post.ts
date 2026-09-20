@@ -42,7 +42,7 @@ export default defineEventHandler(async (event) => {
 
   const biometrics = await prisma.biometrics.findUnique({
     where: { credential_id: result.data.id },
-    include: { user: { include: { aws_credentials: true } } },
+    include: { user: { include: { storage_connection: true } } },
   })
 
   if (!biometrics)
@@ -107,7 +107,7 @@ export default defineEventHandler(async (event) => {
     first_name: user.first_name,
     last_name: user.last_name,
     avatar_url: user.avatar_url,
-    aws_credentials: user.aws_credentials,
+    storage_connection: user.storage_connection,
     created_at: user.created_at,
     last_sign_in_at,
   })

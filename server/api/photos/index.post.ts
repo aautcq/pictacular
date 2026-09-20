@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer'
 import { extractTakenAt } from '#server/utils/exif'
-import { requirePhotoStorageConnection } from '#server/utils/photo-guards'
+import { requirePhotoStorageConnection, withStorageConnectionGuard } from '#server/utils/photo-guards'
 import { prisma } from '#server/utils/prisma'
 import { serializePhoto } from '#server/utils/serialize-photo'
 import { uploadPhotoObject } from '#server/utils/storage'
@@ -33,7 +33,8 @@ export default defineEventHandler(async (event) => {
   const account = await requirePhotoStorageConnection(user.id)
 
   const { filename, mime_type, base64, last_modified } = result.data
-  const { key, size } = await uploadPhotoObject(account.aws_credentials, account.id, filename, mime_type, base64)
+  const { key, size } = await withStorageConnectionGuard(account.id, () =>
+    uploadPhotoObject(account.storage_connection, account.id, filename, mime_type, base64))
 
   // Extracted directly from the already-in-memory uploaded bytes (issue
   // #162) — unlike import, upload never needs an extra S3 round trip to

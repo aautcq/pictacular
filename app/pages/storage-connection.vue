@@ -1,24 +1,42 @@
 <script setup lang="ts">
 definePageMeta({ middleware: 'auth' })
 
-const { connectStorage, checkBucket, user } = useCurrentUser()
+const { launchStorageConnection, confirmStorageConnection, checkBucket, user } = useCurrentUser()
 const { importing, progress, result, etaSeconds, importPhotos } = useBucketImport()
 const toast = useToast()
-const { translateError, getFieldErrors } = useErrorMessage()
+const { translateError, translateErrorCode, getFieldErrors } = useErrorMessage()
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
 
 const form = useTemplateRef('form')
-const mode = shallowRef<'create' | 'connect' | null>(null)
-const state = reactive({
-  bucket: '',
-  access_key_id: '',
-  secret_access_key: '',
-})
-const loading = shallowRef(false)
-const connected = shallowRef(user.value?.has_aws_credentials ?? false)
+const state = reactive({ mode: 'create' as 'create' | 'connect', aws_account_id: '', bucket: '' })
+const launching = shallowRef(false)
+const confirming = shallowRef(false)
+const launchUrl = shallowRef<string | null>(null)
+const pendingToken = shallowRef<string | null>(null)
+const clickedLaunch = shallowRef(false)
+// A broken connection (issue #153) is treated as "not connected" here —
+// the User is dropped straight back into the launch form to relaunch the
+// stack and reconnect (a fresh Role/External Id), never a repair of the
+// old one — but the explanatory banner below still needs to know it was
+// broken specifically, rather than never connected at all.
+const wasBroken = user.value?.storage_connection_broken ?? false
+const connected = shallowRef((user.value?.has_storage_connection ?? false) && !wasBroken)
 const importSkipped = shallowRef(false)
 
 const noImportStatus: BucketStatus = { has_photos: false, import_in_progress: false, import_completed: false, imported: 0, albums: 0 }
+
+// Radio options for the two onboarding modes (issue #152): switching mode
+// clears any bucket name already typed, so a User who starts naming a
+// bucket then switches back to "create a new bucket" doesn't silently
+// submit a stale, unused value.
+const modeItems = [
+  { label: t('modeCreate'), value: 'create' as const },
+  { label: t('modeConnect'), value: 'connect' as const },
+]
+
+watch(() => state.mode, () => {
+  state.bucket = ''
+})
 
 const { data: bucketStatus } = useAsyncData(async () => {
   if (connected.value && !importSkipped.value) {
@@ -35,7 +53,7 @@ const { data: bucketStatus } = useAsyncData(async () => {
 // instead of abandoning it, and a reload after a completed import
 // restores its summary instead of re-offering an import that already
 // finished (bucketStatus.import_completed/import_in_progress + its last
-// result are read straight from the same AwsCredentials row
+// result are read straight from the same StorageConnectionAccess row
 // server/api/photos/import.post.ts persists to).
 watchEffect(() => {
   if (!bucketStatus.value || result.value)
@@ -46,10 +64,6 @@ watchEffect(() => {
   else if (bucketStatus.value.import_in_progress && !importing.value)
     startImport()
 })
-
-function selectMode(value: 'create' | 'connect') {
-  mode.value = value
-}
 
 async function startImport() {
   try {
@@ -64,27 +78,44 @@ function skipImport() {
   importSkipped.value = true
 }
 
-async function submit() {
-  if (!mode.value)
-    return
-
-  loading.value = true
+async function launch() {
+  launching.value = true
   try {
-    await connectStorage(
-      mode.value === 'create'
-        ? { mode: 'create', access_key_id: state.access_key_id, secret_access_key: state.secret_access_key }
-        : { mode: 'connect', access_key_id: state.access_key_id, secret_access_key: state.secret_access_key, bucket: state.bucket },
-    )
-
-    connected.value = true
-    bucketStatus.value = mode.value === 'connect' ? await checkBucket() : noImportStatus
+    const payload = state.mode === 'create'
+      ? { mode: 'create' as const, aws_account_id: state.aws_account_id }
+      : { mode: 'connect' as const, aws_account_id: state.aws_account_id, bucket: state.bucket }
+    const response = await launchStorageConnection(payload)
+    launchUrl.value = response.launch_url
+    pendingToken.value = response.pending_token
   }
   catch (error) {
     form.value?.setErrors(getFieldErrors(error))
     toast.add({ title: translateError(error), color: 'error' })
   }
   finally {
-    loading.value = false
+    launching.value = false
+  }
+}
+
+async function confirm() {
+  if (!pendingToken.value)
+    return
+
+  confirming.value = true
+  try {
+    await confirmStorageConnection(pendingToken.value)
+    connected.value = true
+    // A freshly created bucket (mode "create") can never already contain
+    // photos, so skip the round trip; a connected *existing* bucket
+    // (mode "connect", issue #152) might, so it needs the real
+    // `check-bucket` lookup to decide whether to offer the import step.
+    bucketStatus.value = state.mode === 'connect' ? await checkBucket() : noImportStatus
+  }
+  catch (error) {
+    toast.add({ title: translateError(error), color: 'error' })
+  }
+  finally {
+    confirming.value = false
   }
 }
 
@@ -165,7 +196,7 @@ const etaLabel = computed(() => {
       </p>
 
       <UButton
-        v-if="!importing"
+        v-if="!importing && (importSkipped || !!result || !bucketStatus?.has_photos)"
         :label="t('continue')"
         to="/"
       />
@@ -173,81 +204,92 @@ const etaLabel = computed(() => {
 
     <div v-else class="flex flex-col gap-y-6">
       <div class="flex flex-col gap-y-3 text-sm text-gray-600 dark:text-gray-300">
+        <p v-if="wasBroken" class="text-red-600 dark:text-red-400">
+          {{ t('brokenExplanation') }}
+        </p>
         <p>
           {{ t('description') }}
         </p>
       </div>
 
-      <div class="flex justify-center gap-x-4">
-        <UButton
-          type="button"
-          :active="mode === 'create'"
-          variant="soft"
-          active-variant="solid"
-          color="neutral"
-          active-color="success"
-          :label="t('createBucket')"
-          @click="selectMode('create')"
-        />
-        <UButton
-          type="button"
-          :active="mode === 'connect'"
-          variant="soft"
-          active-variant="solid"
-          color="neutral"
-          active-color="success"
-          :label="t('connectBucket')"
-          @click="selectMode('connect')"
-        />
+      <div v-if="!launchUrl" class="flex flex-col gap-y-4">
+        <UForm
+          ref="form"
+          class="space-y-4"
+          :schema="storageConnectionLaunchSchema"
+          :state="state"
+          @submit.prevent="launch"
+        >
+          <UFormField :label="t('modeLabel')" name="mode">
+            <URadioGroup v-model="state.mode" :items="modeItems" />
+          </UFormField>
+
+          <UFormField :label="t('accountIdLabel')" name="aws_account_id">
+            <UInput
+              v-model="state.aws_account_id"
+              type="text"
+              inputmode="numeric"
+              autocomplete="off"
+              autofocus
+              required
+              :placeholder="t('accountIdPlaceholder')"
+              class="w-full"
+            />
+
+            <template #error="{ error }">
+              <template v-if="typeof error === 'string'">
+                {{ translateErrorCode(error) }}
+              </template>
+            </template>
+          </UFormField>
+
+          <UFormField v-if="state.mode === 'connect'" :label="t('bucketNameLabel')" name="bucket">
+            <UInput
+              v-model="state.bucket"
+              type="text"
+              autocomplete="off"
+              required
+              :placeholder="t('bucketNamePlaceholder')"
+              class="w-full"
+            />
+
+            <template #error="{ error }">
+              <template v-if="typeof error === 'string'">
+                {{ translateErrorCode(error) }}
+              </template>
+            </template>
+          </UFormField>
+
+          <UButton
+            type="submit"
+            :loading="launching"
+            :label="launching ? t('launching') : t('launchStack')"
+            block
+          />
+        </UForm>
       </div>
 
-      <UForm
-        v-if="mode"
-        ref="form"
-        class="space-y-4"
-        :schema="storageConnectionSchema"
-        :state="{ mode, ...state }"
-        @submit.prevent="submit"
-      >
-        <UFormField v-if="mode === 'connect'" :label="t('bucketNameLabel')" name="bucket">
-          <UInput
-            v-model="state.bucket"
-            type="text"
-            autocomplete="off"
-            autofocus
-            required
-            :placeholder="t('bucketPlaceholder')"
-            class="w-full"
-          />
-        </UFormField>
-
-        <UFormField :label="t('accessKeyLabel')" name="access_key_id">
-          <BasePasswordInput
-            v-model="state.access_key_id"
-            autocomplete="off"
-            required
-            :placeholder="t('accessKeyPlaceholder')"
-            class="w-full"
-          />
-        </UFormField>
-
-        <UFormField :label="t('secretKeyLabel')" name="secret_access_key">
-          <BasePasswordInput
-            v-model="state.secret_access_key"
-            autocomplete="off"
-            required
-            :placeholder="t('secretKeyPlaceholder')"
-            class="w-full"
-          />
-        </UFormField>
+      <div v-else class="flex flex-col gap-y-4 items-center text-center">
+        <p>
+          {{ t('launchInstructions') }}
+        </p>
 
         <UButton
-          type="submit"
-          :loading="loading"
-          :label="loading ? t('connecting') : t('connect')"
-          block
+          :label="t('openConsole')"
+          :to="launchUrl"
+          target="_blank"
+          variant="soft"
+          @click="clickedLaunch = true"
         />
-      </UForm>
+
+        <UButton
+          v-if="clickedLaunch"
+          type="button"
+          :loading="confirming"
+          :label="confirming ? t('confirming') : t('confirmLaunched')"
+          @click="confirm"
+        />
+      </div>
     </div>
   </AuthCard>
 </template>
@@ -268,17 +310,21 @@ const etaLabel = computed(() => {
     "importResult": "Imported {photoCount} into {albumCount}.",
     "connectionReady": "Your storage connection is ready.",
     "continue": "Continue",
-    "description": "Pictacular stores your photos in your own AWS S3 bucket. Provide an AWS access key + secret key, then either create a new bucket for Pictacular or connect one you already have.",
-    "createBucket": "Create a new bucket for me",
-    "connectBucket": "I already have a bucket",
+    "brokenExplanation": "Your previous storage connection is broken (its AWS Role can no longer be assumed — for example, its CloudFormation stack may have been deleted). Relaunch a stack below to reconnect with a fresh Role.",
+    "description": "Pictacular stores your photos in your own AWS S3 bucket. Choose whether to create a new bucket or connect one you already own.",
+    "modeLabel": "Bucket",
+    "modeCreate": "Create a new bucket for me",
+    "modeConnect": "Connect an existing bucket",
+    "accountIdLabel": "AWS Account ID",
+    "accountIdPlaceholder": "12-digit AWS Account ID",
     "bucketNameLabel": "Bucket name",
-    "bucketPlaceholder": "Enter your bucket name",
-    "accessKeyLabel": "Access key ID",
-    "accessKeyPlaceholder": "Enter your access key ID",
-    "secretKeyLabel": "Secret access key",
-    "secretKeyPlaceholder": "Enter your secret access key",
-    "connecting": "Connecting…",
-    "connect": "Connect"
+    "bucketNamePlaceholder": "Name of your existing bucket",
+    "launchStack": "Launch Stack",
+    "launching": "Preparing…",
+    "launchInstructions": "A new tab opened the AWS CloudFormation Console with everything pre-filled — review and launch the stack there, then come back and confirm once it's finished.",
+    "openConsole": "Open AWS Console",
+    "confirmLaunched": "I've launched it, confirm connection",
+    "confirming": "Confirming…"
   }
 }
 </i18n>

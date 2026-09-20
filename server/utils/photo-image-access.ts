@@ -1,26 +1,36 @@
-import type { AwsCredentials } from './storage'
+import type { StorageConnectionAccess } from './storage'
+import { storageConnectionBrokenError } from './photo-guards'
 import { prisma } from './prisma'
 
 export interface PhotoImageAccess {
+  ownerId: number
   key: string
   mime_type: string
   storage_class: string | null
   restore_ongoing: boolean
   restore_expires_at: Date | null
-  awsCredentials: AwsCredentials
+  storageConnection: StorageConnectionAccess
 }
 
-function toAccess(photo: { key: string, mime_type: string, storage_class: string | null, restore_ongoing: boolean, restore_expires_at: Date | null, user: { aws_credentials: AwsCredentials | null } }): PhotoImageAccess | null {
-  if (!photo.user.aws_credentials)
+function toAccess(photo: { key: string, mime_type: string, storage_class: string | null, restore_ongoing: boolean, restore_expires_at: Date | null, user_id: number, user: { storage_connection: (StorageConnectionAccess & { broken: boolean }) | null } }): PhotoImageAccess | null {
+  if (!photo.user.storage_connection)
     return null
 
+  // A Photo whose owner's Storage Connection is already known to be
+  // broken (issue #153) can never actually be fetched from S3 either way
+  // — blocked with the same app-wide error every other photo action uses,
+  // rather than only discovering this once the AWS call below fails.
+  if (photo.user.storage_connection.broken)
+    throw createError(storageConnectionBrokenError)
+
   return {
+    ownerId: photo.user_id,
     key: photo.key,
     mime_type: photo.mime_type,
     storage_class: photo.storage_class,
     restore_ongoing: photo.restore_ongoing,
     restore_expires_at: photo.restore_expires_at,
-    awsCredentials: photo.user.aws_credentials,
+    storageConnection: photo.user.storage_connection,
   }
 }
 
@@ -42,7 +52,7 @@ export async function requirePhotoImageAccess(photoId: number, userId: number): 
         { albums: { some: { album: { users: { some: { id: userId } } } } } },
       ],
     },
-    include: { user: { include: { aws_credentials: true } } },
+    include: { user: { include: { storage_connection: true } } },
   })
 
   const access = photo && toAccess(photo)
@@ -66,7 +76,7 @@ export async function requirePhotoImageAccess(photoId: number, userId: number): 
 export async function requirePublicPhotoImageAccess(token: string, photoId: number): Promise<PhotoImageAccess> {
   const membership = await prisma.albumsOnPhotos.findFirst({
     where: { photo_id: photoId, album: { share_token: token } },
-    include: { photo: { include: { user: { include: { aws_credentials: true } } } } },
+    include: { photo: { include: { user: { include: { storage_connection: true } } } } },
   })
 
   const access = membership && toAccess(membership.photo)

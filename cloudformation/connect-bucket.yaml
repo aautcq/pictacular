@@ -1,0 +1,229 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  Pictacular Storage Connection ("connect an existing bucket" mode, issue
+  #151 / ADR-0006). Scopes an IAM Role that trusts Pictacular's own AWS
+  account to a bucket the User already owns (named as a parameter, not
+  created by this stack), and merges Pictacular's required CORS rule into
+  whatever CORS configuration already exists on that bucket rather than
+  replacing it. Launched once per Storage Connection via Pictacular's
+  "Connect your storage" onboarding, which pre-fills every parameter below
+  through the Launch Stack URL's query string — only BucketName needs to
+  be typed by hand, naming the bucket to connect.
+
+Parameters:
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 1
+    Description: >-
+      Fixed, per-connection identifier generated and pre-filled by
+      Pictacular. Do not edit — this scopes the trust policy below so only
+      this specific Storage Connection can assume the created Role.
+  AllowedOrigin:
+    Type: String
+    MinLength: 1
+    Description: >-
+      Pictacular's own origin (e.g. https://pictacular.app), pre-filled by
+      Pictacular, so the merged CORS rule allows the app to load images
+      directly from the bucket.
+  BucketName:
+    Type: String
+    MinLength: 1
+    Description: >-
+      The name of the User's own existing bucket to connect — the only
+      value not pre-filled, since Pictacular has no way to know it ahead
+      of time. Must already exist in this AWS account and be reachable
+      from the region this stack is launched in.
+  RoleName:
+    Type: String
+    MinLength: 1
+    Description: >-
+      Role name generated and pre-filled by Pictacular (same rationale as
+      create-bucket.yaml's own RoleName parameter): Pictacular combines
+      this with the AWS Account ID the User supplies before launching to
+      predict the resulting Role's ARN ahead of time, so it can confirm
+      the connection afterwards (issue #152) without asking the User to
+      paste anything back or polling this stack's own Outputs.
+
+Resources:
+  StorageConnectionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref RoleName
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              # Pictacular's own AWS account (the STS trust anchor
+              # provisioned in issue #148) — see docs/aws-account-setup.md.
+              AWS: 'arn:aws:iam::310649435248:root'
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      Policies:
+        - PolicyName: PictacularStorageConnectionAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              # Bucket-level actions server/utils/storage.ts performs,
+              # scoped to the named bucket's own ARN only — never s3:* or
+              # an account-wide wildcard. No s3:CreateBucket here (unlike
+              # create-bucket.yaml): this mode never creates a bucket.
+              - Sid: BucketLevelAccess
+                Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:GetBucketCors
+                  - s3:PutBucketCors
+                  - s3:GetBucketLocation
+                Resource: !Sub 'arn:aws:s3:::${BucketName}'
+              # Object-level actions, scoped to the named bucket's /*
+              # object ARN.
+              - Sid: ObjectLevelAccess
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: !Sub 'arn:aws:s3:::${BucketName}/*'
+
+  # A bucket this stack doesn't create can't be declared as an
+  # AWS::S3::Bucket resource (CloudFormation would try to manage/replace
+  # its properties outright, and would attempt to delete it on stack
+  # deletion). Merging a CORS rule onto it instead - preserving whatever
+  # rules already exist, per this ticket's acceptance criteria - needs an
+  # imperative read-modify-write that only a custom resource can express.
+  CorsMergeFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CorsMergeFunctionLogging
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*'
+        - PolicyName: CorsMergeFunctionBucketAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetBucketCors
+                  - s3:PutBucketCors
+                Resource: !Sub 'arn:aws:s3:::${BucketName}'
+
+  CorsMergeFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt CorsMergeFunctionRole.Arn
+      Timeout: 30
+      Code:
+        ZipFile: |
+          import json
+          import urllib.request
+
+          import boto3
+
+          # The single CORS rule this stack ever adds/updates — identified
+          # by its own Id so it can be found and replaced (re-launching or
+          # updating the stack must stay idempotent) without touching any
+          # other rule already on the bucket.
+          RULE_ID = 'pictacular-cors'
+
+          def merged_rules(s3, bucket, allowed_origin):
+              try:
+                  existing = s3.get_bucket_cors(Bucket=bucket)['CORSRules']
+              except s3.exceptions.ClientError as error:
+                  if error.response['Error']['Code'] != 'NoSuchCORSConfiguration':
+                      raise
+                  existing = []
+
+              other_rules = [rule for rule in existing if rule.get('ID') != RULE_ID]
+              pictacular_rule = {
+                  'ID': RULE_ID,
+                  'AllowedMethods': ['GET'],
+                  'AllowedOrigins': [allowed_origin],
+                  'AllowedHeaders': ['*'],
+                  'MaxAgeSeconds': 3000,
+              }
+              return other_rules + [pictacular_rule]
+
+          def handler(event, context):
+              status, reason = 'SUCCESS', 'ok'
+              props = event['ResourceProperties']
+              bucket = props['BucketName']
+              # Reused across Update events (CloudFormation tracks this
+              # custom resource by its physical ID); if BucketName itself
+              # changes on an update, CloudFormation treats this as the
+              # same resource rather than issuing a Delete for the old
+              # bucket, so re-launching against a different bucket can
+              # leave a stale pictacular-cors rule on the one previously
+              # connected — not handled here, since re-pointing a stack
+              # at another bucket isn't part of the onboarding flow.
+              physical_id = event.get('PhysicalResourceId', f'{bucket}-pictacular-cors')
+
+              # Create/Update only: this custom resource's DeletionPolicy
+              # (see connect-bucket.yaml) is Retain, so CloudFormation
+              # never actually invokes this handler with RequestType
+              # Delete - disconnecting a Storage Connection must never
+              # touch a bucket the User owns and still uses on their own.
+              if event['RequestType'] in ('Create', 'Update'):
+                  try:
+                      s3 = boto3.client('s3')
+                      rules = merged_rules(s3, bucket, props['AllowedOrigin'])
+                      s3.put_bucket_cors(Bucket=bucket, CORSConfiguration={'CORSRules': rules})
+                  except Exception as error:  # noqa: BLE001
+                      status, reason = 'FAILED', str(error)
+
+              send(event, status, reason, physical_id)
+
+          def send(event, status, reason, physical_id):
+              body = json.dumps({
+                  'Status': status,
+                  'Reason': reason,
+                  'PhysicalResourceId': physical_id,
+                  'StackId': event['StackId'],
+                  'RequestId': event['RequestId'],
+                  'LogicalResourceId': event['LogicalResourceId'],
+              }).encode('utf-8')
+              request = urllib.request.Request(
+                  event['ResponseURL'], data=body, method='PUT', headers={'Content-Type': ''},
+              )
+              urllib.request.urlopen(request)  # noqa: S310
+
+  BucketCorsMerge:
+    Type: Custom::BucketCorsMerge
+    # See CorsMergeFunction's own comment above: disconnecting must never
+    # reach back into a bucket the User still owns and uses.
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      ServiceToken: !GetAtt CorsMergeFunction.Arn
+      BucketName: !Ref BucketName
+      AllowedOrigin: !Ref AllowedOrigin
+
+Outputs:
+  RoleArn:
+    Description: >-
+      The Role Pictacular assumes (via sts:AssumeRole) to operate on this
+      Storage Connection's bucket.
+    Value: !GetAtt StorageConnectionRole.Arn
+  BucketName:
+    Description: The connected bucket's name (unchanged - this mode never renames it).
+    Value: !Ref BucketName

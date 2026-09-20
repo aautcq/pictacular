@@ -26,11 +26,13 @@
     "build": "nuxt build",
     "preview": "nuxt preview",
     "lint": "eslint . --fix",
+    "pretest": "node scripts/db-push-test.mjs",
     "test": "vitest run",
     "typecheck": "nuxt typecheck"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "~3.1113.0",
+    "@aws-sdk/client-sts": "~3.1113.0",
     "@aws-sdk/s3-request-presigner": "~3.1113.0",
     "@getbrevo/brevo": "~6.0.3",
     "@nuxt/fonts": "~0.14.0",

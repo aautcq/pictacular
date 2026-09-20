@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
       avatar_url: true,
       created_at: true,
       last_sign_in_at: true,
-      aws_credentials: true,
+      storage_connection: true,
     },
   })
 

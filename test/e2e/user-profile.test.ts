@@ -1,11 +1,21 @@
+import type { FakeS3Server } from './fake-s3-server'
+import process from 'node:process'
 import { $fetch, fetch, setup } from '@nuxt/test-utils/e2e'
 import { afterAll, describe, expect, it } from 'vitest'
-import { encodeAwsCredentials } from '../../server/utils/jwt'
 import { prisma } from '../../server/utils/prisma'
+import { startFakeS3Server, testExternalId, testRoleArn } from './fake-s3-server'
 
 // Black-box HTTP tests for authenticated self-service profile management
 // (issue #33): get/update/delete one's own account via /api/users/me.
 describe('user profile self-service', async () => {
+  // A signed avatar URL/upload now requires an AssumeRole round trip
+  // before any signing happens (issue #150), even though the signing
+  // itself is still purely local — so this suite needs the same in-
+  // process fake STS/S3 double every Storage-Connection-aware spec uses,
+  // despite never itself asserting on the bucket's contents.
+  const fakeS3: FakeS3Server = await startFakeS3Server()
+  process.env.AWS_S3_ENDPOINT = fakeS3.url
+
   await setup()
 
   const emailPrefix = `profile-${Date.now()}`
@@ -55,6 +65,7 @@ describe('user profile self-service', async () => {
 
   afterAll(async () => {
     await prisma.user.deleteMany({ where: { email: { startsWith: emailPrefix } } })
+    await fakeS3.close()
   })
 
   describe('get profile', () => {
@@ -72,7 +83,8 @@ describe('user profile self-service', async () => {
         email: user.email,
         first_name: user.first_name,
         last_name: user.last_name,
-        has_aws_credentials: false,
+        has_storage_connection: false,
+        storage_connection_broken: false,
         avatar_url: null,
         created_at: user.created_at.toISOString(),
         last_sign_in_at: user.last_sign_in_at?.toISOString(),
@@ -82,22 +94,23 @@ describe('user profile self-service', async () => {
     it('returns a signed avatar URL when the user has AWS credentials and an avatar set', async () => {
       const email = await createVerifiedUser({ avatar_url: 'avatars/1' })
       const user = await prisma.user.findUniqueOrThrow({ where: { email } })
-      await prisma.awsCredentials.create({
+      await prisma.storageConnection.create({
         data: {
           bucket: 'pictacular-test-bucket',
           region: 'eu-west-3',
-          tokens: encodeAwsCredentials({ access_key_id: 'AKIATEST', secret_access_key: 'test-secret' }),
+          role_arn: testRoleArn,
+          external_id: testExternalId,
           user: { connect: { id: user.id } },
         },
       })
       const cookieHeader = await loginCookieHeader(email)
 
-      const response = await $fetch<{ has_aws_credentials: boolean, avatar_url: string | null }>('/api/users/me', {
+      const response = await $fetch<{ has_storage_connection: boolean, avatar_url: string | null }>('/api/users/me', {
         headers: { cookie: cookieHeader },
       })
 
-      expect(response.has_aws_credentials).toBe(true)
-      expect(response.avatar_url).toMatch(/^https:\/\/pictacular-test-bucket\.s3\./)
+      expect(response.has_storage_connection).toBe(true)
+      expect(response.avatar_url).toContain('pictacular-test-bucket')
     })
 
     it('rejects an unauthenticated request with 401', async () => {
@@ -253,11 +266,12 @@ describe('user profile self-service', async () => {
       await prisma.resetPasswordToken.create({
         data: { token: `token-${user.id}`, expiresAt: new Date(), user: { connect: { id: user.id } } },
       })
-      await prisma.awsCredentials.create({
+      await prisma.storageConnection.create({
         data: {
           bucket: 'pictacular-test-bucket',
           region: 'eu-west-3',
-          tokens: encodeAwsCredentials({ access_key_id: 'AKIATEST', secret_access_key: 'test-secret' }),
+          role_arn: testRoleArn,
+          external_id: testExternalId,
           user: { connect: { id: user.id } },
         },
       })
@@ -278,7 +292,7 @@ describe('user profile self-service', async () => {
       await expect(prisma.biometrics.findMany({ where: { user_id: user.id } })).resolves.toHaveLength(0)
       await expect(prisma.pushSubscription.findMany({ where: { user_id: user.id } })).resolves.toHaveLength(0)
       await expect(prisma.resetPasswordToken.findMany({ where: { user_id: user.id } })).resolves.toHaveLength(0)
-      await expect(prisma.awsCredentials.findUnique({ where: { user_id: user.id } })).resolves.toBeNull()
+      await expect(prisma.storageConnection.findUnique({ where: { user_id: user.id } })).resolves.toBeNull()
 
       await expect(
         $fetch('/api/auth/sessions', { method: 'POST', body: { email, password } }),

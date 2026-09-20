@@ -1,18 +1,15 @@
-import type { CORSRule, GetObjectCommandOutput } from '@aws-sdk/client-s3'
+import type { GetObjectCommandOutput } from '@aws-sdk/client-s3'
 import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
 import process from 'node:process'
 import {
 
-  CreateBucketCommand,
   DeleteObjectCommand,
-  GetBucketCorsCommand,
   GetBucketLocationCommand,
   GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
-  PutBucketCorsCommand,
   PutObjectCommand,
   RestoreObjectCommand,
   S3Client,
@@ -28,18 +25,24 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 // the auto-import itself resolves to.
 import { createError } from 'h3'
 import { extractTakenAt } from './exif'
-import { decodeAwsCredentials } from './jwt'
+import { assumeRole } from './sts'
 
-export interface AwsCredentials {
+export interface StorageConnectionAccess {
   bucket: string
   region: string
-  tokens: string
+  role_arn: string
+  external_id: string
 }
 
-// Bucket region used when a User asks Pictacular to create a new bucket for
-// them (they never pick one themselves); an existing/connected bucket's own
-// region is looked up instead (see connectExistingBucket below).
-const defaultRegion = 'eu-west-3'
+// The single region a "create a new bucket" CloudFormation stack is ever
+// launched/created in (issue #150) — a CloudFormation stack's resources
+// (the bucket and Role included) are created in whichever region the
+// stack itself runs in, so this is the same region
+// server/api/storage-connections/launch.post.ts pre-selects in the Launch
+// Stack Console URL and the one confirmStorageConnection below assumes/
+// falls back to before it can look up the bucket's real region: one
+// shared constant, so the two can never independently drift apart.
+export const CREATE_BUCKET_STACK_REGION = 'us-east-1'
 
 // File extensions the legacy import/check-bucket flow treated as "photos"
 // (see docs/legacy-features.md) — no per-object HeadObject/mime-type round
@@ -51,125 +54,80 @@ const imageExtensionPattern = /\.(?:jpe?g|png|gif|webp|heic|heif|bmp|tiff?)$/i
 // set in test envs, to point this at an in-process fake S3 double instead
 // of real AWS (see test/e2e/fake-s3-server.ts) — production never sets
 // AWS_S3_ENDPOINT, so real requests always go to AWS's own endpoints.
-function createClientFromTokens(tokens: string, region: string) {
-  const decoded = decodeAwsCredentials(tokens)
-  if (!decoded) {
-    throw createError({
-      statusCode: 401,
-      statusMessage: 'auth.invalid_aws_credentials',
-    })
-  }
-
+// Building a client now requires assuming the User's own cross-account
+// Role first (issue #150): unlike the old key-pair flow, there's no
+// long-lived AWS credential stored per User at all any more, only the
+// Role ARN + External ID needed to assume a short session on demand (see
+// server/utils/sts.ts's own in-memory session cache, which is what keeps
+// this from costing a fresh AssumeRole round trip on every single call
+// below).
+async function createClient(storageConnection: StorageConnectionAccess, options: { followRegionRedirects?: boolean } = {}) {
+  const { accessKeyId, secretAccessKey, sessionToken } = await assumeRole(storageConnection.role_arn, storageConnection.external_id)
   const endpoint = process.env.AWS_S3_ENDPOINT
 
   return new S3Client({
-    region,
-    credentials: {
-      accessKeyId: decoded.access_key_id,
-      secretAccessKey: decoded.secret_access_key,
-    },
+    region: storageConnection.region,
+    credentials: { accessKeyId, secretAccessKey, sessionToken },
+    ...(options.followRegionRedirects && { followRegionRedirects: true }),
     ...(endpoint && { endpoint, forcePathStyle: true }),
   })
 }
 
-function createClient(awsCredentials: AwsCredentials) {
-  return createClientFromTokens(awsCredentials.tokens, awsCredentials.region)
-}
-
-// A permissive read-only CORS rule (mirroring the legacy StorageUtility's
-// `corsRule`) scoped to this app's own origin, so the client can load
-// signed image URLs directly from the bucket.
-function corsRule(allowedOrigin: string) {
-  return {
-    ID: 'pictacular-cors',
-    AllowedHeaders: ['*'],
-    AllowedMethods: ['GET'],
-    AllowedOrigins: [allowedOrigin],
-    ExposeHeaders: [],
-    MaxAgeSeconds: 3000,
-  }
-}
-
-// S3 rejects a bad AWS key pair itself (as opposed to a bucket-specific
-// problem) with one of these error names, regardless of which operation
-// triggered it. HEAD responses (HeadBucketCommand) never carry a body per
-// HTTP semantics, so the SDK can't parse an error name/code out of them —
-// fall back to the raw 403 status for those.
-function isCredentialsError(error: unknown) {
-  const name = (error as { name?: string } | null)?.name
-  const httpStatusCode = (error as { $metadata?: { httpStatusCode?: number } } | null)?.$metadata?.httpStatusCode
-  return name === 'InvalidAccessKeyId' || name === 'SignatureDoesNotMatch' || httpStatusCode === 403
-}
-
-// Creates a brand-new private bucket for a User's Storage Connection
-// ("create new" onboarding mode) and sets up its CORS rule, porting
-// StorageUtility#createBucket + #setupBucket.
-export async function createBucket(tokens: string, allowedOrigin: string) {
-  const client = createClientFromTokens(tokens, defaultRegion)
-  const bucket = `pictacular-${randomUUID()}`
-
-  try {
-    await client.send(new CreateBucketCommand({
-      Bucket: bucket,
-      CreateBucketConfiguration: { LocationConstraint: defaultRegion },
-    }))
-    await client.send(new PutBucketCorsCommand({
-      Bucket: bucket,
-      CORSConfiguration: { CORSRules: [corsRule(allowedOrigin)] },
-    }))
-  }
-  catch (error) {
-    if (isCredentialsError(error)) {
-      throw createError({ statusCode: 401, statusMessage: 'storage.invalid_credentials' })
-    }
-    throw createError({ statusCode: 502, statusMessage: 'storage.bucket_setup_failed' })
-  }
-
-  return { bucket, region: defaultRegion }
-}
-
-// Verifies an existing bucket is reachable with the given AWS key pair
-// ("connect existing" onboarding mode), merges Pictacular's CORS rule into
-// whatever CORS configuration is already there, and reports the bucket's
-// own region — porting StorageUtility#getBucket + #setupBucket + #getRegion.
-export async function connectExistingBucket(tokens: string, bucket: string, allowedOrigin: string) {
-  const client = createClientFromTokens(tokens, defaultRegion)
+// Confirms a launched CloudFormation stack has actually finished (issues
+// #150/#152): assumes the generated Role (the same AssumeRole call every
+// other S3 operation below makes, but here it's the very first thing
+// that can succeed at all — a stack still mid-create hasn't finished
+// creating the Role yet, so this call itself is the "is it ready?" check,
+// no CloudFormation Outputs/DescribeStacks polling needed), then verifies
+// the bucket and looks up its own region — behaving differently per mode
+// since a "create new bucket" stack's HeadBucket failure just means the
+// stack (bucket included) hasn't finished creating yet (502, still worth
+// falling back to the launch region on a location-lookup hiccup, since a
+// freshly-created bucket's region is already known), whereas a "connect
+// an existing bucket" stack's HeadBucket failure means the User named a
+// bucket that doesn't exist/isn't reachable (404, mirroring the legacy
+// StorageUtility#getBucket the former "connect existing bucket" mode
+// used) and its region can never be assumed to be the stack's own launch
+// region (an existing bucket may live anywhere), so it's always looked
+// up for real rather than silently falling back to a guessed default.
+// `followRegionRedirects` is enabled unconditionally (not just for
+// "connect") since a "create" mode bucket is always actually in
+// CREATE_BUCKET_STACK_REGION, so it never triggers a redirect there
+// anyway — but it's essential for "connect": an initial client always has
+// to guess *some* signing region before a bucket's real one is known, and
+// a real S3 bucket outside that guessed region rejects a mismatched
+// SigV4-signed request outright (unlike the in-process fake double,
+// which never validates signing region) rather than just failing to
+// find it.
+export async function confirmStorageConnection(roleArn: string, externalId: string, bucket: string, mode: 'create' | 'connect') {
+  const client = await createClient({ bucket, region: CREATE_BUCKET_STACK_REGION, role_arn: roleArn, external_id: externalId }, { followRegionRedirects: true })
 
   try {
     await client.send(new HeadBucketCommand({ Bucket: bucket }))
   }
   catch (error) {
-    if (isCredentialsError(error)) {
-      throw createError({ statusCode: 401, statusMessage: 'storage.invalid_credentials' })
-    }
-    throw createError({ statusCode: 404, statusMessage: 'storage.bucket_not_found' })
+    throw mode === 'connect'
+      ? createError({ statusCode: 404, statusMessage: 'storage.bucket_not_found', cause: error })
+      : createError({ statusCode: 502, statusMessage: 'storage.bucket_not_ready', cause: error })
   }
 
-  let existingRules: CORSRule[] = []
-  try {
-    const cors = await client.send(new GetBucketCorsCommand({ Bucket: bucket }))
-    existingRules = cors.CORSRules ?? []
-  }
-  catch {
-    // Bucket has no CORS configuration yet — start from an empty rule set.
-  }
-
-  await client.send(new PutBucketCorsCommand({
-    Bucket: bucket,
-    CORSConfiguration: { CORSRules: [...existingRules, corsRule(allowedOrigin)] },
-  }))
-
-  let region = defaultRegion
+  let region = CREATE_BUCKET_STACK_REGION
   try {
     const location = await client.send(new GetBucketLocationCommand({ Bucket: bucket }))
     // AWS reports an empty LocationConstraint for buckets in us-east-1
     // specifically (its historical "US Standard" default) rather than
     // omitting/erroring — that's a *successful* lookup, not a fallback case.
-    region = location.LocationConstraint || 'us-east-1'
+    region = location.LocationConstraint || CREATE_BUCKET_STACK_REGION
   }
-  catch {
-    // Fall back to the default region when the location lookup isn't
-    // permitted by the given AWS key pair.
+  catch (error) {
+    // "Connect" mode has no safe default to fall back to (unlike
+    // "create", where the bucket was just created in
+    // CREATE_BUCKET_STACK_REGION), so a lookup failure there is a real,
+    // surfaced error rather than a silent guess — connect-bucket.yaml's
+    // Role is granted GetBucketLocation, so this only fails for a
+    // genuinely broken connection.
+    if (mode === 'connect')
+      throw createError({ statusCode: 502, statusMessage: 'storage.bucket_region_lookup_failed', cause: error })
   }
 
   return { bucket, region }
@@ -178,9 +136,9 @@ export async function connectExistingBucket(tokens: string, bucket: string, allo
 // Reports whether a connected bucket already contains image files, so the
 // onboarding client can offer a later "import existing photos" step —
 // porting the checkBucket usecase's `has_photos` shape.
-export async function bucketHasImages(awsCredentials: AwsCredentials) {
-  const client = createClient(awsCredentials)
-  const { Contents } = await client.send(new ListObjectsV2Command({ Bucket: awsCredentials.bucket, MaxKeys: 100 }))
+export async function bucketHasImages(storageConnection: StorageConnectionAccess) {
+  const client = await createClient(storageConnection)
+  const { Contents } = await client.send(new ListObjectsV2Command({ Bucket: storageConnection.bucket, MaxKeys: 100 }))
 
   return (Contents ?? []).some(({ Key }) => Key && imageExtensionPattern.test(Key))
 }
@@ -208,11 +166,11 @@ export interface BucketImagePage {
 // `nextContinuationToken` across requests instead, see
 // server/api/photos/import.post.ts) and its per-object mime-type lookup
 // (see mimeTypeFromKey below instead).
-export async function listBucketImagePage(awsCredentials: AwsCredentials, continuationToken?: string): Promise<BucketImagePage> {
-  const client = createClient(awsCredentials)
+export async function listBucketImagePage(storageConnection: StorageConnectionAccess, continuationToken?: string): Promise<BucketImagePage> {
+  const client = await createClient(storageConnection)
 
   const { Contents, IsTruncated, NextContinuationToken } = await client.send(new ListObjectsV2Command({
-    Bucket: awsCredentials.bucket,
+    Bucket: storageConnection.bucket,
     MaxKeys: 1000,
     ContinuationToken: continuationToken,
   }))
@@ -232,12 +190,12 @@ export async function listBucketImagePage(awsCredentials: AwsCredentials, contin
 // HeadObject/GetObject round trip) to establish an import's total image
 // count for progress reporting (see server/api/photos/import.post.ts),
 // porting the legacy StorageUtility#listData loop's pagination.
-export async function listAllBucketImages(awsCredentials: AwsCredentials): Promise<BucketImageObject[]> {
+export async function listAllBucketImages(storageConnection: StorageConnectionAccess): Promise<BucketImageObject[]> {
   const images: BucketImageObject[] = []
   let continuationToken: string | undefined
 
   do {
-    const page = await listBucketImagePage(awsCredentials, continuationToken)
+    const page = await listBucketImagePage(storageConnection, continuationToken)
     images.push(...page.images)
     continuationToken = page.nextContinuationToken
   } while (continuationToken)
@@ -300,12 +258,11 @@ async function bodyToBuffer(body: NonNullable<GetObjectCommandOutput['Body']>): 
 // rather than surfaced — a Photo import/upload must never fail just
 // because its Taken At couldn't be determined; callers fall back to
 // `last_modified` themselves.
-export async function fetchTakenAt(awsCredentials: AwsCredentials, key: string): Promise<Date | null> {
-  const client = createClient(awsCredentials)
-
+export async function fetchTakenAt(storageConnection: StorageConnectionAccess, key: string): Promise<Date | null> {
   try {
+    const client = await createClient(storageConnection)
     const rangeResponse = await client.send(new GetObjectCommand({
-      Bucket: awsCredentials.bucket,
+      Bucket: storageConnection.bucket,
       Key: key,
       Range: `bytes=0-${EXIF_RANGE_BYTES - 1}`,
     }))
@@ -316,7 +273,7 @@ export async function fetchTakenAt(awsCredentials: AwsCredentials, key: string):
     if (noExifContainerExtensions.has(extensionFromKey(key)))
       return null
 
-    const fullResponse = await client.send(new GetObjectCommand({ Bucket: awsCredentials.bucket, Key: key }))
+    const fullResponse = await client.send(new GetObjectCommand({ Bucket: storageConnection.bucket, Key: key }))
     return await extractTakenAt(await bodyToBuffer(fullResponse.Body!))
   }
   catch {
@@ -327,9 +284,9 @@ export async function fetchTakenAt(awsCredentials: AwsCredentials, key: string):
 // Generates a time-limited signed URL for any object in a User's own
 // bucket (avatars, Photos, ...) — generic over bucket + key, not
 // per-asset-type.
-export async function generateSecureObjectUrl(awsCredentials: AwsCredentials, key: string, expiresIn = 3600) {
-  const client = createClient(awsCredentials)
-  const command = new GetObjectCommand({ Bucket: awsCredentials.bucket, Key: key })
+export async function generateSecureObjectUrl(storageConnection: StorageConnectionAccess, key: string, expiresIn = 3600) {
+  const client = await createClient(storageConnection)
+  const command = new GetObjectCommand({ Bucket: storageConnection.bucket, Key: key })
 
   return getSignedUrl(client, command, { expiresIn })
 }
@@ -340,22 +297,22 @@ export async function generateSecureObjectUrl(awsCredentials: AwsCredentials, ke
 // multi-MB original in memory (unlike bodyToBuffer above, which the
 // EXIF/Taken At read path needs a full in-memory Buffer for). The route
 // handler is responsible for streaming `Body` on to its own response.
-export async function fetchPhotoObject(awsCredentials: AwsCredentials, key: string) {
-  const client = createClient(awsCredentials)
+export async function fetchPhotoObject(storageConnection: StorageConnectionAccess, key: string) {
+  const client = await createClient(storageConnection)
 
-  return client.send(new GetObjectCommand({ Bucket: awsCredentials.bucket, Key: key }))
+  return client.send(new GetObjectCommand({ Bucket: storageConnection.bucket, Key: key }))
 }
 
 // Uploads a User's avatar image (base64-in-JSON, per the legacy upload
 // contract preserved by this rebuild) to their own Storage Connection
 // bucket under a fixed per-user key, so re-uploading always replaces the
 // previous avatar object rather than accumulating orphaned ones.
-export async function uploadAvatarObject(awsCredentials: AwsCredentials, userId: number, mimeType: string, base64: string) {
-  const client = createClient(awsCredentials)
+export async function uploadAvatarObject(storageConnection: StorageConnectionAccess, userId: number, mimeType: string, base64: string) {
+  const client = await createClient(storageConnection)
   const key = `avatars/${userId}`
 
   await client.send(new PutObjectCommand({
-    Bucket: awsCredentials.bucket,
+    Bucket: storageConnection.bucket,
     Key: key,
     Body: Buffer.from(base64, 'base64'),
     ContentType: mimeType,
@@ -369,13 +326,13 @@ export async function uploadAvatarObject(awsCredentials: AwsCredentials, userId:
 // collide with another upload (unlike avatars, a User may have any number
 // of Photos), returning the storage key + byte size persisted on the
 // Photo row.
-export async function uploadPhotoObject(awsCredentials: AwsCredentials, userId: number, filename: string, mimeType: string, base64: string) {
-  const client = createClient(awsCredentials)
+export async function uploadPhotoObject(storageConnection: StorageConnectionAccess, userId: number, filename: string, mimeType: string, base64: string) {
+  const client = await createClient(storageConnection)
   const body = Buffer.from(base64, 'base64')
   const key = `photos/${userId}/${randomUUID()}-${filename}`
 
   await client.send(new PutObjectCommand({
-    Bucket: awsCredentials.bucket,
+    Bucket: storageConnection.bucket,
     Key: key,
     Body: body,
     ContentType: mimeType,
@@ -387,10 +344,10 @@ export async function uploadPhotoObject(awsCredentials: AwsCredentials, userId: 
 // Deletes a Photo's underlying bucket object (issue #50), used alongside
 // removing its Photo row so a deleted Photo never leaves an orphaned S3
 // object behind.
-export async function deletePhotoObject(awsCredentials: AwsCredentials, key: string) {
-  const client = createClient(awsCredentials)
+export async function deletePhotoObject(storageConnection: StorageConnectionAccess, key: string) {
+  const client = await createClient(storageConnection)
 
-  await client.send(new DeleteObjectCommand({ Bucket: awsCredentials.bucket, Key: key }))
+  await client.send(new DeleteObjectCommand({ Bucket: storageConnection.bucket, Key: key }))
 }
 
 export interface RestoreStatus {
@@ -417,25 +374,40 @@ function parseRestoreHeader(header: string | undefined): { ongoing: boolean, exp
   }
 }
 
+// Already-namespaced errors this module's own `createClient`/`assumeRole`
+// can throw (e.g. `storage.invalid_role` when a Role can no longer be
+// assumed at all — see server/utils/sts.ts) carry both fields already, set
+// by createError itself — unlike a raw AWS SDK exception, which never has
+// a top-level `statusCode`/`statusMessage` of its own. Distinguishing the
+// two below (issue #153) is what lets a Role-unassumable failure bubble up
+// unchanged for photo-guards.ts's withStorageConnectionGuard to recognize
+// and turn into a single, connection-wide "broken" state, rather than
+// this function masking it as its own unrelated `photos.restore_failed`.
+function isNamespacedAwsError(error: unknown): boolean {
+  return !!error && typeof error === 'object' && 'statusCode' in error && 'statusMessage' in error
+}
+
 // Reads a single object's current storage class + Restore Request status
 // (issue #145) via `HeadObject` — only ever called for a Photo already
 // known to be archived from the free `ListObjectsV2` `StorageClass` field
 // (see listAllBucketImages above), never per-Photo on every scan/request.
-// Any AWS-level failure (bad/revoked credentials, permission error, ...)
-// is surfaced as the same namespaced error code `restoreObject` below
-// uses, rather than bubbling up as an unhandled 500 — this is the only
-// AWS call the restore endpoints make before deciding whether to issue a
-// `RestoreObjectCommand` at all.
-export async function headObjectRestoreStatus(awsCredentials: AwsCredentials, key: string): Promise<RestoreStatus> {
-  const client = createClient(awsCredentials)
-
+// Any other AWS-level failure (permission error, ...) is surfaced as the
+// same namespaced error code `restoreObject` below uses, rather than
+// bubbling up as an unhandled 500 — this is the only AWS call the restore
+// endpoints make before deciding whether to issue a `RestoreObjectCommand`
+// at all.
+export async function headObjectRestoreStatus(storageConnection: StorageConnectionAccess, key: string): Promise<RestoreStatus> {
   try {
-    const response = await client.send(new HeadObjectCommand({ Bucket: awsCredentials.bucket, Key: key }))
+    const client = await createClient(storageConnection)
+    const response = await client.send(new HeadObjectCommand({ Bucket: storageConnection.bucket, Key: key }))
     const { ongoing, expires_at } = parseRestoreHeader(response.Restore)
 
     return { storage_class: response.StorageClass ?? 'STANDARD', ongoing, expires_at }
   }
   catch (error) {
+    if (isNamespacedAwsError(error))
+      throw error
+
     throw createError({
       statusCode: 502,
       statusMessage: 'photos.restore_failed',
@@ -460,12 +432,11 @@ const RESTORE_REQUEST_DAYS = 7
 // with a 409 `RestoreAlreadyInProgress`; that's treated as a no-op success
 // rather than surfaced as a failure, since the end state — a restore is in
 // progress — is exactly what was being asked for.
-export async function restoreObject(awsCredentials: AwsCredentials, key: string): Promise<void> {
-  const client = createClient(awsCredentials)
-
+export async function restoreObject(storageConnection: StorageConnectionAccess, key: string): Promise<void> {
   try {
+    const client = await createClient(storageConnection)
     await client.send(new RestoreObjectCommand({
-      Bucket: awsCredentials.bucket,
+      Bucket: storageConnection.bucket,
       Key: key,
       RestoreRequest: {
         Days: RESTORE_REQUEST_DAYS,
@@ -476,6 +447,9 @@ export async function restoreObject(awsCredentials: AwsCredentials, key: string)
   catch (error) {
     if ((error as { name?: string } | null)?.name === 'RestoreAlreadyInProgress')
       return
+
+    if (isNamespacedAwsError(error))
+      throw error
 
     throw createError({
       statusCode: 502,

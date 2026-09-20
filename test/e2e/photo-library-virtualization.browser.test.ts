@@ -1,8 +1,10 @@
+import type { FakeS3Server } from './fake-s3-server'
+import process from 'node:process'
 import { createPage, setup, url } from '@nuxt/test-utils/e2e'
 import { afterAll, describe, expect, it } from 'vitest'
 import { hashPassword } from '../../server/utils/crypto'
-import { encodeAwsCredentials } from '../../server/utils/jwt'
 import { prisma } from '../../server/utils/prisma'
+import { startFakeS3Server, testExternalId, testRoleArn } from './fake-s3-server'
 
 // Regression test for issue #175 (see docs/adr/0009-tanstack-virtual-for-photo-and-album-grids.md):
 // the photo library page used to mount one live DOM node per loaded Photo,
@@ -14,6 +16,9 @@ import { prisma } from '../../server/utils/prisma'
 // both right after the first page loads and after scrolling through the
 // full, fully-paginated list.
 describe('photo library grid virtualization', async () => {
+  const fakeS3: FakeS3Server = await startFakeS3Server()
+  process.env.AWS_S3_ENDPOINT = fakeS3.url
+
   await setup({ browser: true })
 
   const emailPrefix = `photo-virtualization-${Date.now()}`
@@ -29,6 +34,7 @@ describe('photo library grid virtualization', async () => {
 
   afterAll(async () => {
     await prisma.user.deleteMany({ where: { email: { startsWith: emailPrefix } } })
+    await fakeS3.close()
   })
 
   it('keeps the rendered gallery cell count bounded regardless of how many photos have loaded', async () => {
@@ -43,11 +49,12 @@ describe('photo library grid virtualization', async () => {
       },
     })
 
-    await prisma.awsCredentials.create({
+    await prisma.storageConnection.create({
       data: {
         bucket,
         region: 'eu-west-3',
-        tokens: encodeAwsCredentials({ access_key_id: 'AKIATEST', secret_access_key: 'test-secret' }),
+        role_arn: testRoleArn,
+        external_id: testExternalId,
         user: { connect: { id: user.id } },
       },
     })

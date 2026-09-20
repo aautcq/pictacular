@@ -16,6 +16,7 @@ const passwordInputType = shallowRef('password')
         color="neutral"
         variant="link"
         size="sm"
+        tabindex="-1"
         :icon="passwordInputType === 'password' ? 'ph:eye' : 'ph:eye-slash'"
         :aria-label="passwordInputType === 'password' ? 'Show password' : 'Hide password'"
         @click="passwordInputType = passwordInputType === 'password' ? 'text' : 'password'"

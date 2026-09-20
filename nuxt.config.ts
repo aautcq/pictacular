@@ -308,6 +308,19 @@ export default defineNuxtConfig({
       publicKey: '',
       privateKey: '',
     },
+    aws: {
+      accessKeyId: '',
+      secretAccessKey: '',
+      // Public S3 base URL the Storage Connection CloudFormation templates
+      // are hosted under (issue #146/#150) — CloudFormation's own
+      // CreateStack API only accepts a TemplateURL pointing at an S3
+      // object (or SSM document), never an arbitrary HTTPS host such as
+      // raw.githubusercontent.com, so the version-controlled
+      // cloudformation/*.yaml files must be mirrored to a bucket at this
+      // URL (see cloudformation/README.md) for server/api/storage-
+      // connections/launch.post.ts's Launch Stack links to work at all.
+      cfnTemplatesBaseUrl: '',
+    },
   },
   compatibilityDate: '2026-08-22',
 })

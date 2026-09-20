@@ -1,5 +1,6 @@
 import type { Task } from 'nitropack/types'
 import { isArchivedStorageClass, photoArchiveState } from '#server/utils/archived-photo'
+import { withStorageConnectionGuard } from '#server/utils/photo-guards'
 import { prisma } from '#server/utils/prisma'
 import { serializePhoto } from '#server/utils/serialize-photo'
 import { headObjectRestoreStatus, listAllBucketImages } from '#server/utils/storage'
@@ -63,19 +64,26 @@ const archivedPhotosScanTask: Task = {
   },
   async run() {
     const accounts = await prisma.user.findMany({
-      where: { aws_credentials: { isNot: null } },
-      include: { aws_credentials: true },
+      // A connection issue #153 has already marked broken is skipped
+      // entirely rather than retried every scan cycle — its owner is
+      // already hard-blocked and directed to reconnect, so retrying a
+      // doomed AssumeRole here would only waste an STS round trip.
+      where: { storage_connection: { isNot: null, is: { broken: false } } },
+      include: { storage_connection: true },
     })
 
     for (const account of accounts) {
-      const awsCredentials = account.aws_credentials!
+      const storageConnection = account.storage_connection!
 
       // One User's broken Storage Connection (revoked credentials, bucket
       // deleted, ...) must not abort the scan for every other User —
       // logged and skipped instead, the same "keep going" resilience
-      // email-outbox's own per-row try/catch already relies on.
+      // email-outbox's own per-row try/catch already relies on. Routed
+      // through the same broken-connection guard (issue #153) as the
+      // interactive routes, so a Role revoked since the last scan gets
+      // marked broken here too instead of being retried forever.
       try {
-        const images = await listAllBucketImages(awsCredentials)
+        const images = await withStorageConnectionGuard(account.id, () => listAllBucketImages(storageConnection))
         if (images.length === 0)
           continue
 
@@ -119,7 +127,7 @@ const archivedPhotosScanTask: Task = {
         await mapWithConcurrency(archivedImages, 20, async (image) => {
           const photo = photoByKey.get(image.key)!
           const previousState = photoArchiveState(photo)
-          const status = await headObjectRestoreStatus(awsCredentials, image.key)
+          const status = await withStorageConnectionGuard(account.id, () => headObjectRestoreStatus(storageConnection, image.key))
 
           const updated = await prisma.photo.update({
             where: { id: photo.id },

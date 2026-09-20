@@ -1,4 +1,4 @@
-import { requirePhotoIdParam, requirePhotoStorageConnection } from '#server/utils/photo-guards'
+import { requirePhotoIdParam, requirePhotoStorageConnection, withStorageConnectionGuard } from '#server/utils/photo-guards'
 import { prisma } from '#server/utils/prisma'
 import { deletePhotoObject } from '#server/utils/storage'
 
@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  await deletePhotoObject(account.aws_credentials, photo.key)
+  await withStorageConnectionGuard(account.id, () => deletePhotoObject(account.storage_connection, photo.key))
   await prisma.photo.delete({ where: { id } })
 
   setResponseStatus(event, 204)
