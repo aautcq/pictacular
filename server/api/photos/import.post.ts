@@ -125,7 +125,7 @@ export default defineEventHandler(async (event) => {
   // accumulating on top of a previous run's), while `import_completed_at`
   // + `import_last_imported`/`import_last_albums` separately snapshot
   // this run's final result permanently — see the schema comment on
-  // StorageConnectionAccess for why check-bucket.get.ts needs that separate,
+  // StorageConnection for why check-bucket.get.ts needs that separate,
   // non-resetting snapshot.
   await prisma.storageConnection.update({
     where: { id: storage_connection.id },

@@ -14,7 +14,6 @@
     "auth.invalid_credentials": "Incorrect email or password.",
     "auth.email_taken": "This email is already taken.",
     "auth.invalid_token": "This link is invalid or has expired.",
-    "auth.invalid_aws_credentials": "Your storage connection credentials are invalid.",
     "users.storage_connection_required": "Connect a storage bucket before uploading an avatar.",
     "storage.bucket_not_found": "That bucket could not be found or is not accessible with these credentials.",
     "storage.bucket_not_ready": "That CloudFormation stack hasn't finished creating your bucket yet. Wait a moment and try confirming again.",

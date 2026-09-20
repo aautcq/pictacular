@@ -1,4 +1,5 @@
 import { requireAlbumIdParam, requireAlbumMembership } from '#server/utils/album-guards'
+import { requirePhotoStorageConnection } from '#server/utils/photo-guards'
 import { prisma } from '#server/utils/prisma'
 import { findAlbumPhotoAssignment, loadAlbumPhotoIdPage } from '#server/utils/serialize-album'
 import { serializePhoto } from '#server/utils/serialize-photo'
@@ -13,6 +14,13 @@ export default defineEventHandler(async (event) => {
   const id = requireAlbumIdParam(event)
 
   await requireAlbumMembership(id, user.id)
+
+  // Hard-blocks (issue #153) browsing this Album's photos once the
+  // requesting User's own Storage Connection is broken — matching every
+  // other Photo action (upload, view, browse via GET /api/photos) rather
+  // than leaving this route reachable while every other photo-viewing
+  // path is blocked.
+  await requirePhotoStorageConnection(user.id)
 
   const query = getQuery(event)
   const result = albumPhotosQuerySchema.safeParse(query)
@@ -52,13 +60,13 @@ export default defineEventHandler(async (event) => {
 
   // Preserves the requested keyset order (Map/findMany order isn't
   // guaranteed to match), then drops any Photo whose owner currently has
-  // no Storage Connection — matching the previous serializeAlbumFull's
-  // filter — without letting either guard shrink the page below `limit`
-  // affect the cursor, which is still derived from the full requested id
-  // list below.
+  // no Storage Connection, or one that's broken (issue #153) — matching
+  // the previous serializeAlbumFull's filter — without letting either
+  // guard shrink the page below `limit` affect the cursor, which is still
+  // derived from the full requested id list below.
   const page = requestedIds
     .map(photoId => photosById.get(photoId))
-    .filter(photo => photo !== undefined && photo.user.storage_connection)
+    .filter(photo => photo !== undefined && photo.user.storage_connection && !photo.user.storage_connection.broken)
 
   return {
     photos: page.map((photo) => {
