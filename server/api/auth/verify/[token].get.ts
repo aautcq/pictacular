@@ -1,3 +1,4 @@
+import { fulfillPendingInvitations } from '#server/utils/fulfill-invitations'
 import { prisma } from '#server/utils/prisma'
 
 // Replaces the former AuthController#verify (GET /auth/verify/:token).
@@ -5,9 +6,9 @@ import { prisma } from '#server/utils/prisma'
 // Issue #52: verifying is this app's "finishing signup" moment (login
 // stays blocked until then, so there's no earlier point at which an
 // invited-but-unregistered person could meaningfully hold Album access) —
-// so any pending Invitation(s) for this User's email become Collaborator
-// access right here, then get cleared so a later re-invite starts fresh
-// rather than resurrecting a stale row.
+// so any pending Invitation(s) for this User's email are fulfilled right
+// here (see fulfillPendingInvitations, also reused by issue #157's Google
+// sign-up flow).
 export default defineEventHandler(async (event) => {
   const token = getRouterParam(event, 'token')
 
@@ -27,18 +28,7 @@ export default defineEventHandler(async (event) => {
     data: { is_verified: true },
   })
 
-  const invitations = await prisma.invitation.findMany({ where: { email: user.email } })
-
-  for (const invitation of invitations) {
-    await prisma.album.update({
-      where: { id: invitation.album_id },
-      data: { users: { connect: { id: user.id } } },
-    })
-  }
-
-  if (invitations.length) {
-    await prisma.invitation.deleteMany({ where: { email: user.email } })
-  }
+  await fulfillPendingInvitations(user.id, user.email)
 
   setResponseStatus(event, 204)
 })

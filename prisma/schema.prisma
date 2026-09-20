@@ -17,7 +17,11 @@ model User {
   first_name             String
   last_name              String
   avatar_url             String?
-  password               String
+  // Issue #157: nullable so a User who signed up exclusively via an OAuth
+  // Account (e.g. Google) never has a password at all. Password-login and
+  // password-reset explicitly detect and reject a null password rather
+  // than crashing or comparing against it.
+  password               String?
   last_sign_in_at        DateTime?
   is_verified            Boolean    @default(false)
   verification_token     String     @unique
@@ -28,6 +32,7 @@ model User {
   storage_connection  StorageConnection?
   sessions            Session[]
   biometrics          Biometrics[]
+  oauth_accounts      OAuthAccount[]
   albums              Album[] @relation("Albums")
   photos              Photo[] @relation("Photos")
   liked_photos        Photo[] @relation("LikedPhotos")
@@ -64,6 +69,30 @@ model Biometrics {
   user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@map("biometrics")
+}
+
+// Issue #157/ADR-0007: a generic, provider-agnostic link between a User
+// and an identity the User has proven ownership of at an external OAuth
+// provider (Google is the only one implemented so far, but the shape
+// isn't Google-specific). Keyed by (provider, provider_user_id) — the
+// provider's own stable identifier for that identity — with the linked
+// email stored at the time of link for reference; Google's access/refresh
+// tokens themselves are used transiently during the callback and never
+// persisted here or anywhere else.
+model OAuthAccount {
+  id         Int        @id @default(autoincrement())
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+
+  provider         String
+  provider_user_id String
+  email            String
+
+  user_id Int
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([provider, provider_user_id])
+  @@map("oauth_accounts")
 }
 
 model PushSubscription {

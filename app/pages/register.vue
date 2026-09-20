@@ -116,6 +116,8 @@ async function submit() {
         :label="loading ? t('submitting') : t('submit')"
       />
 
+      <AuthGoogleButton />
+
       <p class="text-center text-sm">
         {{ t('alreadyHaveAccount') }} <NuxtLink to="/login" class="underline">
           {{ t('signIn') }}

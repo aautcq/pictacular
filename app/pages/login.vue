@@ -4,7 +4,7 @@ definePageMeta({ middleware: 'guest' })
 const { login, loginWithBiometrics } = useCurrentUser()
 const { hasStoredCredential, isSupported } = useBiometrics()
 const toast = useToast()
-const { translateError, getFieldErrors } = useErrorMessage()
+const { translateError, translateErrorCode, getFieldErrors } = useErrorMessage()
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
 const { t: tg } = useI18n({ useScope: 'global' })
 const route = useRoute()
@@ -25,6 +25,12 @@ async function redirectAfterSignIn() {
   const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
   await navigateTo(redirect)
 }
+
+// GET /api/auth/google/callback redirects failures back here as a full
+// page navigation with `oauth_error=<code>` (e.g. auth.oauth_failed) —
+// translated exactly like any other namespaced error code (issue #157).
+if (typeof route.query.oauth_error === 'string')
+  toast.add({ title: translateErrorCode(route.query.oauth_error), color: 'error' })
 
 async function submit() {
   if (anyLoading.value)
@@ -140,6 +146,8 @@ if (isSupported && hasStoredCredential.value)
         :label="biometricLoading ? t('signingIn') : t('signInWithBiometrics')"
         @click="signInWithBiometrics()"
       />
+
+      <AuthGoogleButton />
 
       <p class="text-center text-sm">
         {{ t('noAccountYet') }} <NuxtLink to="/register" class="underline">

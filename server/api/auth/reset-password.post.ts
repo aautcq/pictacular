@@ -25,7 +25,11 @@ export default defineEventHandler(async (event) => {
   const { email } = result.data
 
   const user = await prisma.user.findUnique({ where: { email } })
-  if (user?.is_verified)
+  // Issue #157: a Google-only (null-password) User has nothing to reset —
+  // silently no-op here (same as the unverified branch above) rather than
+  // sending a reset email for a password that doesn't exist, keeping this
+  // endpoint's enumeration-safe 204-either-way contract intact.
+  if (user?.is_verified && user.password)
     await issuePasswordResetEmail(event, email)
 
   setResponseStatus(event, 204)
