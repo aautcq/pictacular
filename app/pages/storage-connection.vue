@@ -13,6 +13,7 @@ const launching = shallowRef(false)
 const confirming = shallowRef(false)
 const launchUrl = shallowRef<string | null>(null)
 const pendingToken = shallowRef<string | null>(null)
+const clickedLaunch = shallowRef(false)
 // A broken connection (issue #153) is treated as "not connected" here —
 // the User is dropped straight back into the launch form to relaunch the
 // stack and reconnect (a fresh Role/External Id), never a repair of the
@@ -195,7 +196,7 @@ const etaLabel = computed(() => {
       </p>
 
       <UButton
-        v-if="!importing"
+        v-if="!importing && (importSkipped || !!result || !bucketStatus?.has_photos)"
         :label="t('continue')"
         to="/"
       />
@@ -278,9 +279,11 @@ const etaLabel = computed(() => {
           :to="launchUrl"
           target="_blank"
           variant="soft"
+          @click="clickedLaunch = true"
         />
 
         <UButton
+          v-if="clickedLaunch"
           type="button"
           :loading="confirming"
           :label="confirming ? t('confirming') : t('confirmLaunched')"
@@ -308,7 +311,7 @@ const etaLabel = computed(() => {
     "connectionReady": "Your storage connection is ready.",
     "continue": "Continue",
     "brokenExplanation": "Your previous storage connection is broken (its AWS Role can no longer be assumed — for example, its CloudFormation stack may have been deleted). Relaunch a stack below to reconnect with a fresh Role.",
-    "description": "Pictacular stores your photos in your own AWS S3 bucket. Choose whether to create a new bucket or connect one you already own, enter your AWS Account ID, then launch a CloudFormation stack that sets up a Role Pictacular can use — no AWS keys are ever shared with Pictacular.",
+    "description": "Pictacular stores your photos in your own AWS S3 bucket. Choose whether to create a new bucket or connect one you already own.",
     "modeLabel": "Bucket",
     "modeCreate": "Create a new bucket for me",
     "modeConnect": "Connect an existing bucket",
