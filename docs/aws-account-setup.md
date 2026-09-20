@@ -27,6 +27,3 @@ object (see `cloudformation/README.md`), so a public-read S3 bucket in this
 same account mirrors `cloudformation/create-bucket.yaml` and
 `connect-bucket.yaml`. Its base URL is the `NUXT_AWS_CFN_TEMPLATES_BASE_URL`
 env var (see `.env.example`) — set this up with
-`scripts/setup-cfn-templates-bucket.sh` (a `/wizard`-generated one-off
-script; delete it once the bucket is provisioned and the two templates are
-uploaded, re-running it after any template change in the meantime).
