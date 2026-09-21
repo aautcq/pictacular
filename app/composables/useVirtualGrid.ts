@@ -161,6 +161,17 @@ export function useVirtualGrid(options: UseVirtualGridOptions) {
 
   const totalSize = computed(() => virtualizer.value.getTotalSize())
 
+  // The virtualizer's own measurement cache keys off `count`/`scrollMargin`/
+  // `gap` — not `estimateSize` itself (see @tanstack/virtual-core's
+  // `getMeasurementOptions`) — so a `columnWidth` change alone (e.g. going
+  // from the pre-`ResizeObserver` `0` at mount to the container's real
+  // width, with no accompanying `scrollMargin`/`count` change) never
+  // invalidates already-computed row sizes: every photo row stays frozen at
+  // whatever `columnWidth + gap` it first measured (`gap`, since
+  // `columnWidth` was still `0`). `measure()` is the public API for forcing
+  // a full remeasure with the current `estimateSize`.
+  watch([columnCount, columnWidth], () => virtualizer.value.measure())
+
   watch(virtualRows, (rows) => {
     if (!hasMore?.value || loading?.value)
       return
