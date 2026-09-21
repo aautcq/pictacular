@@ -177,6 +177,64 @@ describe('personal photo library journey', async () => {
     await page.close()
   }, 60_000)
 
+  // The dropzone overlay (app/components/BaseDropzone.vue) must hide the
+  // instant a drop happens, not linger on screen: it's a drag-target hint,
+  // not an upload-progress indicator.
+  it('hides the dropzone overlay as soon as a drop happens', async () => {
+    const dropzoneBucket = `${bucket}-dropzone`
+    fakeS3.seedBucket(dropzoneBucket)
+
+    const dropzoneEmailPrefix = `${emailPrefix}-dropzone`
+    const dropzoneEmail = `${dropzoneEmailPrefix}@example.com`
+
+    const user = await prisma.user.create({
+      data: {
+        email: dropzoneEmail,
+        first_name: 'Jane',
+        last_name: 'Doe',
+        password: hashPassword(password),
+        is_verified: true,
+        verification_token: `token-${dropzoneEmailPrefix}`,
+      },
+    })
+
+    await prisma.storageConnection.create({
+      data: {
+        bucket: dropzoneBucket,
+        region: 'eu-west-3',
+        role_arn: testRoleArn,
+        external_id: testExternalId,
+        user: { connect: { id: user.id } },
+      },
+    })
+
+    const page = await createPage('/login')
+    await page.getByLabel('Email').fill(dropzoneEmail)
+    await page.getByLabel('Password').fill(password)
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+
+    await page.waitForURL(url('/'))
+    await page.getByText(`Welcome, Jane Doe`).waitFor()
+
+    const overlayHint = page.getByText('Drag and drop photos here, or use the Upload photos button above.')
+
+    // Real OS file drags aren't simulable, but a plain DragEvent with an
+    // empty DataTransfer is enough to exercise the same dragenter/drop
+    // handlers the browser would fire, without touching any app internals.
+    // Dispatched from inside the dropzone's own content (not document.body,
+    // which is an *ancestor* of it and so wouldn't bubble the event down to
+    // its handlers).
+    const welcomeHeading = page.getByText('Welcome, Jane Doe')
+    const dataTransfer = await page.evaluateHandle(() => new DataTransfer())
+    await welcomeHeading.dispatchEvent('dragenter', { dataTransfer })
+    await overlayHint.waitFor()
+
+    await welcomeHeading.dispatchEvent('drop', { dataTransfer })
+    await overlayHint.waitFor({ state: 'hidden' })
+
+    await page.close()
+  }, 60_000)
+
   // issue #193: the details modal's photo can be zoomed (Ctrl+scroll /
   // pinch) and panned (drag) without the whole page zooming, resets on
   // photo navigation, and is clamped to a 3x maximum.
