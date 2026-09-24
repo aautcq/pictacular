@@ -6,8 +6,9 @@ const { t } = useI18n({ useScope: 'global' })
 <template>
   <header class="fixed inset-x-0 top-0 z-20 h-12 bg-gray-200 dark:bg-gray-900">
     <nav class="mx-auto flex h-full max-w-5xl items-center justify-between px-6">
-      <NuxtLink to="/" class="font-semibold text-gray-900 dark:text-gray-100">
-        Pictacular
+      <NuxtLink to="/" class="flex items-center gap-x-2 font-semibold text-gray-900 dark:text-gray-100">
+        <img src="/icon.svg" alt="" width="24" height="24" class="size-6 dark:invert">
+        <span class="sr-only sm:not-sr-only">Pictacular</span>
       </NuxtLink>
 
       <div class="flex items-center gap-x-2">

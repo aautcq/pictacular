@@ -96,6 +96,9 @@ export default defineNuxtConfig({
         { name: 'viewport', content: 'width=device-width, initial-scale=1.0' },
         { name: 'fragment', content: '!' },
       ],
+      link: [
+        { rel: 'icon', type: 'image/svg+xml', href: '/icon.svg' },
+      ],
     },
     pageTransition: { name: 'page', mode: 'out-in' },
   },
