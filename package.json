@@ -39,6 +39,7 @@
     "@nuxt/icon": "~2.5.0",
     "@nuxt/image": "~2.1.0",
     "@nuxt/ui": "~4.11.0",
+    "@nuxtjs/device": "~4.0.0",
     "@nuxtjs/i18n": "~10.6.0",
     "@nuxtjs/seo": "~5.3.14",
     "@prisma/adapter-pg": "~7.9.1",

@@ -17,6 +17,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
+const { isMobileOrTablet } = useDevice()
 
 // Clicking a photo either toggles its selection (once selection has
 // started, or with Shift held for a range-select) or opens the details
@@ -79,7 +80,7 @@ function formatExpiry(date: string) {
       type="button"
       :title="t('select')"
       class="absolute left-2 top-2 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-black/30 transition-opacity"
-      :class="isSelected ? 'bg-green-500 opacity-100' : 'opacity-0 group-hover:opacity-100'"
+      :class="isSelected ? 'bg-green-500 opacity-100' : isMobileOrTablet ? '' : 'opacity-0 group-hover:opacity-100'"
       @click.stop="emit('toggleSelection', photo, $event)"
     >
       <Icon v-if="isSelected" name="ph:check-bold" class="text-white" />
