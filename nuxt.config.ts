@@ -97,8 +97,6 @@ export default defineNuxtConfig({
         { name: 'fragment', content: '!' },
       ],
       link: [
-        // Modern browsers prefer this SVG icon; `favicon.ico` (from `public/`) is
-        // the automatic fallback for browsers without SVG favicon support.
         { rel: 'icon', type: 'image/svg+xml', href: '/icon.svg' },
       ],
     },
