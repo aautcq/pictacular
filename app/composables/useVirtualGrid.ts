@@ -154,12 +154,52 @@ export function useVirtualGrid(options: UseVirtualGridOptions) {
         scrollMargin: scrollMargin.value,
       })))
 
-  const virtualRows = computed(() => virtualizer.value.getVirtualItems().map(row => ({
-    ...row,
-    start: row.start - (scrollElement ? 0 : scrollMargin.value),
-  })))
+  // `@tanstack/virtual-core`'s own range calculation (which rows count as
+  // "visible") bails out to an empty range whenever the scroll element's
+  // measured size is `0` (see `calculateRange`'s `outerSize === 0` guard) —
+  // true of every SSR render, since there's no real viewport/container to
+  // measure server-side. That's fundamental to windowing, not a bug to work
+  // around: an SSR pass can never legitimately answer "which rows are on
+  // screen". `isMounted` makes that explicit and *consistent* between the
+  // server and the client's own pre-mount render (hydration compares the
+  // two, so both must agree on rendering zero rows) — real rows only ever
+  // appear once mounted, as an ordinary post-hydration reactive update
+  // rather than something hydration itself has to reconcile.
+  const isMounted = shallowRef(false)
+  onMounted(() => {
+    isMounted.value = true
+  })
 
-  const totalSize = computed(() => virtualizer.value.getTotalSize())
+  const virtualRows = computed(() => {
+    if (!isMounted.value)
+      return []
+
+    return virtualizer.value.getVirtualItems().map(row => ({
+      ...row,
+      start: row.start - (scrollElement ? 0 : scrollMargin.value),
+    }))
+  })
+
+  // Deliberately summed here instead of delegating to
+  // `virtualizer.value.getTotalSize()`: that reads from the virtualizer's
+  // own internal option-sync (a `watch` that only fires once, synchronously,
+  // during SSR — see `useVirtualizerBase` in `@tanstack/vue-virtual`), which
+  // freezes at whatever `count` happened to be true at the *first* moment
+  // this composable runs. A caller whose own row count depends on data
+  // that's still loading at that exact moment (e.g. `index.vue`, which
+  // builds this directly rather than through `BaseVirtualGrid`, ahead of its
+  // own `await useAsyncData`) would otherwise be stuck reporting `0` forever
+  // for that render. Summing `estimateSize` over `rowCountValue` ourselves
+  // stays correctly reactive to our own (already server/client-consistent)
+  // row count regardless of the virtualizer's internal freeze, and matches
+  // its real total exactly once rows do mount (same `estimateSize`, no
+  // padding options in use).
+  const totalSize = computed(() => {
+    let total = 0
+    for (let index = 0; index < rowCountValue.value; index++)
+      total += estimateSize(index)
+    return total
+  })
 
   // The virtualizer's own measurement cache keys off `count`/`scrollMargin`/
   // `gap` — not `estimateSize` itself (see @tanstack/virtual-core's
