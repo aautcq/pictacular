@@ -29,7 +29,6 @@ interface HeaderRow { type: 'header', date: string, isFirstGroup: boolean }
 interface PhotoRow { type: 'photos', photos: Photo[] }
 type GridRow = HeaderRow | PhotoRow
 
-const { fullName } = useCurrentUser()
 const { translateError } = useErrorMessage()
 const { on } = useRealtime()
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
@@ -288,10 +287,6 @@ onUnmounted(() => {
       </template>
 
       <BaseDropzone class="mx-auto flex max-w-5xl flex-col gap-y-8" @drop="handleFiles">
-        <h1 class="text-xl font-semibold">
-          {{ t('welcome', { name: fullName }) }}
-        </h1>
-
         <PhotoUploads v-if="uploads.length" :uploads />
 
         <div v-if="!displayedPhotos.length && !loading && !searching" class="py-20 text-center text-gray-500 dark:text-gray-300">
@@ -428,7 +423,6 @@ onUnmounted(() => {
 <i18n lang="json">
 {
   "en": {
-    "welcome": "Welcome, {name}",
     "searchLabel": "Search photos",
     "searchPlaceholder": "Search photos…",
     "noResults": "No photos match your search.",

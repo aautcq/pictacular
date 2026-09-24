@@ -27,6 +27,7 @@ export default defineNuxtConfig({
     '@nuxtjs/i18n',
     '@vueuse/nuxt',
     '@nuxtjs/seo',
+    '@nuxtjs/device',
   ],
 
   css: ['~/assets/css/main.css'],
