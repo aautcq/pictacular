@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <g stroke="#3b2313" stroke-width="2" stroke-linejoin="round" stroke-linecap="round">
+    <!-- left flap -->
+    <polygon points="18.14,22.00 32.00,14.00 26.00,1.00 12.14,9.00" fill="#c98a4c" />
+    <!-- right flap -->
+    <polygon points="45.86,22.00 32.00,14.00 38.00,1.00 51.86,9.00" fill="#c98a4c" />
+    <!-- interior opening -->
+    <polygon points="32.00,30.00 45.86,22.00 32.00,14.00 18.14,22.00" fill="#4a2f1c" stroke="#3b2313" stroke-width="1.5" />
+    <!-- left face -->
+    <polygon points="32.00,46.00 18.14,38.00 18.14,22.00 32.00,30.00" fill="#8a5a35" />
+    <!-- right face -->
+    <polygon points="32.00,46.00 45.86,38.00 45.86,22.00 32.00,30.00" fill="#b3763f" />
+  </g>
+  <!-- photo label on the box's side panel -->
+  <g>
+    <rect x="33.43" y="28.50" width="11" height="11" rx="1.5" fill="#fdf6ec" stroke="#3b2313" stroke-width="1.2" />
+    <path d="M 34.93 37.50 L 37.43 33.00 L 39.43 35.00 L 40.73 33.70 L 42.93 37.50 Z" fill="#16a34a" />
+    <circle cx="41.23" cy="31.50" r="1.4" fill="#16a34a" />
+  </g>
+</svg>
