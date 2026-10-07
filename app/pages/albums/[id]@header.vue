@@ -27,18 +27,14 @@ const {
 
 const { handleFiles: uploadFiles } = usePhotoUpload('album-detail', prependPhoto)
 
-// Same 'album'/'album-photos' useAsyncData keys as albums/[id].vue, so this
-// shares that component's fetch rather than re-requesting — but, unlike the
-// page, this header doesn't gate anything on `pending` (everything below is
-// already guarded by `v-if="album"`), so it doesn't need to await the fetch
-// itself. Awaiting it here too would make this component async-setup as
-// well, which — paired with the page component also being async-setup for
-// the same route — can trip a Vue/Suspense edge case where sibling async
-// components under separate Suspense boundaries leak internal render state,
-// producing a spurious "Slot invoked outside of the render function"
-// warning (https://github.com/vuejs/core/issues/14667).
-const { data: album } = useAsyncData('album', async () => await fetchAlbum(albumId.value), { watch: [albumId] })
-useAsyncData('album-photos', fetchNextPhotosPage)
+// Issue #170: an Album can hold thousands of Photos, so its metadata and
+// its first page of Photos are two separate requests — run together
+// rather than one after the other, so `pending` going false always means
+// both the metadata and at least the first Photo page are ready.
+const [{ data: album }] = await Promise.all([
+  useAsyncData('album', async () => await fetchAlbum(albumId.value), { watch: [albumId] }),
+  useAsyncData('album-photos', fetchNextPhotosPage),
+])
 
 // Issue #190: search scoped to this Album's own Photos (filename only —
 // see useAlbumPhotos#searchPhotos). Same "search results replace the
