@@ -66,7 +66,7 @@ const {
   showNext,
   closeDetails,
 } = usePhotoGallery('library', displayedPhotos)
-const { queueUpload, uploads } = usePhotoUpload()
+const { uploads, handleFiles } = usePhotoUpload('library', addUploadedPhoto)
 const toast = useToast()
 
 const container = useTemplateRef<HTMLElement | null>('container')
@@ -146,18 +146,6 @@ async function onRestorePhoto(photo: Photo) {
   }
   catch (error) {
     toast.add({ title: translateError(error), color: 'error' })
-  }
-}
-
-async function handleFiles(fileList: FileList | null) {
-  if (!fileList)
-    return
-  for (const file of Array.from(fileList)) {
-    if (file.type.startsWith('image/')) {
-      const photo = await queueUpload(file)
-      if (photo)
-        addUploadedPhoto(photo)
-    }
   }
 }
 

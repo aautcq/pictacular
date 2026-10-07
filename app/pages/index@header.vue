@@ -27,7 +27,7 @@ const {
   clearSelection,
   downloadSelected,
 } = usePhotoGallery('library', displayedPhotos)
-const { queueUpload } = usePhotoUpload()
+const { handleFiles } = usePhotoUpload('library', addUploadedPhoto)
 const toast = useToast()
 
 const deleting = shallowRef(false)
@@ -65,18 +65,6 @@ async function confirmDeleteSelected() {
   }
   finally {
     deleting.value = false
-  }
-}
-
-async function handleFiles(fileList: FileList | null) {
-  if (!fileList)
-    return
-  for (const file of Array.from(fileList)) {
-    if (file.type.startsWith('image/')) {
-      const photo = await queueUpload(file)
-      if (photo)
-        addUploadedPhoto(photo)
-    }
   }
 }
 

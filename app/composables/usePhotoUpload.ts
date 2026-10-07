@@ -5,10 +5,19 @@ export interface UploadItem {
   error: string | null
 }
 
-export function usePhotoUpload() {
+// `key` scopes the underlying `useState` (same rationale as useSearch/
+// usePhotoGallery) so the home page's upload queue and an Album's own
+// upload queue — two unrelated pages, each itself split into a page +
+// `*@header.vue` named-view pair sharing one `usePhotoUpload` call —
+// don't bleed into one another. `onUploaded` is what each page does with
+// a File once it's finished uploading (e.g. usePhotoLibrary#addUploadedPhoto
+// vs useAlbumPhotos#prependPhoto) — `handleFiles` below is the identical
+// drag-drop/file-picker handling every page needs, kept here once rather
+// than copy-pasted into both halves of each page's split.
+export function usePhotoUpload(key: string, onUploaded: (photo: Photo) => void) {
   const { translateError } = useErrorMessage()
 
-  const uploads = useState<UploadItem[]>('photo-uploads', () => [])
+  const uploads = useState<UploadItem[]>(`${key}-uploads`, () => [])
 
   // Uploads a File to the User's own bucket via base64-in-JSON (matching
   // the avatar-upload contract), reporting 0-100 progress via a plain
@@ -77,8 +86,24 @@ export function usePhotoUpload() {
     }
   }
 
+  // Shared drag-drop/file-picker handling (issue #215): filters to actual
+  // images and uploads them one at a time (preserving drop order), handing
+  // each finished Photo to the page's own `onUploaded` as it completes.
+  async function handleFiles(fileList: FileList | null) {
+    if (!fileList)
+      return
+    for (const file of Array.from(fileList)) {
+      if (file.type.startsWith('image/')) {
+        const photo = await queueUpload(file)
+        if (photo)
+          onUploaded(photo)
+      }
+    }
+  }
+
   return {
     uploads,
     queueUpload,
+    handleFiles,
   }
 }

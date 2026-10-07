@@ -6,7 +6,6 @@ const albumId = computed(() => Number(route.params.id))
 
 const { user } = useCurrentUser()
 const { fetchAlbum, removePhotoFromAlbum } = useAlbums()
-const { queueUpload } = usePhotoUpload()
 const toast = useToast()
 const { translateError } = useErrorMessage()
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
@@ -25,6 +24,8 @@ const {
   prependPhoto,
   removePhoto,
 } = useAlbumPhotos(albumId)
+
+const { handleFiles: uploadFiles } = usePhotoUpload('album-detail', prependPhoto)
 
 // Issue #170: an Album can hold thousands of Photos, so its metadata and
 // its first page of Photos are two separate requests — run together
@@ -73,15 +74,9 @@ async function confirmRemoveSelected() {
 }
 
 async function handleFiles(fileList: FileList | null) {
-  if (!fileList || !album.value)
+  if (!album.value)
     return
-  for (const file of Array.from(fileList)) {
-    if (file.type.startsWith('image/')) {
-      const photo = await queueUpload(file)
-      if (photo)
-        prependPhoto(photo)
-    }
-  }
+  await uploadFiles(fileList)
 }
 
 const settingsItems = computed<DropdownMenuItem[][]>(() => [
@@ -115,7 +110,7 @@ const settingsItems = computed<DropdownMenuItem[][]>(() => [
       visible: selectionMode.value,
     },
     {
-      label: t('remove'),
+      label: t('remove', selectedCount.value),
       icon: 'ph:trash-simple',
       color: 'warning',
       onSelect: () => { isRemovePhotosModalOpen.value = true },
@@ -192,7 +187,7 @@ const settingsItems = computed<DropdownMenuItem[][]>(() => [
       v-if="isAdmin"
       v-model:open="isRemovePhotosModalOpen"
       :title="t('removeModalTitle', selectedCount)"
-      :description="t('removeModalBody')"
+      :description="t('removeModalBody', selectedCount)"
     >
       <template #footer="{ close }">
         <UButton
@@ -205,8 +200,8 @@ const settingsItems = computed<DropdownMenuItem[][]>(() => [
         <UButton
           type="button"
           :loading="deleting"
-          :label="deleting ? t('removing') : t('remove')"
-          color="error"
+          :label="deleting ? t('removing') : t('remove', selectedCount)"
+          color="warning"
           @click="confirmRemoveSelected"
         />
       </template>
@@ -217,7 +212,7 @@ const settingsItems = computed<DropdownMenuItem[][]>(() => [
 <i18n lang="json">
 {
   "en": {
-    "photosDeleted": "Photos deleted",
+    "photosDeleted": "Photos removed",
     "searchLabel": "Search photos",
     "searchPlaceholder": "Search photos…",
     "collaboratorsButton": "Collaborators",
@@ -226,9 +221,9 @@ const settingsItems = computed<DropdownMenuItem[][]>(() => [
     "addPhotosButton": "Add photos from gallery",
     "cancel": "Cancel",
     "removeModalTitle": "Remove {count} photo | Remove {count} photos",
-    "removeModalBody": "This action is irreversible. Are you sure?",
+    "removeModalBody": "You are about to remove this photo from the album. Are you sure? | You are about to remove these photo from the album. Are you sure?",
     "removing": "Removing…",
-    "remove": "Remove photos",
+    "remove": "Remove photo | Remove photos",
     "download": "Download",
     "deleteModalTitle": "Delete this album"
   }

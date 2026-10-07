@@ -15,7 +15,6 @@ const albumId = computed(() => Number(route.params.id))
 const { user } = useCurrentUser()
 const { fetchAlbum, updateAlbum } = useAlbums()
 const { toggleLike } = usePhotoLibrary()
-const { queueUpload, uploads } = usePhotoUpload()
 const toast = useToast()
 const { translateError } = useErrorMessage()
 const { t } = useI18n({ useScope: 'local', inheritLocale: true })
@@ -35,6 +34,8 @@ const {
   prependPhoto,
   updatePhoto,
 } = useAlbumPhotos(albumId)
+
+const { uploads, handleFiles: uploadFiles } = usePhotoUpload('album-detail', prependPhoto)
 
 // Issue #170: an Album can hold thousands of Photos, so its metadata and
 // its first page of Photos are two separate requests — run together
@@ -130,15 +131,9 @@ async function onToggleLike(photo: Photo) {
 }
 
 async function handleFiles(fileList: FileList | null) {
-  if (!fileList || !album.value)
+  if (!album.value)
     return
-  for (const file of Array.from(fileList)) {
-    if (file.type.startsWith('image/')) {
-      const photo = await queueUpload(file)
-      if (photo)
-        prependPhoto(photo)
-    }
-  }
+  await uploadFiles(fileList)
 }
 </script>
 
