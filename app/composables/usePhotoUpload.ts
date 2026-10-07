@@ -8,7 +8,7 @@ export interface UploadItem {
 export function usePhotoUpload() {
   const { translateError } = useErrorMessage()
 
-  const uploads = ref<UploadItem[]>([])
+  const uploads = useState<UploadItem[]>('photo-uploads', () => [])
 
   // Uploads a File to the User's own bucket via base64-in-JSON (matching
   // the avatar-upload contract), reporting 0-100 progress via a plain

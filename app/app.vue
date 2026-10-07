@@ -9,6 +9,9 @@ await callOnce('fetch-current-user', () => fetchCurrentUser())
 <template>
   <UApp>
     <NuxtLayout>
+      <template #header-actions>
+        <NuxtPage name="header" />
+      </template>
       <NuxtPage />
     </NuxtLayout>
   </UApp>

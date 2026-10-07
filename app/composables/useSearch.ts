@@ -7,11 +7,11 @@
 // whatever endpoint call a given page needs (e.g. useAlbums#searchAlbums,
 // usePhotoLibrary#searchPhotos) — this composable owns none of the
 // result shape.
-export function useSearch<T>(searchFn: (keyword: string) => Promise<T[]>) {
-  const query = shallowRef('')
+export function useSearch<T>(key: string, searchFn: (keyword: string) => Promise<T[]>) {
+  const query = useState(`${key}-search-query`, () => '')
   const debouncedQuery = refDebounced(query, 300)
-  const results = shallowRef<T[] | null>(null)
-  const searching = shallowRef(false)
+  const results = useState<T[] | null>(`${key}-search-results`, () => null)
+  const searching = useState(`${key}-search-searching`, () => false)
 
   const toast = useToast()
   const { translateError } = useErrorMessage()

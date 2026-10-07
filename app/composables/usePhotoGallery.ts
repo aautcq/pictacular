@@ -1,14 +1,14 @@
 import type { Photo } from '~/composables/usePhotoLibrary'
 
-export function usePhotoGallery(photos: Ref<Photo[]>) {
+export function usePhotoGallery(key: string, photos: Ref<Photo[]>) {
   const toast = useToast()
   const { translateError } = useErrorMessage()
 
-  const selectedIds = ref<Set<number>>(new Set())
+  const selectedIds = useState<Set<number>>(`${key}-gallery-selected-ids`, () => new Set())
   const selectedCount = computed(() => selectedIds.value.size)
   const selectionMode = computed(() => selectedCount.value > 0)
-  const lastSelectedId = shallowRef<number | null>(null)
-  const detailsPhotoId = shallowRef<number | null>(null)
+  const lastSelectedId = useState<number | null>(`${key}-gallery-last-selected-id`, () => null)
+  const detailsPhotoId = useState<number | null>(`${key}-gallery-details-photo-id`, () => null)
 
   const detailsIndex = computed(() => photos.value.findIndex(photo => photo.id === detailsPhotoId.value))
   const detailsPhoto = computed(() => detailsIndex.value === -1 ? null : photos.value[detailsIndex.value]!)
